@@ -1,0 +1,135 @@
+import json
+from datetime import datetime, timezone
+
+from flask_login import UserMixin
+from werkzeug.security import check_password_hash, generate_password_hash
+
+from extensions import db
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
+
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(150), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(255))
+    first_name = db.Column(db.String(150))
+    last_name = db.Column(db.String(150))
+    auth_type = db.Column(db.String(10), nullable=False, default="local")  # 'local' | 'ldap'
+    password_hash = db.Column(db.String(255), nullable=True)
+    is_admin = db.Column(db.Boolean, nullable=False, default=False)
+    is_active_flag = db.Column("is_active", db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    selections = db.relationship(
+        "UserServerSelection", back_populates="user", cascade="all, delete-orphan"
+    )
+    overrides = db.relationship(
+        "UserServerOverride", back_populates="user", cascade="all, delete-orphan"
+    )
+
+    @property
+    def is_active(self):
+        return self.is_active_flag
+
+    def set_password(self, raw_password):
+        self.auth_type = "local"
+        self.password_hash = generate_password_hash(raw_password)
+
+    def check_password(self, raw_password):
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, raw_password)
+
+    @property
+    def display_name(self):
+        parts = [p for p in (self.first_name, self.last_name) if p]
+        return " ".join(parts) if parts else self.username
+
+
+class McpServer(db.Model):
+    __tablename__ = "mcp_servers"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False, index=True)
+    label = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
+    transport = db.Column(db.String(10), nullable=False)  # 'stdio' | 'http' | 'sse'
+
+    # stdio
+    command = db.Column(db.String(500), nullable=True)
+    args_json = db.Column(db.Text, nullable=True)  # JSON-encoded list[str]
+
+    # http / sse
+    url = db.Column(db.String(500), nullable=True)
+    auth_header_name = db.Column(db.String(150), nullable=True)
+    auth_env_key = db.Column(db.String(150), nullable=True)
+
+    # non-secret hints only — actual values live in Vaultwarden
+    env_var_names_json = db.Column(db.Text, nullable=True)  # JSON-encoded list[str]
+    vaultwarden_item_name = db.Column(db.String(255), nullable=True)
+
+    allow_user_override = db.Column(db.Boolean, nullable=False, default=True)
+    category = db.Column(db.String(255), nullable=True)
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    selections = db.relationship(
+        "UserServerSelection", back_populates="server", cascade="all, delete-orphan"
+    )
+    overrides = db.relationship(
+        "UserServerOverride", back_populates="server", cascade="all, delete-orphan"
+    )
+
+    @property
+    def args(self):
+        return json.loads(self.args_json) if self.args_json else []
+
+    @args.setter
+    def args(self, value):
+        self.args_json = json.dumps(list(value or []))
+
+    @property
+    def env_var_names(self):
+        return json.loads(self.env_var_names_json) if self.env_var_names_json else []
+
+    @env_var_names.setter
+    def env_var_names(self, value):
+        self.env_var_names_json = json.dumps(list(value or []))
+
+    @property
+    def vault_item(self):
+        return self.vaultwarden_item_name or f"MCP-{self.name}"
+
+
+class UserServerSelection(db.Model):
+    __tablename__ = "user_server_selections"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
+    selected_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+
+    user = db.relationship("User", back_populates="selections")
+    server = db.relationship("McpServer", back_populates="selections")
+
+
+class UserServerOverride(db.Model):
+    """Bookkeeping only: records that a personal Vaultwarden override note
+    exists for this user+server. The actual override values live in
+    Vaultwarden under '<server.vault_item>-user-<username>', never here."""
+
+    __tablename__ = "user_server_overrides"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    user = db.relationship("User", back_populates="overrides")
+    server = db.relationship("McpServer", back_populates="overrides")

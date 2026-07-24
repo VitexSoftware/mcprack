@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if server else "New" }} server — mcprack{% endblock %}
+{% block content %}
+<h1>{{ "Edit" if server else "Register" }} MCP server</h1>
+<form method="post">
+  <label for="name">Name (unique slug)</label>
+  <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
+         {{ 'readonly' if server else '' }} required>
+
+  <label for="label">Label</label>
+  <input type="text" id="label" name="label" value="{{ server.label if server else '' }}" required>
+
+  <label for="description">Description</label>
+  <textarea id="description" name="description" rows="2">{{ server.description if server else '' }}</textarea>
+
+  <label for="category">Category</label>
+  <input type="text" id="category" name="category" value="{{ server.category if server else '' }}">
+
+  <label for="transport">Transport (how the server itself communicates)</label>
+  <select id="transport" name="transport">
+    {% for t in ["stdio", "http", "sse"] %}
+    <option value="{{ t }}" {{ "selected" if server and server.transport == t else "" }}>{{ t }}</option>
+    {% endfor %}
+  </select>
+  <p><small>This only records the server's own implementation. What remote
+  users actually get is decided by whether a network endpoint (below) is
+  set — fill it in even for a stdio server if it's proxied onto the network
+  (e.g. via mcp_rack's fastmcp proxy), so remote users always connect over
+  the network instead of needing the binary installed locally.</small></p>
+
+  <fieldset>
+    <legend>Local stdio command (used only if no network endpoint below is set)</legend>
+    <label for="command">Command</label>
+    <input type="text" id="command" name="command" value="{{ server.command if server else '' }}">
+    <label for="args">Args (space-separated)</label>
+    <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server else '' }}">
+  </fieldset>
+
+  <fieldset>
+    <legend>Network endpoint (how remote users connect — takes priority over the stdio command above)</legend>
+    <label for="url">URL</label>
+    <input type="text" id="url" name="url" value="{{ server.url if server else '' }}"
+           placeholder="http://mcphost.spojenet.cz:3100/mcp/">
+    <label for="auth_header_name">Auth header name</label>
+    <input type="text" id="auth_header_name" name="auth_header_name"
+           value="{{ server.auth_header_name if server else '' }}" placeholder="Authorization">
+    <label for="auth_env_key">Auth token env key</label>
+    <input type="text" id="auth_env_key" name="auth_env_key"
+           value="{{ server.auth_env_key if server else '' }}" placeholder="AUTH_TOKEN">
+  </fieldset>
+
+  <label for="env_text">Default credentials / env vars (KEY=value per line, stored in Vaultwarden — never in this app's database)</label>
+  <textarea id="env_text" name="env_text" rows="6">{{ env_text }}</textarea>
+
+  <label>
+    <input type="checkbox" name="allow_user_override" {{ "checked" if not server or server.allow_user_override else "" }}>
+    Allow users to override credentials with their own
+  </label>
+
+  <label>
+    <input type="checkbox" name="enabled" {{ "checked" if not server or server.enabled else "" }}>
+    Enabled (visible in catalog)
+  </label>
+
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

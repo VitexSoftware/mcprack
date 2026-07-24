@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Catalog — mcprack{% endblock %}
+{% block content %}
+<h1>MCP server catalog</h1>
+<p>Tick the servers you want, save your selection, then download the config
+for your client. You can re-download in either format at any time — your
+selection isn't tied to a specific client.</p>
+
+<form method="post" action="{{ url_for('catalog.selection') }}">
+  {% for server in servers %}
+  <div class="server-row">
+    <input type="checkbox" name="server_id" value="{{ server.id }}"
+           {{ "checked" if server.id in selected_ids else "" }}>
+    <div class="meta">
+      <div class="label">{{ server.label }} <small>({{ server.transport }})</small></div>
+      {% if server.description %}<div class="desc">{{ server.description }}</div>{% endif %}
+    </div>
+    {% if server.allow_user_override %}
+    <a href="{{ url_for('catalog.override', server_id=server.id) }}">
+      {{ "using your own credentials" if server.id in override_ids else "use my own credentials" }}
+    </a>
+    {% endif %}
+  </div>
+  {% else %}
+  <p>No servers available yet — ask an admin to register some.</p>
+  {% endfor %}
+  <button type="submit">Save selection</button>
+</form>
+
+<h2>Get config</h2>
+<p>
+  <a href="{{ url_for('catalog.download', client='claude') }}">Download for Claude</a>
+  &middot;
+  <a href="{{ url_for('catalog.view', client='claude') }}">view / copy</a>
+</p>
+<p>
+  <a href="{{ url_for('catalog.download', client='copilot') }}">Download for GitHub Copilot</a>
+  &middot;
+  <a href="{{ url_for('catalog.view', client='copilot') }}">view / copy</a>
+</p>
+{% endblock %}

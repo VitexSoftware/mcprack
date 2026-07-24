@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+*.db
+.env
+.env.testrun
+instance/
+.pytest_cache/
+debian/.debhelper/
+debian/mcprack/
+debian/mcprack.debhelper.log
+debian/mcprack.substvars
+debian/files
+debian/*.debhelper

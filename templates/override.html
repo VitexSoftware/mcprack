@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Override credentials — mcprack{% endblock %}
+{% block content %}
+<h1>Your credentials for {{ server.label }}</h1>
+<p>These values are stored in Vaultwarden under your personal item and only
+affect configs downloaded by you. Leave blank / reset to fall back to the
+admin's default credentials.</p>
+{% if server.env_var_names %}
+<p>Expected keys: <code>{{ server.env_var_names | join(', ') }}</code></p>
+{% endif %}
+<form method="post">
+  <label for="env_text">KEY=value (one per line)</label>
+  <textarea id="env_text" name="env_text" rows="6">{{ env_text }}</textarea>
+  <button type="submit" name="action" value="save">Save my credentials</button>
+</form>
+{% if has_override %}
+<form method="post">
+  <button type="submit" name="action" value="reset">Reset to default</button>
+</form>
+{% endif %}
+<p><a href="{{ url_for('catalog.index') }}">Back to catalog</a></p>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}MCP servers — mcprack{% endblock %}
+{% block content %}
+<h1>MCP servers</h1>
+<p><a href="{{ url_for('admin.server_new') }}">+ Register new server</a></p>
+<form method="post" action="{{ url_for('admin.servers_autodetect') }}" class="inline">
+  <button type="submit">Autodetect local MCP servers</button>
+</form>
+<p><small>Checks this machine's own Claude Code config (most accurate — exact
+command/args/url), running <code>mcp-rack-*</code> proxies, and known MCP CLI
+binaries on PATH, and registers any not already in the catalog. Only
+structure is imported — not credential values — so you'll still need to set
+default credentials for each before relying on them.</small></p>
+<table>
+  <thead>
+    <tr><th>Name</th><th>Label</th><th>Transport</th><th>Category</th><th>Enabled</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for server in servers %}
+    {% set h = server_health.get(server.id, {}) %}
+    <tr class="{{ 'row-warn' if h.get('missing_credentials') or not h.get('reachable', True) else '' }}">
+      <td>{{ server.name }}</td>
+      <td>{{ server.label }}</td>
+      <td>{{ server.transport }}</td>
+      <td>{{ server.category or "" }}</td>
+      <td>{{ "yes" if server.enabled else "no" }}</td>
+      <td>
+        {% if not h.get('reachable', True) %}
+        <span class="badge badge-error" title="{{ 'Command not found on PATH' if server.transport == 'stdio' else 'Host/port not reachable' }}">
+          &#9888; {{ "won't start" if server.transport == "stdio" else "unreachable" }}
+        </span>
+        {% endif %}
+        {% if h.get('missing_credentials') %}
+        <span class="badge badge-warn" title="Missing in Vaultwarden: {{ h['missing_credentials'] | join(', ') }}">
+          &#128273; missing: {{ h['missing_credentials'] | join(', ') }}
+        </span>
+        {% endif %}
+        {% if h.get('reachable', True) and not h.get('missing_credentials') %}
+        <span class="badge badge-ok">&#10003; ok</span>
+        {% endif %}
+      </td>
+      <td>
+        <a href="{{ url_for('admin.server_edit', server_id=server.id) }}">Edit</a>
+        <form class="inline" method="post" action="{{ url_for('admin.server_delete', server_id=server.id) }}"
+              onsubmit="return confirm('Delete {{ server.name }}?');">
+          <button type="submit">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="7">No servers registered yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

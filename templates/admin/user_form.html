@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if user else "New" }} user — mcprack{% endblock %}
+{% block content %}
+<h1>{{ "Edit" if user else "Create local" }} user</h1>
+<form method="post">
+  {% if not user %}
+  <label for="username">Username</label>
+  <input type="text" id="username" name="username" required autofocus>
+
+  <label for="email">Email</label>
+  <input type="email" id="email" name="email">
+
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password" required>
+  {% else %}
+  <p><strong>{{ user.username }}</strong> ({{ user.auth_type }})</p>
+  {% if user.auth_type == "local" %}
+  <label for="password">New password (leave blank to keep current)</label>
+  <input type="password" id="password" name="password">
+  {% endif %}
+  <label>
+    <input type="checkbox" name="is_active" {{ "checked" if user.is_active else "" }}>
+    Active
+  </label>
+  {% endif %}
+
+  <label>
+    <input type="checkbox" name="is_admin" {{ "checked" if user and user.is_admin else "" }}>
+    Admin
+  </label>
+
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

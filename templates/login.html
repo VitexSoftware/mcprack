@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Log in — mcprack{% endblock %}
+{% block content %}
+<h1>Log in</h1>
+<form method="post">
+  <label for="username">Username</label>
+  <input type="text" id="username" name="username" required autofocus>
+
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password" required>
+
+  <button type="submit">Log in</button>
+</form>
+<p>Use your local mcprack account, or your regular Active Directory username/password.</p>
+{% endblock %}

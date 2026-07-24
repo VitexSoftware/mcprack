@@ -1,0 +1,33 @@
+Source: mcprack
+Section: python
+Priority: optional
+Maintainer: Vítězslav Dvořák <info@vitexsoftware.cz>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+Standards-Version: 4.7.0
+Homepage: https://github.com/VitexSoftware/mcprack
+Rules-Requires-Root: no
+
+Package: mcprack
+Architecture: all
+Multi-Arch: foreign
+Depends:
+ ${misc:Depends},
+ ${python3:Depends},
+ python3-flask,
+ python3-flask-sqlalchemy,
+ python3-flask-login,
+ python3-flask-migrate,
+ python3-ldap3,
+ bw-cli,
+ gunicorn,
+Suggests:
+ python3-psycopg2,
+ python3-pymysql,
+Description: Self-service MCP server catalog and client config generator
+ mcprack lets an admin register MCP (Model Context Protocol) servers once;
+ users log in (local account or Active Directory), pick which servers they
+ need and which client they use (Claude or GitHub Copilot), and download a
+ ready-to-use client configuration file. Credentials are never stored by
+ mcprack itself — they live in Vaultwarden, fetched at download time.

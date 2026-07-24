@@ -1,0 +1,14 @@
+[Unit]
+Description=mcprack MCP server catalog & config generator
+After=network.target
+
+[Service]
+EnvironmentFile=-/etc/mcprack/env
+User=www-data
+WorkingDirectory=/usr/lib/mcprack
+StateDirectory=mcprack
+ExecStart=/usr/bin/gunicorn -b :8912 -w 4 wsgi:application
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,42 @@
+mcprack for Debian
+===================
+
+Configuration lives in /etc/mcprack/env (create it before the first start —
+see the systemd unit's EnvironmentFile). Required variables:
+
+  SECRET_KEY=<random-string>
+  SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
+  # or postgresql+psycopg2://... / mysql+pymysql://... (install python3-psycopg2
+  # or python3-pymysql respectively — see Suggests in debian/control)
+
+  LDAP_SERVER=ldap://10.11.25.3:389
+  LDAP_BASE_DN=dc=spojent,dc=cz
+  LDAP_USER_OU=ou=Users,dc=spojent,dc=cz
+  LDAP_USER_FILTER=(sAMAccountName=%(user)s)
+
+  BW_SERVER=https://vaultwarden-dev.proxy.spojenet.cz
+  BW_CLIENTID=...
+  BW_CLIENTSECRET=...
+  BW_PASSWORD=...
+  BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
+
+Get BW_CLIENTID/BW_CLIENTSECRET from the Vaultwarden web vault: Account
+Settings -> Security -> Keys (API Key). BW_PASSWORD is that same account's
+master password. After setting these, log in to mcprack as an admin and open
+"Vaultwarden diagnostics" in the nav bar (/admin/vaultwarden/wizard) — it
+checks the bw binary, BW_SERVER reachability, the API key, and the master
+password one at a time and tells you exactly which one is still wrong,
+instead of a raw "bw login failed" error. Re-run it after every edit to
+/etc/mcprack/env; no service restart is needed.
+
+After creating /etc/mcprack/env, run the database migration once:
+
+  su -s /bin/sh www-data -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade'
+
+Then create the first admin account:
+
+  su -s /bin/sh www-data -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask create-admin'
+
+Finally start the service:
+
+  systemctl enable --now mcprack

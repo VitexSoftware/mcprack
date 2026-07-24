@@ -1,0 +1,5 @@
+#!/bin/sh
+# Launcher for the mcprack Flask app (dev/manual use — production runs via
+# gunicorn + the mcprack.service systemd unit, see debian/mcprack.service).
+cd /usr/lib/mcprack || cd "$(dirname "$0")/.."
+exec python3 -m flask --app app:create_app run "$@"

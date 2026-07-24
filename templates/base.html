@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}mcprack{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <nav class="topnav">
+    <a href="{{ url_for('catalog.index') }}" class="brand">mcprack</a>
+    {% if current_user.is_authenticated %}
+      <span class="spacer"></span>
+      {% if current_user.is_admin %}
+        <a href="{{ url_for('admin.servers_list') }}">Servers</a>
+        <a href="{{ url_for('admin.users_list') }}">Users</a>
+        <a href="{{ url_for('admin.vaultwarden_wizard') }}">Vaultwarden diagnostics</a>
+      {% endif %}
+      <span class="whoami">{{ current_user.display_name }}</span>
+      <a href="{{ url_for('auth.logout') }}">Log out</a>
+    {% endif %}
+  </nav>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul class="flashes">
+        {% for category, message in messages %}
+          <li class="flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

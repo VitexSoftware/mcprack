@@ -1,0 +1,25 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  configure)
+    install -d -o www-data -g www-data -m 0750 /var/lib/mcprack
+
+    if [ -f /etc/mcprack/env ]; then
+      set -a
+      # shellcheck disable=SC1091
+      . /etc/mcprack/env
+      set +a
+      su -s /bin/sh www-data -c \
+        'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade' \
+        || echo "mcprack: 'flask db upgrade' failed - check /etc/mcprack/env and run it manually." >&2
+    else
+      echo "mcprack: /etc/mcprack/env not found yet - create it (see /usr/share/doc/mcprack/README.Debian), then run:"
+      echo "  su -s /bin/sh www-data -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade'"
+    fi
+    ;;
+esac
+
+#DEBHELPER#
+
+exit 0

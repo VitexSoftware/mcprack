@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Vaultwarden diagnostics — mcprack{% endblock %}
+{% block content %}
+<h1>Vaultwarden connection wizard</h1>
+<p>Checks each prerequisite in order and stops at the first problem, so you
+can fix one thing at a time instead of guessing from a raw error message.</p>
+
+<ol class="wizard">
+  {% for step in steps %}
+  <li class="wizard-step wizard-{{ step.status }}">
+    <span class="wizard-icon">
+      {% if step.status == "ok" %}&#10003;
+      {% elif step.status == "fail" %}&#10007;
+      {% else %}&#8213;
+      {% endif %}
+    </span>
+    <div class="wizard-body">
+      <div class="wizard-label">{{ step.label }}</div>
+      <div class="wizard-detail">{{ step.detail }}</div>
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+
+{% if steps and steps[-1].status == "ok" %}
+<p class="flash-success">All checks passed — Vaultwarden is fully configured and reachable.</p>
+{% else %}
+<p><small>Edit <code>/etc/mcprack/env</code> on the mcprack host to fix the flagged setting, then
+restart the mcprack service (or just reload this page — nothing here is cached).</small></p>
+{% endif %}
+
+<p>
+  <a href="{{ url_for('admin.vaultwarden_wizard') }}">Re-run diagnostics</a>
+  &middot;
+  <a href="{{ url_for('admin.servers_list') }}">Back to servers</a>
+</p>
+{% endblock %}

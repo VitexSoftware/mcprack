@@ -1,0 +1,43 @@
+body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; background: #fafafa; }
+.topnav { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1.5rem; background: #20232a; color: #fff; }
+.topnav a { color: #fff; text-decoration: none; }
+.topnav a:hover { text-decoration: underline; }
+.topnav .brand { font-weight: 700; }
+.topnav .spacer { flex: 1; }
+.topnav .whoami { opacity: 0.8; }
+main { padding: 1.5rem; max-width: 960px; margin: 0 auto; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+th, td { text-align: left; padding: 0.4rem 0.6rem; border-bottom: 1px solid #ddd; }
+form.inline { display: inline; }
+.flashes { list-style: none; padding: 0.5rem 1.5rem; margin: 0; }
+.flash-success { color: #146c2e; }
+.flash-error { color: #b3261e; }
+tr.row-warn { background: #fff6e5; }
+.badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.85rem; margin-right: 0.25rem; white-space: nowrap; }
+.badge-ok { background: #e3f5e8; color: #146c2e; }
+.badge-warn { background: #fdecc8; color: #8a5a00; }
+.badge-error { background: #fbe4e1; color: #b3261e; }
+.server-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid #e5e5e5; }
+
+ol.wizard { list-style: none; padding: 0; margin: 1rem 0; }
+.wizard-step { display: flex; align-items: flex-start; gap: 0.75rem; padding: 0.6rem 0.75rem; border-left: 3px solid #ddd; margin-bottom: 0.4rem; background: #fafafa; }
+.wizard-step.wizard-ok { border-left-color: #2e8b47; }
+.wizard-step.wizard-fail { border-left-color: #b3261e; background: #fbe4e1; }
+.wizard-step.wizard-skipped { border-left-color: #ccc; color: #888; }
+.wizard-icon { font-size: 1.1rem; line-height: 1.4; width: 1.2rem; text-align: center; flex-shrink: 0; }
+.wizard-ok .wizard-icon { color: #146c2e; }
+.wizard-fail .wizard-icon { color: #b3261e; }
+.wizard-label { font-weight: 600; }
+.wizard-detail { font-size: 0.9rem; color: #444; }
+.wizard-skipped .wizard-detail { color: #999; }
+.server-row .meta { flex: 1; }
+.server-row .label { font-weight: 600; }
+.server-row .desc { color: #555; font-size: 0.9rem; }
+textarea { width: 100%; font-family: monospace; }
+label { display: block; margin-top: 0.75rem; font-weight: 600; }
+input[type=text], input[type=password], input[type=email], select, textarea {
+  width: 100%; padding: 0.4rem; box-sizing: border-box;
+}
+button, input[type=submit] {
+  margin-top: 1rem; padding: 0.5rem 1rem; cursor: pointer;
+}
