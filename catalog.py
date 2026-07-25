@@ -1,4 +1,5 @@
 import json
+import socket as _socket
 
 from flask import (
     Blueprint,
@@ -18,6 +19,20 @@ from extensions import db
 from models import McpServer, UserServerOverride, UserServerSelection
 
 bp = Blueprint("catalog", __name__)
+
+# Cache server IPs to avoid repeated socket.getaddrinfo() calls (DNS lookups are slow)
+_SERVER_LOCAL_IPS = None
+
+def _get_server_local_ips():
+    """Get the set of local IPs (the server itself), cached after first lookup."""
+    global _SERVER_LOCAL_IPS
+    if _SERVER_LOCAL_IPS is None:
+        try:
+            server_hostname = _socket.getfqdn()
+            _SERVER_LOCAL_IPS = {ip[4][0] for ip in _socket.getaddrinfo(server_hostname, None)}
+        except Exception:
+            _SERVER_LOCAL_IPS = set()
+    return _SERVER_LOCAL_IPS
 
 RENDERERS = {
     "claude": (render_claude_config, "claude_desktop_config.json"),
@@ -178,13 +193,7 @@ def _build_client_config_json(client):
     # Detect if this is a remote request and enable proxy mode
     client_ip = request.remote_addr
     localhost_ips = {"127.0.0.1", "::1", "localhost"}
-    # Also consider the main server IP as local
-    try:
-        import socket
-        server_hostname = socket.getfqdn()
-        server_ips = {ip[4][0] for ip in socket.getaddrinfo(server_hostname, None)}
-    except Exception:
-        server_ips = set()
+    server_ips = _get_server_local_ips()
     
     is_remote = client_ip not in localhost_ips and client_ip not in server_ips
     proxy_host = request.host.split(":")[0] if is_remote else None
