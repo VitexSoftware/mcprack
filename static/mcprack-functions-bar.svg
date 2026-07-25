@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 80">
+  <defs>
+    <style>
+      .segment-label { font-family: sans-serif; font-size: 11px; font-weight: 600; fill: white; text-anchor: middle; }
+      .segment:hover { opacity: 0.85; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="80" fill="#f3f4f6" rx="8"/>
+
+  <!-- MCP Logo on left -->
+  <g transform="translate(30, 40)">
+    <circle r="28" fill="#1f2937" opacity="0.9"/>
+    <text x="0" y="5" font-family="sans-serif" font-size="14" font-weight="bold" 
+          fill="white" text-anchor="middle">MCP</text>
+    <text x="0" y="20" font-family="sans-serif" font-size="7" fill="#9ca3af" 
+          text-anchor="middle" font-weight="500">Protocol</text>
+  </g>
+
+  <!-- Functional segments -->
+  <!-- Admin -->
+  <rect x="70" y="10" width="60" height="60" fill="#2563eb" rx="4" class="segment"/>
+  <text x="100" y="42" class="segment-label">Admin</text>
+
+  <!-- Catalog -->
+  <rect x="140" y="10" width="60" height="60" fill="#16a34a" rx="4" class="segment"/>
+  <text x="170" y="42" class="segment-label">Catalog</text>
+
+  <!-- Vault -->
+  <rect x="210" y="10" width="60" height="60" fill="#9333ea" rx="4" class="segment"/>
+  <text x="240" y="42" class="segment-label">Vault</text>
+
+  <!-- Registry -->
+  <rect x="280" y="10" width="60" height="60" fill="#ea580c" rx="4" class="segment"/>
+  <text x="310" y="42" class="segment-label">Registry</text>
+
+  <!-- Proxy -->
+  <rect x="350" y="10" width="50" height="60" fill="#0891b2" rx="4" class="segment"/>
+  <text x="375" y="42" class="segment-label">Proxy</text>
+
+  <!-- Function labels below -->
+  <g font-family="sans-serif" font-size="8" fill="#6b7280" text-anchor="middle" font-weight="400">
+    <text x="100" y="78">Management</text>
+    <text x="170" y="78">Selection</text>
+    <text x="240" y="78">Secrets</text>
+    <text x="310" y="78">Servers</text>
+    <text x="375" y="78">Remote</text>
+  </g>
+</svg>

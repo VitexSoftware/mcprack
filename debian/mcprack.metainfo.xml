@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="web-application">
+  <id>cz.vitexsoftware.mcprack</id>
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>mcprack</name>
+  <summary>MCP Self-Service Server Catalog &amp; Config Generator</summary>
+  <description>
+    <p>
+      mcprack is a centralized platform for managing and distributing Model Context Protocol (MCP) server configurations across your organization. It solves the problem of how to securely provision AI clients with access to multiple backend services without hardcoding secrets or requiring manual configuration on each machine.
+    </p>
+    <p>
+      Key features:
+    </p>
+    <ul>
+      <li>Admin UI for registering MCP servers and managing credentials</li>
+      <li>User self-service catalog to browse and select available servers</li>
+      <li>Automatic config generation for Claude Desktop, GitHub Copilot, and other MCP-compatible clients</li>
+      <li>Secure credential management via Vaultwarden — secrets never stored in mcprack's database</li>
+      <li>Per-user credential overrides for personalized access control</li>
+      <li>Optional HTTP proxy (FastMCP) for exposing stdio servers to remote clients</li>
+      <li>LDAP/Active Directory support for enterprise deployments</li>
+    </ul>
+    <p>
+      Users log in with local account or Active Directory credentials, select which servers they need, choose their target client, and download a ready-to-use configuration. Credentials are managed centrally in Vaultwarden using the same secure pattern as the mcp_rack Ansible role.
+    </p>
+  </description>
+  <launchable type="url">http://localhost:5000</launchable>
+  <icon type="stock">mcp-logo</icon>
+  <categories>
+    <category>WebApplication</category>
+    <category>Network</category>
+    <category>System</category>
+  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/VitexSoftware/mcprack/main/static/mcprack-catalog.png</image>
+      <caption>User catalog interface for selecting MCP servers</caption>
+    </screenshot>
+  </screenshots>
+  <url type="homepage">https://github.com/VitexSoftware/mcprack</url>
+  <url type="bugtracker">https://github.com/VitexSoftware/mcprack/issues</url>
+  <url type="help">https://github.com/VitexSoftware/mcprack/blob/main/README.md</url>
+  <developer_name>VitexSoftware</developer_name>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.2.0" date="2026-07-25">
+      <description>
+        <p>
+          Initial public release of mcprack with full feature set:
+        </p>
+        <ul>
+          <li>MCP server registry and management</li>
+          <li>User self-service configuration</li>
+          <li>Vaultwarden credential integration</li>
+          <li>FastMCP HTTP proxy support</li>
+          <li>LDAP/Active Directory authentication</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>

@@ -19,3 +19,4 @@ bin/mcprack /usr/bin/
 bin/mcprack-generate-proxy-config /usr/bin/
 bin/mcprack-mcp-manager /usr/bin/
 bin/mcprack-proxy-start /usr/bin/
+debian/mcprack.metainfo.xml /usr/share/metainfo/

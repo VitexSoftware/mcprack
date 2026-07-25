@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <style>
+      .ribbon { transition: opacity 0.3s; }
+      .ribbon:hover { opacity: 0.8; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="120" height="120" fill="#f9fafb" rx="6"/>
+
+  <!-- Central MCP hub -->
+  <circle cx="60" cy="60" r="22" fill="#1f2937" opacity="0.9"/>
+  <text x="60" y="67" font-family="sans-serif" font-size="13" font-weight="bold" 
+        fill="white" text-anchor="middle">MCP</text>
+
+  <!-- Functional rings around center -->
+  <!-- Admin (Blue) - Top -->
+  <path d="M 60 38 L 75 45 L 70 60 L 50 60 L 45 45 Z" 
+        fill="#2563eb" opacity="0.85" class="ribbon"/>
+  <title>Admin Panel</title>
+
+  <!-- Catalog (Green) - Right -->
+  <path d="M 82 60 L 75 75 L 60 70 L 60 50 L 70 55 Z" 
+        fill="#16a34a" opacity="0.85" class="ribbon"/>
+  <title>User Catalog</title>
+
+  <!-- Vault (Purple) - Bottom -->
+  <path d="M 60 82 L 45 75 L 50 60 L 70 60 L 75 75 Z" 
+        fill="#9333ea" opacity="0.85" class="ribbon"/>
+  <title>Vaultwarden Vault</title>
+
+  <!-- Registry (Orange) - Left-Bottom -->
+  <path d="M 38 60 L 45 75 L 35 70 L 30 55 Z" 
+        fill="#ea580c" opacity="0.85" class="ribbon"/>
+  <title>Server Registry</title>
+
+  <!-- Proxy (Teal) - Left-Top -->
+  <path d="M 38 60 L 45 45 L 50 50 L 40 60 Z" 
+        fill="#0891b2" opacity="0.85" class="ribbon"/>
+  <title>HTTP Proxy</title>
+
+  <!-- Functional labels around edges (smaller version) -->
+  <g font-family="sans-serif" font-size="7" fill="#6b7280" text-anchor="middle" font-weight="500">
+    <text x="60" y="15">ADMIN</text>
+    <text x="105" y="65">CATALOG</text>
+    <text x="60" y="110">VAULT</text>
+    <text x="15" y="65">REGISTRY</text>
+  </g>
+</svg>
