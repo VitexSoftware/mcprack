@@ -1,5 +1,7 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 import json
+from datetime import datetime, timedelta
+from functools import lru_cache
 
 import detection
 import health
@@ -9,6 +11,11 @@ from extensions import db
 from models import McpServer, User
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+# Cache for server health checks (expires after 30 seconds)
+_health_cache = {}
+_health_cache_time = None
+HEALTH_CACHE_TTL = 30  # seconds
 
 
 def _parse_kv_textarea(text):
@@ -32,25 +39,40 @@ def _compute_server_health(servers):
     """One Vaultwarden session for the whole list, instead of one per row.
     Falls back to 'credentials unknown' (never flagged as missing) if
     Vaultwarden itself can't be reached, so a vault outage doesn't turn the
-    entire servers list red."""
+    entire servers list red.
+    
+    Caches results for 30 seconds to avoid repeated Vaultwarden/bw calls."""
+    global _health_cache, _health_cache_time
+    
+    # Check if cache is still valid
+    now = datetime.now()
+    if _health_cache_time and (now - _health_cache_time).total_seconds() < HEALTH_CACHE_TTL:
+        return _health_cache
+    
+    # Cache expired or not set - recompute
     try:
         with vaultwarden.session() as sess:
             health_by_id = {}
             for server in servers:
                 try:
-                    vault_values = vaultwarden.get_notes(sess, server.vault_item)
+                    vault_values = vaultwarden.get_notes(sess, server.vaultwarden_item_name)
                 except vaultwarden.VaultwardenError:
                     vault_values = {}
                 health_by_id[server.id] = {
                     "missing_credentials": vaultwarden.missing_credential_keys(server, vault_values),
                     "reachable": health.check_reachable(server),
                 }
+            _health_cache = health_by_id
+            _health_cache_time = now
             return health_by_id
     except vaultwarden.VaultwardenError:
-        return {
+        health_by_id = {
             server.id: {"missing_credentials": [], "reachable": health.check_reachable(server)}
             for server in servers
         }
+        _health_cache = health_by_id
+        _health_cache_time = now
+        return health_by_id
 
 
 @bp.route("/servers")
