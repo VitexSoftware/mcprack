@@ -1,6 +1,12 @@
 # mcprack
 
+<div align="center">
+
+![mcprack logo](https://raw.githubusercontent.com/VitexSoftware/mcprack/main/static/mcprack-icon-composite.svg)
+
 **Model Context Protocol (MCP) Self-Service Catalog & Config Generator**
+
+</div>
 
 mcprack is a centralized platform for managing and distributing MCP (Model Context Protocol) server configurations across your organization. It solves the problem of how to securely provision AI clients (Claude Desktop, GitHub Copilot, and other MCP-compatible tools) with access to multiple backend services — without hardcoding secrets or requiring manual configuration on each machine.
 
@@ -230,3 +236,24 @@ includes support for this via `fastmcp`:
    HTTP proxy instead of local stdio commands.
 
 See `debian/README.Debian` for full details on the proxy setup.
+
+## Branding & Icons
+
+mcprack includes several icon variants to represent the platform's five functional areas:
+
+| Icon | Purpose | Colors |
+|------|---------|--------|
+| `mcprack-app-icon.svg` | App launcher / favicon (256×256) | 2×2 grid: Blue (Admin) / Green (Catalog) / Purple (Vault) / Teal+Orange (Registry/Proxy) |
+| `mcprack-icon-composite.svg` | Hub diagram with labeled functions | Circular design with 5 surrounding functional rings |
+| `mcprack-badge.svg` | Shield badge for documentation | Overlapping colored segments |
+| `mcprack-rings.svg` | Concentric design | Rings around central MCP hub |
+| `mcprack-functions-bar.svg` | Web header / banner | Horizontal stacked bar showing all 5 functions |
+
+All icons are located in `static/` and are included in the AppStream metadata for app catalog discovery.
+
+**Color scheme:**
+- 🔵 Blue = Admin Panel (management & configuration)
+- 🟢 Green = User Catalog (server selection)
+- 🟣 Purple = Vaultwarden Vault (credential storage)
+- 🟠 Orange = Server Registry (inventory)
+- 🔷 Teal = HTTP Proxy (remote access)
