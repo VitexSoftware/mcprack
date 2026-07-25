@@ -38,7 +38,8 @@ def _ldap_authenticate(username, password):
         return None
 
     cfg = current_app.config
-    server = ldap3.Server(cfg["LDAP_SERVER"], get_info=None)
+    # Set connect_timeout to 5 seconds to prevent worker hangs
+    server = ldap3.Server(cfg["LDAP_SERVER"], get_info=None, connect_timeout=5)
     search_filter = cfg["LDAP_USER_FILTER"] % {"user": escape_filter_chars(username)}
 
     try:
@@ -92,7 +93,11 @@ def login():
             flash("Invalid username or password.", "error")
             return render_template("login.html")
 
-        attrs = _ldap_authenticate(username, password)
+        if current_app.config["LDAP_ENABLED"]:
+            attrs = _ldap_authenticate(username, password)
+        else:
+            attrs = None
+
         if attrs is not None:
             if user is None:
                 user = User(username=username, auth_type="ldap")

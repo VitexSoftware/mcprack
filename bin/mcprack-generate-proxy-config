@@ -11,9 +11,24 @@ import sys
 from pathlib import Path
 
 # Load Flask app to access database
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from app import create_app
-from models import McpServer
+# In production, mcprack is at /usr/lib/mcprack (added by debian package)
+# In development, it's in the same directory as this script or ../..
+app_path = '/usr/lib/mcprack'
+if not os.path.isdir(app_path):
+    app_path = str(Path(__file__).parent.parent / 'mcprack')
+if not os.path.isdir(app_path):
+    app_path = str(Path(__file__).parent.parent)
+
+sys.path.insert(0, app_path)
+
+try:
+    from app import create_app
+    from models import McpServer
+except ImportError as e:
+    print(f"ERROR: Could not import mcprack modules from {app_path}", file=sys.stderr)
+    print(f"ImportError: {e}", file=sys.stderr)
+    print(f"sys.path: {sys.path}", file=sys.stderr)
+    sys.exit(1)
 
 def main():
     app = create_app()

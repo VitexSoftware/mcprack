@@ -13,6 +13,7 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    LDAP_ENABLED = os.environ.get("LDAP_ENABLED", "false").lower() in ("true", "1", "yes")
     LDAP_SERVER = os.environ.get("LDAP_SERVER", "ldap://10.11.25.3:389")
     LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN", "dc=spojent,dc=cz")
     LDAP_USER_OU = os.environ.get("LDAP_USER_OU", "ou=Users,dc=spojent,dc=cz")

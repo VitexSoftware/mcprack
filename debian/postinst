@@ -43,13 +43,41 @@ case "$1" in
       printf "Bitwarden master password: "
       read -r BW_PASSWORD
       
-      printf "LDAP server URL [ldap://10.11.25.3:389]: "
-      read -r LDAP_SERVER
-      LDAP_SERVER="${LDAP_SERVER:-ldap://10.11.25.3:389}"
+      # Ask about LDAP authentication
+      echo ""
+      echo "========================================="
+      echo "LDAP Authentication (Optional)"
+      echo "========================================="
+      printf "Enable LDAP authentication? (y/N): "
+      read -r ENABLE_LDAP
       
-      printf "LDAP base DN [dc=spojent,dc=cz]: "
-      read -r LDAP_BASE_DN
-      LDAP_BASE_DN="${LDAP_BASE_DN:-dc=spojent,dc=cz}"
+      if [ "$ENABLE_LDAP" = "y" ] || [ "$ENABLE_LDAP" = "Y" ]; then
+        LDAP_ENABLED="true"
+        
+        printf "LDAP server URL [ldap://10.11.25.3:389]: "
+        read -r LDAP_SERVER
+        LDAP_SERVER="${LDAP_SERVER:-ldap://10.11.25.3:389}"
+        
+        printf "LDAP base DN [dc=spojent,dc=cz]: "
+        read -r LDAP_BASE_DN
+        LDAP_BASE_DN="${LDAP_BASE_DN:-dc=spojent,dc=cz}"
+        
+        printf "LDAP bind DN (for LDAP queries, e.g., cn=admin,dc=spojent,dc=cz) [leave empty for anonymous]: "
+        read -r LDAP_BIND_DN
+        
+        if [ -n "$LDAP_BIND_DN" ]; then
+          printf "LDAP bind password: "
+          read -r LDAP_BIND_PASSWORD
+        else
+          LDAP_BIND_PASSWORD=""
+        fi
+      else
+        LDAP_ENABLED="false"
+        LDAP_SERVER="ldap://localhost"
+        LDAP_BASE_DN="dc=example,dc=com"
+        LDAP_BIND_DN=""
+        LDAP_BIND_PASSWORD=""
+      fi
       
       # Ask about FastMCP HTTP proxy for remote clients
       echo ""
@@ -117,8 +145,8 @@ LDAP_SERVER=$LDAP_SERVER
 LDAP_BASE_DN=$LDAP_BASE_DN
 LDAP_USER_OU=ou=Users,$LDAP_BASE_DN
 LDAP_USER_FILTER='(sAMAccountName=%(user)s)'
-LDAP_BIND_DN=
-LDAP_BIND_PASSWORD=
+LDAP_BIND_DN=$LDAP_BIND_DN
+LDAP_BIND_PASSWORD=$LDAP_BIND_PASSWORD
 
 # Vaultwarden (Bitwarden) - MCP server credentials storage
 BW_SERVER=$BW_SERVER
