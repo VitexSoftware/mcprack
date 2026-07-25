@@ -1,17 +1,13 @@
 #!/usr/bin/make -f
 
 %:
-	dh $@ --with python3
-
-override_dh_installdirs:
-	dh_installdirs
-	# Ensure systemd system directory exists in the package
-	mkdir -p debian/mcprack/lib/systemd/system
-	mkdir -p debian/mcprack/usr/lib/mcprack
-	mkdir -p debian/mcprack/usr/bin
+	dh $@
 
 override_dh_install:
 	dh_install
-	# Explicitly copy service files to ensure they're included
-	install -D -m 0644 debian/mcprack.service debian/mcprack/lib/systemd/system/mcprack.service
-	install -D -m 0644 debian/mcprack-proxy.service debian/mcprack/lib/systemd/system/mcprack-proxy.service
+	# Create systemd directory and copy service files into the package
+	mkdir -p debian/mcprack/lib/systemd/system
+	cp debian/mcprack.service debian/mcprack/lib/systemd/system/
+	cp debian/mcprack-proxy.service debian/mcprack/lib/systemd/system/
+	chmod 0644 debian/mcprack/lib/systemd/system/mcprack.service
+	chmod 0644 debian/mcprack/lib/systemd/system/mcprack-proxy.service
