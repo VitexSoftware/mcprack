@@ -49,6 +49,13 @@
            value="{{ server.auth_env_key if server else '' }}" placeholder="AUTH_TOKEN">
   </fieldset>
 
+  <fieldset>
+    <legend>Environment Variables (passed to server binary)</legend>
+    <p><small>JSON format: {"VAR_NAME": "value", "ANOTHER": "value"}</small></p>
+    <label for="env_config">Environment Config (JSON)</label>
+    <textarea id="env_config" name="env_config" rows="6" placeholder='{"MASTODON_INSTANCE": "https://fosstodon.org", "MASTODON_ACCESS_TOKEN": "token"}'>{{ env_config_json if server else '' }}</textarea>
+  </fieldset>
+
   <label for="env_text">Default credentials / env vars (KEY=value per line, stored in Vaultwarden — never in this app's database)</label>
   <textarea id="env_text" name="env_text" rows="6">{{ env_text }}</textarea>
 

@@ -1,4 +1,5 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
+import json
 
 import detection
 import health
@@ -70,7 +71,7 @@ def server_new():
         db.session.commit()
         flash(f"Server '{server.name}' created.", "success")
         return redirect(url_for("admin.servers_list"))
-    return render_template("admin/server_form.html", server=None, env_text="")
+    return render_template("admin/server_form.html", server=None, env_text="", env_config_json="")
 
 
 @bp.route("/servers/<int:server_id>/edit", methods=["GET", "POST"])
@@ -91,8 +92,9 @@ def server_edit(server_id):
         flash(f"Could not reach Vaultwarden — showing an empty credentials form: {exc}", "error")
         env_values = {}
 
+    env_config_json = json.dumps(server.env_config, indent=2) if server.env_config else ""
     return render_template(
-        "admin/server_form.html", server=server, env_text=_render_kv_textarea(env_values)
+        "admin/server_form.html", server=server, env_text=_render_kv_textarea(env_values), env_config_json=env_config_json
     )
 
 
@@ -117,6 +119,17 @@ def _apply_server_form(server, form):
     server.url = form.get("url", "") or None
     server.auth_header_name = form.get("auth_header_name", "") or None
     server.auth_env_key = form.get("auth_env_key", "") or None
+
+    # Handle environment configuration (JSON format stored in database)
+    env_config_text = form.get("env_config", "").strip()
+    if env_config_text:
+        try:
+            server.env_config = json.loads(env_config_text)
+        except json.JSONDecodeError as e:
+            flash(f"Invalid JSON in environment config: {e}", "error")
+            server.env_config = {}
+    else:
+        server.env_config = {}
 
     env_values = _parse_kv_textarea(form.get("env_text", ""))
     server.env_var_names = list(env_values.keys())

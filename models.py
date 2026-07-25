@@ -74,6 +74,10 @@ class McpServer(db.Model):
     env_var_names_json = db.Column(db.Text, nullable=True)  # JSON-encoded list[str]
     vaultwarden_item_name = db.Column(db.String(255), nullable=True)
 
+    # Environment variables for this server (JSON dict)
+    # Example: {"MASTODON_INSTANCE": "https://fosstodon.org", "MASTODON_ACCESS_TOKEN": "***"}
+    env_config_json = db.Column(db.Text, nullable=True, default='{}')
+
     allow_user_override = db.Column(db.Boolean, nullable=False, default=True)
     category = db.Column(db.String(255), nullable=True)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
@@ -103,6 +107,14 @@ class McpServer(db.Model):
     @env_var_names.setter
     def env_var_names(self, value):
         self.env_var_names_json = json.dumps(list(value or []))
+
+    @property
+    def env_config(self):
+        return json.loads(self.env_config_json) if self.env_config_json else {}
+
+    @env_config.setter
+    def env_config(self, value):
+        self.env_config_json = json.dumps(dict(value or {}))
 
     @property
     def vault_item(self):
