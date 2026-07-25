@@ -7,8 +7,18 @@ EnvironmentFile=-/etc/mcprack/env
 User=www-data
 WorkingDirectory=/usr/lib/mcprack
 StateDirectory=mcprack
-ExecStart=/usr/bin/gunicorn -b :8912 -w 4 wsgi:application
+ExecStart=/usr/bin/gunicorn \
+    --bind 0.0.0.0:8912 \
+    --workers 4 \
+    --worker-class sync \
+    --worker-tmp-dir /dev/shm \
+    --timeout 30 \
+    --access-logfile /var/log/mcprack/access.log \
+    --error-logfile /var/log/mcprack/error.log \
+    --log-level info \
+    wsgi:application
 Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target

@@ -2,6 +2,10 @@ import os
 
 
 class Config:
+    # Production settings by default
+    DEBUG = False
+    TESTING = False
+    
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-secret-change-me")
 
     SQLALCHEMY_DATABASE_URI = os.environ.get(
