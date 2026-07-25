@@ -11,6 +11,8 @@ around in memory only for the lifetime of a single request.
 """
 
 import base64
+import contextlib
+import fcntl
 import json
 import os
 import subprocess
@@ -34,7 +36,41 @@ def _env():
         # bw needs a PATH/HOME to run at all
         "PATH": "/usr/bin:/bin",
         "HOME": cfg["BITWARDENCLI_APPDATA_DIR"],
+        # Fail fast instead of blocking on stdin if something we didn't
+        # anticipate makes `bw` want to prompt interactively (e.g. a stale
+        # session from a concurrent request leaving the vault locked) — a
+        # hung subprocess under gunicorn just burns a worker until its
+        # request timeout kills it, with no useful error at all.
+        "BW_NOINTERACTION": "true",
     }
+
+
+def _lock_file_path():
+    appdata_dir = current_app.config["BITWARDENCLI_APPDATA_DIR"]
+    os.makedirs(appdata_dir, exist_ok=True)
+    return os.path.join(appdata_dir, ".mcprack-bw.lock")
+
+
+@contextlib.contextmanager
+def _serialized():
+    """Cross-process mutex around a chunk of `bw` CLI calls.
+
+    The `bw` CLI's local state directory is not safe for concurrent
+    unlock/lock cycles: `bw lock` clears the encryption key for *all* local
+    state in `BITWARDENCLI_APPDATA_DIR`, not just one session. With multiple
+    gunicorn workers sharing one appdata dir, one worker finishing its
+    request (and locking) can yank the vault out from under a different
+    worker that's still mid-request with an earlier session — which is
+    exactly what caused a worker to hang waiting on an unexpected
+    interactive prompt. Serializing access here trades a little latency
+    under concurrency for correctness.
+    """
+    with open(_lock_file_path(), "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def _bw_bin():
@@ -79,6 +115,25 @@ def unlock():
 
 def lock(session):
     _run(["lock"], check=False)
+
+
+@contextlib.contextmanager
+def session():
+    """Preferred entry point for callers: unlock, yield a session token, and
+    always lock again on the way out — the whole thing serialized against
+    other requests (see _serialized()) so concurrent gunicorn workers can't
+    race each other's unlock/lock cycles.
+
+    Usage:
+        with vaultwarden.session() as sess:
+            vaultwarden.get_notes(sess, "MCP-jenkins")
+    """
+    with _serialized():
+        sess = unlock()
+        try:
+            yield sess
+        finally:
+            lock(sess)
 
 
 def _find_item_id(session, item_name):
@@ -234,29 +289,30 @@ def diagnose():
 
     login_ok, login_detail = False, "Not attempted."
     if not blocked:
-        _run(["config", "server", server], check=False)
-        status_result = _run(["status", "--raw"], check=False)
-        current_status = "unknown"
-        if status_result and status_result.stdout:
-            try:
-                current_status = json.loads(status_result.stdout).get("status", "unknown")
-            except ValueError:
-                pass
+        with _serialized():
+            _run(["config", "server", server], check=False)
+            status_result = _run(["status", "--raw"], check=False)
+            current_status = "unknown"
+            if status_result and status_result.stdout:
+                try:
+                    current_status = json.loads(status_result.stdout).get("status", "unknown")
+                except ValueError:
+                    pass
 
-        if current_status == "unauthenticated":
-            login_result = _run(["login", "--apikey", "--quiet"], check=False)
-            login_ok = login_result is not None and login_result.returncode == 0
-            if login_ok:
-                login_detail = "Logged in successfully with the configured API key."
+            if current_status == "unauthenticated":
+                login_result = _run(["login", "--apikey", "--quiet"], check=False)
+                login_ok = login_result is not None and login_result.returncode == 0
+                if login_ok:
+                    login_detail = "Logged in successfully with the configured API key."
+                else:
+                    stderr = (login_result.stderr.strip() or login_result.stdout.strip()) if login_result else ""
+                    login_detail = stderr or (
+                        "Login failed — double check BW_CLIENTID/BW_CLIENTSECRET are correct for this "
+                        "Vaultwarden server (Account Settings -> Security -> API Key)."
+                    )
             else:
-                stderr = (login_result.stderr.strip() or login_result.stdout.strip()) if login_result else ""
-                login_detail = stderr or (
-                    "Login failed — double check BW_CLIENTID/BW_CLIENTSECRET are correct for this "
-                    "Vaultwarden server (Account Settings -> Security -> API Key)."
-                )
-        else:
-            login_ok = True
-            login_detail = f"Already authenticated (status: {current_status})."
+                login_ok = True
+                login_detail = f"Already authenticated (status: {current_status})."
     add("bw_api_login", "API key login succeeds", login_ok, login_detail)
 
     password_set = bool(cfg["BW_PASSWORD"])
@@ -270,18 +326,19 @@ def diagnose():
 
     unlock_ok, unlock_detail = False, "Not attempted."
     if not blocked:
-        unlock_result = _run(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"], check=False)
-        unlock_ok = bool(unlock_result and unlock_result.returncode == 0 and unlock_result.stdout.strip())
-        if unlock_ok:
-            _run(["lock"], check=False)
-            unlock_detail = "Vault unlocked successfully — Vaultwarden is fully configured."
-        else:
-            stderr = (
-                (unlock_result.stderr.strip() or unlock_result.stdout.strip()) if unlock_result else ""
-            )
-            unlock_detail = stderr or (
-                "Unlock failed — double check BW_PASSWORD is the correct master password for this account."
-            )
+        with _serialized():
+            unlock_result = _run(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"], check=False)
+            unlock_ok = bool(unlock_result and unlock_result.returncode == 0 and unlock_result.stdout.strip())
+            if unlock_ok:
+                _run(["lock"], check=False)
+                unlock_detail = "Vault unlocked successfully — Vaultwarden is fully configured."
+            else:
+                stderr = (
+                    (unlock_result.stderr.strip() or unlock_result.stdout.strip()) if unlock_result else ""
+                )
+                unlock_detail = stderr or (
+                    "Unlock failed — double check BW_PASSWORD is the correct master password for this account."
+                )
     add("bw_unlock", "Vault unlocks with BW_PASSWORD", unlock_ok, unlock_detail)
 
     return steps

@@ -3,6 +3,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 import vaultwarden
 
 
@@ -267,3 +269,58 @@ def test_diagnose_reports_bad_master_password(app):
     assert statuses["bw_unlock"] == "fail"
     unlock_step = next(s for s in steps if s["key"] == "bw_unlock")
     assert "incorrect" in unlock_step["detail"]
+
+
+def test_session_unlocks_yields_and_locks(app):
+    with app.app_context():
+        with patch("vaultwarden.unlock", return_value="sess-token") as mock_unlock, \
+             patch("vaultwarden.lock") as mock_lock:
+            with vaultwarden.session() as sess:
+                assert sess == "sess-token"
+                mock_unlock.assert_called_once()
+                mock_lock.assert_not_called()
+            mock_lock.assert_called_once_with("sess-token")
+
+
+def test_session_locks_even_if_body_raises(app):
+    with app.app_context():
+        with patch("vaultwarden.unlock", return_value="sess-token"), \
+             patch("vaultwarden.lock") as mock_lock:
+            with pytest.raises(RuntimeError):
+                with vaultwarden.session():
+                    raise RuntimeError("boom")
+            mock_lock.assert_called_once_with("sess-token")
+
+
+def test_session_propagates_unlock_failure_without_locking(app):
+    with app.app_context():
+        with patch("vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")), \
+             patch("vaultwarden.lock") as mock_lock:
+            with pytest.raises(vaultwarden.VaultwardenError):
+                with vaultwarden.session():
+                    pass
+            mock_lock.assert_not_called()
+
+
+def test_session_serializes_across_concurrent_callers(app):
+    """Two overlapping session() calls must not run their unlock/lock cycles
+    concurrently — this is the fix for gunicorn workers racing each other's
+    `bw lock` and yanking the vault out from under a still-in-flight
+    request. Simulate overlap by having the first call's body attempt to
+    acquire the same lock file non-blocking; it must fail while the first
+    session is still open."""
+    import fcntl
+
+    with app.app_context():
+        with patch("vaultwarden.unlock", return_value="sess-token"), \
+             patch("vaultwarden.lock"):
+            with vaultwarden.session():
+                lock_path = vaultwarden._lock_file_path()
+                with open(lock_path, "w") as probe:
+                    with pytest.raises(BlockingIOError):
+                        fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+            # after the first session exits, the lock is free again
+            with open(lock_path, "w") as probe:
+                fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fcntl.flock(probe, fcntl.LOCK_UN)

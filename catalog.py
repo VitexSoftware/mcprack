@@ -78,11 +78,12 @@ def override(server_id):
 
     if request.method == "POST":
         if request.form.get("action") == "reset":
-            session = vaultwarden.unlock()
             try:
-                vaultwarden.delete_item(session, override_item)
-            finally:
-                vaultwarden.lock(session)
+                with vaultwarden.session() as sess:
+                    vaultwarden.delete_item(sess, override_item)
+            except vaultwarden.VaultwardenError as exc:
+                flash(f"Could not reach Vaultwarden: {exc} (ask an admin to check the diagnostics wizard).", "error")
+                return redirect(url_for("catalog.index"))
             if override_row:
                 db.session.delete(override_row)
                 db.session.commit()
@@ -99,11 +100,12 @@ def override(server_id):
             if key:
                 values[key] = val.strip()
 
-        session = vaultwarden.unlock()
         try:
-            vaultwarden.set_notes(session, override_item, values)
-        finally:
-            vaultwarden.lock(session)
+            with vaultwarden.session() as sess:
+                vaultwarden.set_notes(sess, override_item, values)
+        except vaultwarden.VaultwardenError as exc:
+            flash(f"Could not save your credentials to Vaultwarden: {exc} (ask an admin to check the diagnostics wizard).", "error")
+            return redirect(url_for("catalog.index"))
 
         if not override_row:
             db.session.add(UserServerOverride(user_id=current_user.id, server_id=server.id))
@@ -113,11 +115,12 @@ def override(server_id):
 
     env_text = ""
     if override_row:
-        session = vaultwarden.unlock()
         try:
-            values = vaultwarden.get_notes(session, override_item)
-        finally:
-            vaultwarden.lock(session)
+            with vaultwarden.session() as sess:
+                values = vaultwarden.get_notes(sess, override_item)
+        except vaultwarden.VaultwardenError as exc:
+            flash(f"Could not reach Vaultwarden to load your credentials: {exc}", "error")
+            values = {}
         env_text = "\n".join(f"{k}={v}" for k, v in values.items())
 
     return render_template(
@@ -144,7 +147,22 @@ def _build_client_config_json(client):
         return None, filename
 
     try:
-        session = vaultwarden.unlock()
+        with vaultwarden.session() as sess:
+            entries = []
+            for server in selected:
+                env = vaultwarden.resolve_env(sess, server, user=current_user)
+                entries.append(
+                    {
+                        "name": server.name,
+                        "transport": server.transport,
+                        "command": server.command,
+                        "args": server.args,
+                        "url": server.url,
+                        "auth_header_name": server.auth_header_name,
+                        "auth_env_key": server.auth_env_key,
+                        "env": env,
+                    }
+                )
     except vaultwarden.VaultwardenError as exc:
         flash(
             f"Could not reach Vaultwarden to resolve credentials: {exc} "
@@ -152,25 +170,6 @@ def _build_client_config_json(client):
             "error",
         )
         return None, filename
-
-    try:
-        entries = []
-        for server in selected:
-            env = vaultwarden.resolve_env(session, server, user=current_user)
-            entries.append(
-                {
-                    "name": server.name,
-                    "transport": server.transport,
-                    "command": server.command,
-                    "args": server.args,
-                    "url": server.url,
-                    "auth_header_name": server.auth_header_name,
-                    "auth_env_key": server.auth_env_key,
-                    "env": env,
-                }
-            )
-    finally:
-        vaultwarden.lock(session)
 
     payload = render_fn(entries)
     return json.dumps(payload, indent=2), filename

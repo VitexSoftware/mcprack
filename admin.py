@@ -32,30 +32,24 @@ def _compute_server_health(servers):
     Falls back to 'credentials unknown' (never flagged as missing) if
     Vaultwarden itself can't be reached, so a vault outage doesn't turn the
     entire servers list red."""
-    session = None
     try:
-        session = vaultwarden.unlock()
+        with vaultwarden.session() as sess:
+            health_by_id = {}
+            for server in servers:
+                try:
+                    vault_values = vaultwarden.get_notes(sess, server.vault_item)
+                except vaultwarden.VaultwardenError:
+                    vault_values = {}
+                health_by_id[server.id] = {
+                    "missing_credentials": vaultwarden.missing_credential_keys(server, vault_values),
+                    "reachable": health.check_reachable(server),
+                }
+            return health_by_id
     except vaultwarden.VaultwardenError:
-        session = None
-
-    health_by_id = {}
-    for server in servers:
-        vault_values = {}
-        if session is not None:
-            try:
-                vault_values = vaultwarden.get_notes(session, server.vault_item)
-            except vaultwarden.VaultwardenError:
-                vault_values = {}
-
-        health_by_id[server.id] = {
-            "missing_credentials": vaultwarden.missing_credential_keys(server, vault_values),
-            "reachable": health.check_reachable(server),
+        return {
+            server.id: {"missing_credentials": [], "reachable": health.check_reachable(server)}
+            for server in servers
         }
-
-    if session is not None:
-        vaultwarden.lock(session)
-
-    return health_by_id
 
 
 @bp.route("/servers")
@@ -90,11 +84,12 @@ def server_edit(server_id):
         flash(f"Server '{server.name}' updated.", "success")
         return redirect(url_for("admin.servers_list"))
 
-    session = vaultwarden.unlock()
     try:
-        env_values = vaultwarden.get_notes(session, server.vault_item)
-    finally:
-        vaultwarden.lock(session)
+        with vaultwarden.session() as sess:
+            env_values = vaultwarden.get_notes(sess, server.vault_item)
+    except vaultwarden.VaultwardenError as exc:
+        flash(f"Could not reach Vaultwarden — showing an empty credentials form: {exc}", "error")
+        env_values = {}
 
     return render_template(
         "admin/server_form.html", server=server, env_text=_render_kv_textarea(env_values)
@@ -129,21 +124,14 @@ def _apply_server_form(server, form):
         server.vaultwarden_item_name = f"MCP-{server.name}"
 
     try:
-        session = vaultwarden.unlock()
+        with vaultwarden.session() as sess:
+            vaultwarden.set_notes(sess, server.vault_item, env_values)
     except vaultwarden.VaultwardenError as exc:
         flash(
-            f"Could not reach Vaultwarden — credentials were NOT saved: {exc} "
+            f"Could not save credentials to Vaultwarden: {exc} "
             "(see Vaultwarden diagnostics in the nav bar to find out why).",
             "error",
         )
-        return
-
-    try:
-        vaultwarden.set_notes(session, server.vault_item, env_values)
-    except vaultwarden.VaultwardenError as exc:
-        flash(f"Could not save credentials to Vaultwarden: {exc}", "error")
-    finally:
-        vaultwarden.lock(session)
 
 
 @bp.route("/servers/autodetect", methods=["POST"])
