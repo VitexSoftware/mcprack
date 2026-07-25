@@ -1,17 +1,117 @@
 # mcprack
 
-Self-service MCP server catalog and client config generator.
+**Model Context Protocol (MCP) Self-Service Catalog & Config Generator**
 
-An admin registers each available MCP (Model Context Protocol) server once.
-Users log in — with a local account or (optionally) their Active Directory credentials —
-tick which servers they need and pick a target client (Claude or GitHub
-Copilot), and download a ready-to-use config file for that client.
+mcprack is a centralized platform for managing and distributing MCP (Model Context Protocol) server configurations across your organization. It solves the problem of how to securely provision AI clients (Claude Desktop, GitHub Copilot, and other MCP-compatible tools) with access to multiple backend services — without hardcoding secrets or requiring manual configuration on each machine.
 
-Credentials are never stored in mcprack's own database. Every secret lives in
-Vaultwarden (the same `bw-cli` / Secure Note pattern already used by the
-`mcp_rack` Ansible role): the admin sets default credentials/env vars per
-server, and a user may optionally override them with their own for their
-personal downloads.
+## What mcprack Does
+
+### The Problem
+You have multiple MCP servers (tools that connect AI clients to your services: databases, APIs, knowledge bases, etc.). You want users to:
+- Easily discover which servers are available
+- Self-serve which ones they need
+- Get a ready-to-use config file for their client
+- Have credentials managed securely without access to raw secrets
+
+### The Solution
+mcprack provides:
+
+1. **Admin UI** — Register MCP servers once, define environment variables and defaults, store secrets in Vaultwarden
+2. **User Catalog** — Browse available servers, select which ones you need, choose your target client (Claude, Copilot, etc.)
+3. **Config Generator** — Automatically builds a `.json` or `.env` config file tailored to each user with their chosen servers
+4. **Credential Management** — Credentials never stored in mcprack's DB; every secret lives in Vaultwarden (optional override per user)
+5. **HTTP Proxy** (optional) — Expose stdio-based MCP servers over HTTP so remote clients can access them
+
+### Typical Workflow
+
+1. **Admin** registers a new server (e.g., `mastodon-mcp`):
+   - Command: `/usr/bin/mastodon-mcp`
+   - Environment variables: `MASTODON_INSTANCE`, `MASTODON_ACCESS_TOKEN`
+   - Saves defaults in Vaultwarden secure note: `MCP-mastodon-mcp`
+
+2. **User** logs into mcprack (local account or Active Directory):
+   - Sees available servers in the catalog
+   - Selects which ones they need: ✓ mastodon-mcp, ✓ postgres-mcp
+   - Chooses target: "Claude Desktop"
+   - Downloads `claude_desktop_config.json` with only those servers
+
+3. **AI Client** (Claude) loads the config:
+   - Starts each selected MCP server as a subprocess
+   - Can now call functions and access tools from all those backends
+
+Credentials are never exposed to the user or stored insecurely — they come from Vaultwarden at runtime.
+
+---
+
+## Authentication
+
+**Local accounts** are always available. **LDAP/Active Directory** is optional and disabled by default — enable it during installation if you want users to authenticate with AD credentials instead.
+
+## Key Features
+
+- **Per-server environment configuration** — Store API keys, connection strings, and other secrets in Vaultwarden, not in config files
+- **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden)
+- **Multi-client support** — Generate configs for Claude Desktop, GitHub Copilot, and other MCP-compatible clients
+- **HTTP proxy for remote access** — Expose stdio servers over HTTP so users on different machines can access them (via FastMCP)
+- **Vaultwarden integration** — Leverages the same `bw-cli` / Secure Note pattern used by the `mcp_rack` Ansible role
+- **LDAP/AD support** — Optional directory authentication for enterprise deployments
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    mcprack Web App (Flask)                  │
+│  • Admin UI (register servers, manage credentials)          │
+│  • User Catalog (browse, select, download config)           │
+│  • Config Generator (build Claude/Copilot JSON/ENV)         │
+└────────────┬────────────────────────────┬───────────────────┘
+             │                            │
+      [SQLite/PG/MySQL]       [Vaultwarden (via bw-cli)]
+      • Server registry        • Secure credentials
+      • User accounts          • Environment variables
+      • Server selections      • User overrides
+             │                            │
+             └────────────┬───────────────┘
+                          │
+                    (user downloads)
+                          │
+        ┌─────────────────┴──────────────────┐
+        │                                    │
+   [Local Config]                  [Remote Config]
+   • claude_desktop_config.json    • HTTP reference
+   • Stdio servers listed          • FastMCP proxy
+   • Run on local machine          • HTTP://proxy:3100/mcp/
+```
+
+**Components:**
+- **Flask App**: Core web service, handles auth, server management, config generation
+- **Database**: Stores server registry, users, and selections (SQLite, PostgreSQL, or MySQL)
+- **Vaultwarden**: Stores all credentials and secrets (never in mcprack's DB)
+- **FastMCP Proxy** (optional): HTTP gateway for remote clients to access stdio servers
+
+## Use Cases
+
+**Scenario 1: Team with shared MCP servers**
+- Your team has built MCP servers for PostgreSQL, internal APIs, Slack, Jira, etc.
+- Developers use Claude Desktop or GitHub Copilot on their own machines
+- They need access to different subsets of these servers based on their role
+- Solution: Deploy mcprack once, register each server, let users self-serve their configs
+
+**Scenario 2: Enterprise deployment**
+- Multiple teams, each with different access controls
+- Need to integrate with Active Directory for SSO
+- Credentials managed centrally in Vaultwarden
+- Solution: mcprack with LDAP enabled, per-team server configurations
+
+**Scenario 3: Remote teams across NAT**
+- MCP servers hosted on internal network (10.11.x.x)
+- Users on different networks/VPNs need to access them
+- Solution: Deploy FastMCP proxy on public-facing machine, mcprack generates HTTP config for remote clients
+
+**Scenario 4: Multi-client support**
+- Some users prefer Claude Desktop, others use GitHub Copilot
+- Different clients have different config formats
+- Solution: mcprack generates client-specific configs automatically
 
 ## Authentication
 
