@@ -1,0 +1,5 @@
+lib/systemd/system
+usr/lib/mcprack
+usr/bin
+var/lib/mcprack
+var/log/mcprack
