@@ -3,6 +3,11 @@ set -e
 
 case "$1" in
   configure)
+    # Install systemd service files from /usr/lib/mcprack
+    install -d -m 0755 /lib/systemd/system
+    install -m 0644 /usr/lib/mcprack/mcprack.service /lib/systemd/system/
+    install -m 0644 /usr/lib/mcprack/mcprack-proxy.service /lib/systemd/system/
+    
     # Create mcprack system user if it doesn't exist (www-data is used for main app)
     if ! getent passwd mcprack > /dev/null; then
       adduser --system --group --home /var/lib/mcprack --no-create-home \

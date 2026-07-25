@@ -13,9 +13,9 @@ health.py /usr/lib/mcprack/
 templates/* /usr/lib/mcprack/templates/
 static/* /usr/lib/mcprack/static/
 migrations/* /usr/lib/mcprack/migrations/
+debian/mcprack.service /usr/lib/mcprack/
+debian/mcprack-proxy.service /usr/lib/mcprack/
 bin/mcprack /usr/bin/
 bin/mcprack-generate-proxy-config /usr/bin/
 bin/mcprack-mcp-manager /usr/bin/
 bin/mcprack-proxy-start /usr/bin/
-debian/mcprack.service /lib/systemd/system/
-debian/mcprack-proxy.service /lib/systemd/system/

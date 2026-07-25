@@ -1,12 +1,7 @@
 #!/bin/sh
 set -e
 
-case "$1" in
-  install|upgrade)
-    # Create systemd directories before dpkg tries to extract service files
-    mkdir -p /lib/systemd/system
-    mkdir -p /usr/lib/systemd/system
-    ;;
-esac
+# This script currently does nothing, but is kept for compatibility
+# Service files are installed by postinst after systemd directory is verified
 
 #DEBHELPER#
