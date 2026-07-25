@@ -131,7 +131,11 @@ def override(server_id):
 def _build_client_config_json(client):
     """Resolve the current user's selected+enabled servers into a rendered
     client config, as a pretty-printed JSON string. Returns None (with a
-    flash already set) if there's nothing selected, or `client` is unknown."""
+    flash already set) if there's nothing selected, or `client` is unknown.
+    
+    Automatically detects if the client is remote and enables proxy mode
+    if fastmcp is running (stdio servers exposed via HTTP).
+    """
     if client not in RENDERERS:
         abort(404)
     render_fn, filename = RENDERERS[client]
@@ -171,7 +175,21 @@ def _build_client_config_json(client):
         )
         return None, filename
 
-    payload = render_fn(entries)
+    # Detect if this is a remote request and enable proxy mode
+    client_ip = request.remote_addr
+    localhost_ips = {"127.0.0.1", "::1", "localhost"}
+    # Also consider the main server IP as local
+    try:
+        import socket
+        server_hostname = socket.getfqdn()
+        server_ips = {ip[4][0] for ip in socket.getaddrinfo(server_hostname, None)}
+    except Exception:
+        server_ips = set()
+    
+    is_remote = client_ip not in localhost_ips and client_ip not in server_ips
+    proxy_host = request.host.split(":")[0] if is_remote else None
+    
+    payload = render_fn(entries, proxy_host=proxy_host)
     return json.dumps(payload, indent=2), filename
 
 

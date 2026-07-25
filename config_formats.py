@@ -43,11 +43,17 @@ def _stdio_entry(server, include_type):
     return entry
 
 
-def _network_entry(server):
+def _network_entry(server, proxy_url=None):
+    """Render a server as a network entry.
+    
+    If proxy_url is provided (e.g. "http://10.11.182.99:3100/mcp/"), use that
+    instead of server["url"] — this handles proxied stdio servers.
+    """
+    url = proxy_url or server["url"]
     network_type = server["transport"] if server["transport"] in _NETWORK_TYPES else "http"
     entry = {
         "type": network_type,
-        "url": server["url"],
+        "url": url,
     }
     header_name = server.get("auth_header_name")
     auth_key = server.get("auth_env_key")
@@ -57,19 +63,38 @@ def _network_entry(server):
     return entry
 
 
-def _render(servers, include_stdio_type):
+def _render(servers, include_stdio_type, proxy_host=None, proxy_port=3100):
+    """Render servers as client config entries.
+    
+    Args:
+        servers: List of server dicts
+        include_stdio_type: Whether to include "type": "stdio" in entries
+        proxy_host: If set (e.g. "10.11.182.99"), proxied stdio servers become HTTP
+        proxy_port: Port for proxy endpoint (default 3100)
+    
+    Logic:
+    - If server has url, use _network_entry with that url
+    - Else if proxy_host is set and server has command, use _network_entry with proxy url
+    - Else use _stdio_entry (local spawn)
+    """
     result = {}
+    proxy_url = f"http://{proxy_host}:{proxy_port}/mcp/" if proxy_host else None
+    
     for server in servers:
         if server.get("url"):
             result[server["name"]] = _network_entry(server)
+        elif proxy_url and server.get("command"):
+            # Proxied stdio server: expose via fastmcp
+            result[server["name"]] = _network_entry(server, proxy_url=proxy_url)
         else:
+            # Local stdio server
             result[server["name"]] = _stdio_entry(server, include_stdio_type)
     return result
 
 
-def render_claude_config(servers):
-    return {"mcpServers": _render(servers, include_stdio_type=True)}
+def render_claude_config(servers, proxy_host=None, proxy_port=3100):
+    return {"mcpServers": _render(servers, include_stdio_type=True, proxy_host=proxy_host, proxy_port=proxy_port)}
 
 
-def render_copilot_config(servers):
-    return {"servers": _render(servers, include_stdio_type=False)}
+def render_copilot_config(servers, proxy_host=None, proxy_port=3100):
+    return {"servers": _render(servers, include_stdio_type=False, proxy_host=proxy_host, proxy_port=proxy_port)}

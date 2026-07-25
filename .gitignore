@@ -12,3 +12,5 @@ debian/mcprack.debhelper.log
 debian/mcprack.substvars
 debian/files
 debian/*.debhelper
+.vscode/
+.DS_Store
