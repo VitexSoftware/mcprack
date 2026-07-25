@@ -4,10 +4,15 @@
   <meta charset="utf-8">
   <title>{% block title %}mcprack{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='mcprack-app-icon.svg') }}">
+  <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('static', filename='mcprack-app-icon.svg') }}">
 </head>
 <body>
   <nav class="topnav">
-    <a href="{{ url_for('catalog.index') }}" class="brand">mcprack</a>
+    <a href="{{ url_for('catalog.index') }}" class="brand">
+      <img src="{{ url_for('static', filename='mcprack-app-icon.svg') }}" alt="mcprack" class="brand-logo">
+      mcprack
+    </a>
     {% if current_user.is_authenticated %}
       <span class="spacer"></span>
       {% if current_user.is_admin %}
