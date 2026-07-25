@@ -9,9 +9,8 @@ case "$1" in
         --disabled-login --quiet mcprack
     fi
 
-    install -d -o www-data -g www-data -m 0750 /var/lib/mcprack
-    # Also ensure mcprack user can read the proxy config
-    chown -R mcprack:mcprack /var/lib/mcprack || true
+    # MCprack application and data directory (owned by mcprack user)
+    install -d -o mcprack -g mcprack -m 0750 /var/lib/mcprack
 
     # Create /etc/mcprack directory if missing
     install -d -o root -g root -m 0755 /etc/mcprack
@@ -132,6 +131,7 @@ BW_BIN=/usr/bin/bw
 ENV_FILE
       
       chmod 0600 /etc/mcprack/env
+      chown root:mcprack /etc/mcprack/env
       echo ""
       echo "✅ Configuration saved to /etc/mcprack/env"
       echo ""
@@ -145,7 +145,7 @@ ENV_FILE
       set +a
       
       echo "Running database migrations..."
-      su -s /bin/sh www-data -c \
+      su -s /bin/sh mcprack -c \
         'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -m flask db upgrade' \
         || echo "mcprack: 'flask db upgrade' failed - check /etc/mcprack/env and run it manually." >&2
       
@@ -154,8 +154,8 @@ ENV_FILE
       echo "⚠️  /etc/mcprack/env not found - skipping database setup"
     fi
 
-    # Create log directory
-    install -d -o www-data -g www-data -m 0755 /var/log/mcprack
+    # Create log directory (owned by mcprack user)
+    install -d -o mcprack -g mcprack -m 0755 /var/log/mcprack
 
     # Reload systemd daemon
     if [ -d /run/systemd/system ]; then

@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 EnvironmentFile=-/etc/mcprack/env
-User=www-data
+User=mcprack
+Group=mcprack
 WorkingDirectory=/usr/lib/mcprack
 StateDirectory=mcprack
 ExecStart=/usr/bin/gunicorn \
