@@ -2,12 +2,3 @@
 
 %:
 	dh $@
-
-override_dh_install:
-	dh_install
-	# Create systemd directory and copy service files into the package
-	mkdir -p debian/mcprack/lib/systemd/system
-	cp debian/mcprack.service debian/mcprack/lib/systemd/system/
-	cp debian/mcprack-proxy.service debian/mcprack/lib/systemd/system/
-	chmod 0644 debian/mcprack/lib/systemd/system/mcprack.service
-	chmod 0644 debian/mcprack/lib/systemd/system/mcprack-proxy.service

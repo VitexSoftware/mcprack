@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+  install|upgrade)
+    # Create systemd directories before dpkg tries to extract service files
+    mkdir -p /lib/systemd/system
+    mkdir -p /usr/lib/systemd/system
+    ;;
+esac
+
+#DEBHELPER#
