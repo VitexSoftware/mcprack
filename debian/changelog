@@ -1,3 +1,9 @@
+mcprack (0.2.0) UNRELEASED; urgency=medium
+
+  * Add database-driven MCP server environment configuration support
+
+ -- vitex <info@vitexsoftware.cz>  Sat, 25 Jul 2026 10:24:10 +0200
+
 mcprack (0.1.0) unstable; urgency=low
 
   * Initial release.
