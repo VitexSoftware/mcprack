@@ -8,7 +8,7 @@ case "$1" in
     install -m 0644 /usr/lib/mcprack/mcprack.service /lib/systemd/system/
     install -m 0644 /usr/lib/mcprack/mcprack-proxy.service /lib/systemd/system/
     
-    # Create mcprack system user if it doesn't exist (www-data is used for main app)
+    # Create mcprack system user if it doesn't exist
     if ! getent passwd mcprack > /dev/null; then
       adduser --system --group --home /var/lib/mcprack --no-create-home \
         --disabled-login --quiet mcprack
@@ -16,144 +16,88 @@ case "$1" in
 
     # MCprack application and data directory (owned by mcprack user)
     install -d -o mcprack -g mcprack -m 0750 /var/lib/mcprack
-
-    # Create /etc/mcprack directory if missing
     install -d -o root -g root -m 0755 /etc/mcprack
+    install -d -o mcprack -g mcprack -m 0755 /var/log/mcprack
 
-    # Interactive configuration if /etc/mcprack/env doesn't exist
+    # Check if stdin is a terminal (interactive mode)
+    if [ -t 0 ]; then
+      INTERACTIVE=true
+    else
+      INTERACTIVE=false
+    fi
+
+    # Configuration if /etc/mcprack/env doesn't exist
     if [ ! -f /etc/mcprack/env ]; then
-      echo ""
-      echo "========================================="
-      echo "MCprack Configuration"
-      echo "========================================="
-      echo ""
-      echo "MCprack needs Vaultwarden (Bitwarden) credentials to store and resolve MCP server secrets."
-      echo ""
-      
-      # Generate a secure SECRET_KEY if needed
-      SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
-      
-      # Ask for Vaultwarden server URL
-      printf "Vaultwarden server URL (e.g., https://vaultwarden.example.com) [https://vaultwarden.proxy.spojenet.cz]: "
-      read -r BW_SERVER
-      BW_SERVER="${BW_SERVER:-https://vaultwarden.proxy.spojenet.cz}"
-      
-      # Ask for Bitwarden CLI client credentials
-      printf "Bitwarden client ID (from /root/.config/Bitwarden CLI/data.json): "
-      read -r BW_CLIENTID
-      
-      printf "Bitwarden client secret: "
-      read -r BW_CLIENTSECRET
-      
-      printf "Bitwarden master password: "
-      read -r BW_PASSWORD
-      
-      # Ask about LDAP authentication
-      echo ""
-      echo "========================================="
-      echo "LDAP Authentication (Optional)"
-      echo "========================================="
-      printf "Enable LDAP authentication? (y/N): "
-      read -r ENABLE_LDAP
-      
-      if [ "$ENABLE_LDAP" = "y" ] || [ "$ENABLE_LDAP" = "Y" ]; then
-        LDAP_ENABLED="true"
+      if [ "$INTERACTIVE" = "true" ]; then
+        # Interactive configuration
+        echo ""
+        echo "========================================="
+        echo "MCprack Configuration"
+        echo "========================================="
+        echo ""
         
-        printf "LDAP server URL [ldap://10.11.25.3:389]: "
-        read -r LDAP_SERVER
-        LDAP_SERVER="${LDAP_SERVER:-ldap://10.11.25.3:389}"
+        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
         
-        printf "LDAP base DN [dc=spojent,dc=cz]: "
-        read -r LDAP_BASE_DN
-        LDAP_BASE_DN="${LDAP_BASE_DN:-dc=spojent,dc=cz}"
+        printf "Vaultwarden server URL [https://vaultwarden.proxy.spojenet.cz]: "
+        read -r BW_SERVER
+        BW_SERVER="${BW_SERVER:-https://vaultwarden.proxy.spojenet.cz}"
         
-        printf "LDAP bind DN (for LDAP queries, e.g., cn=admin,dc=spojent,dc=cz) [leave empty for anonymous]: "
-        read -r LDAP_BIND_DN
+        printf "Bitwarden client ID: "
+        read -r BW_CLIENTID
         
-        if [ -n "$LDAP_BIND_DN" ]; then
-          printf "LDAP bind password: "
-          read -r LDAP_BIND_PASSWORD
+        printf "Bitwarden client secret: "
+        read -r BW_CLIENTSECRET
+        
+        printf "Bitwarden master password: "
+        read -r BW_PASSWORD
+        
+        printf "Enable LDAP? (y/N): "
+        read -r ENABLE_LDAP
+        
+        if [ "$ENABLE_LDAP" = "y" ] || [ "$ENABLE_LDAP" = "Y" ]; then
+          printf "LDAP server [ldap://10.11.25.3:389]: "
+          read -r LDAP_SERVER
+          LDAP_SERVER="${LDAP_SERVER:-ldap://10.11.25.3:389}"
+          
+          printf "LDAP base DN [dc=spojent,dc=cz]: "
+          read -r LDAP_BASE_DN
+          LDAP_BASE_DN="${LDAP_BASE_DN:-dc=spojent,dc=cz}"
+          
+          printf "LDAP bind DN (anonymous if empty): "
+          read -r LDAP_BIND_DN
         else
-          LDAP_BIND_PASSWORD=""
+          LDAP_SERVER="ldap://localhost"
+          LDAP_BASE_DN="dc=example,dc=com"
+          LDAP_BIND_DN=""
         fi
       else
-        LDAP_ENABLED="false"
+        # Non-interactive - use defaults
+        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+        BW_SERVER="https://vaultwarden.proxy.spojenet.cz"
+        BW_CLIENTID=""
+        BW_CLIENTSECRET=""
+        BW_PASSWORD=""
         LDAP_SERVER="ldap://localhost"
         LDAP_BASE_DN="dc=example,dc=com"
         LDAP_BIND_DN=""
-        LDAP_BIND_PASSWORD=""
       fi
-      
-      # Ask about FastMCP HTTP proxy for remote clients
-      echo ""
-      echo "========================================="
-      echo "FastMCP HTTP Proxy Configuration (Optional)"
-      echo "========================================="
-      echo ""
-      echo "The FastMCP proxy allows remote clients to access MCP servers via HTTP."
-      echo "It's optional - local users can spawn servers directly."
-      printf "Enable FastMCP HTTP proxy? (y/N): "
-      read -r ENABLE_PROXY
-      
-      if [ "$ENABLE_PROXY" = "y" ] || [ "$ENABLE_PROXY" = "Y" ]; then
-        printf "Proxy listen address (127.0.0.1, 0.0.0.0, or specific IP) [127.0.0.1]: "
-        read -r PROXY_HOST
-        PROXY_HOST="${PROXY_HOST:-127.0.0.1}"
-        
-        if [ "$PROXY_HOST" = "0.0.0.0" ]; then
-          echo "⚠️  Listening on 0.0.0.0 - configure firewall004 to allow external access"
-        fi
-        
-        printf "Proxy listen port [3100]: "
-        read -r PROXY_PORT
-        PROXY_PORT="${PROXY_PORT:-3100}"
-        
-        # Create /etc/mcprack/proxy.env for fastmcp service
-        cat > /etc/mcprack/proxy.env <<-PROXY_FILE
-# MCprack FastMCP HTTP Proxy Configuration
-# Auto-generated during installation on $(date)
 
-# FastMCP proxy bind address (0.0.0.0 = all interfaces; configure firewall004)
-FASTMCP_HOST=$PROXY_HOST
-
-# FastMCP proxy bind port
-FASTMCP_PORT=$PROXY_PORT
-
-# Optional: proxy authentication token (if needed)
-# FASTMCP_TOKEN=
-
-# Optional: TLS certificate (for HTTPS)
-# FASTMCP_TLS_CERT=
-# FASTMCP_TLS_KEY=
-PROXY_FILE
-        
-        chmod 0640 /etc/mcprack/proxy.env
-        chown root:mcprack /etc/mcprack/proxy.env
-        echo ""
-        echo "✅ Proxy configuration saved to /etc/mcprack/proxy.env"
-        echo ""
-      fi
-      
-      # Create /etc/mcprack/env with collected values
+      # Create /etc/mcprack/env
       cat > /etc/mcprack/env <<-ENV_FILE
-# MCprack production configuration
-# Auto-generated during installation on $(date)
+# MCprack Configuration
+# Generated: $(date)
+# ⚠️  UPDATE with your actual credentials!
 
-# Flask security key (regenerate with: python3 -c "import secrets; print(secrets.token_hex(32))")
 SECRET_KEY=$SECRET_KEY
-
-# Database location (default: system-wide)
 SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
 
-# LDAP authentication
 LDAP_SERVER=$LDAP_SERVER
 LDAP_BASE_DN=$LDAP_BASE_DN
 LDAP_USER_OU=ou=Users,$LDAP_BASE_DN
 LDAP_USER_FILTER='(sAMAccountName=%(user)s)'
 LDAP_BIND_DN=$LDAP_BIND_DN
-LDAP_BIND_PASSWORD=$LDAP_BIND_PASSWORD
+LDAP_BIND_PASSWORD=
 
-# Vaultwarden (Bitwarden) - MCP server credentials storage
 BW_SERVER=$BW_SERVER
 BW_CLIENTID=$BW_CLIENTID
 BW_CLIENTSECRET=$BW_CLIENTSECRET
@@ -165,93 +109,19 @@ ENV_FILE
       
       chmod 0600 /etc/mcprack/env
       chown root:mcprack /etc/mcprack/env
-      echo ""
-      echo "✅ Configuration saved to /etc/mcprack/env"
-      echo ""
     fi
 
-    # Load configuration
-    if [ -f /etc/mcprack/env ]; then
-      set -a
-      # shellcheck disable=SC1091
-      . /etc/mcprack/env
-      set +a
-      
-      echo "Running database migrations..."
-      su -s /bin/sh mcprack -c \
-        'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -m flask db upgrade' \
-        || echo "mcprack: 'flask db upgrade' failed - check /etc/mcprack/env and run it manually." >&2
-      
-      echo "Creating default admin account..."
-      su -s /bin/sh mcprack -c \
-        'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -c "
-from app import create_app
-from models import User
-from extensions import db
-app = create_app()
-with app.app_context():
-    existing = User.query.filter_by(username=\"admin\").first()
-    if not existing:
-        admin = User(username=\"admin\", auth_type=\"local\", is_admin=True)
-        admin.is_active_flag = True
-        admin.set_password("mcprack-test-2026")
-        db.session.add(admin)
-        db.session.commit()
-        print("✅ Admin user created: admin/mcprack-test-2026")
-    else:
-        print(\"ℹ️  Admin user already exists\")
-"' \
-        || echo "mcprack: admin account creation failed (might already exist)" >&2
-      
-      echo "✅ Database initialized"
-    else
-      echo "⚠️  /etc/mcprack/env not found - skipping database setup"
-    fi
-
-    # Create log directory (owned by mcprack user)
-    install -d -o mcprack -g mcprack -m 0755 /var/log/mcprack
-
-    # Reload systemd daemon
+    # Reload systemd
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload || true
-      echo ""
-      echo "========================================="
-      echo "MCprack Installation Complete"
-      echo "========================================="
-      echo ""
-      echo "📋 Configuration Files:"
-      echo "  • Main config: /etc/mcprack/env"
-      if [ -f /etc/mcprack/proxy.env ]; then
-        echo "  • Proxy config: /etc/mcprack/proxy.env"
-      fi
-      echo "  • Database: /var/lib/mcprack/mcprack.db"
-      echo "  • Logs: /var/log/mcprack/"
-      echo ""
-      echo "🚀 Start Services:"
-      echo "  # MCprack web interface (users login here):"
-      echo "  sudo systemctl enable --now mcprack.service"
-      echo ""
-      if [ -f /etc/mcprack/proxy.env ]; then
-        echo "  # FastMCP HTTP proxy (for remote clients):"
-        echo "  sudo systemctl enable --now mcprack-proxy.service"
-        echo ""
-        echo "⚠️  If proxy listens on 0.0.0.0, configure firewall004 for external access"
-      fi
-      echo ""
-      echo "🔐 Default Admin Account:"
-      echo "  • Username: admin"
-      echo "  • Password: mcprack-test-2026"
-      echo "  • ⚠️  Please change this password after first login!"
-      echo ""
-      echo "📖 Documentation:"
-      echo "  • See /usr/share/doc/mcprack/README.Debian for setup instructions"
-      echo ""
-      echo "✅ MCprack is ready for use"
-      echo ""
+    fi
+
+    if [ "$INTERACTIVE" = "false" ]; then
+      echo "ℹ️  mcprack installed with default configuration"
+      echo "⚠️  Update /etc/mcprack/env with your Vaultwarden credentials"
+      exit 0
     fi
     ;;
 esac
 
 #DEBHELPER#
-
-exit 0
