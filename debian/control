@@ -23,7 +23,7 @@ Depends:
  bw-cli,
  gunicorn,
 Recommends:
- python3-fastmcp,
+ python3-fastmcp (>= 4.0.0~a2),
 Suggests:
  python3-psycopg2,
  python3-pymysql,

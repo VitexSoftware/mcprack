@@ -4,3 +4,4 @@ flask-login
 flask-migrate
 ldap3
 gunicorn
+fastmcp>=4.0.0a2
