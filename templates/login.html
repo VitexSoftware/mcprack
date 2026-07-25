@@ -11,5 +11,9 @@
 
   <button type="submit">Log in</button>
 </form>
+{% if config['LDAP_ENABLED'] %}
 <p>Use your local mcprack account, or your regular Active Directory username/password.</p>
+{% else %}
+<p>Use your local mcprack account.</p>
+{% endif %}
 {% endblock %}
