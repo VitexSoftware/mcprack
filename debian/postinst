@@ -13,24 +13,118 @@ case "$1" in
     # Also ensure mcprack user can read the proxy config
     chown -R mcprack:mcprack /var/lib/mcprack || true
 
+    # Create /etc/mcprack directory if missing
+    install -d -o root -g root -m 0755 /etc/mcprack
+
+    # Interactive configuration if /etc/mcprack/env doesn't exist
+    if [ ! -f /etc/mcprack/env ]; then
+      echo ""
+      echo "========================================="
+      echo "MCprack Configuration"
+      echo "========================================="
+      echo ""
+      echo "MCprack needs Vaultwarden (Bitwarden) credentials to store and resolve MCP server secrets."
+      echo ""
+      
+      # Generate a secure SECRET_KEY if needed
+      SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+      
+      # Ask for Vaultwarden server URL
+      printf "Vaultwarden server URL (e.g., https://vaultwarden.example.com) [https://vaultwarden.proxy.spojenet.cz]: "
+      read -r BW_SERVER
+      BW_SERVER="${BW_SERVER:-https://vaultwarden.proxy.spojenet.cz}"
+      
+      # Ask for Bitwarden CLI client credentials
+      printf "Bitwarden client ID (from /root/.config/Bitwarden CLI/data.json): "
+      read -r BW_CLIENTID
+      
+      printf "Bitwarden client secret: "
+      read -r BW_CLIENTSECRET
+      
+      printf "Bitwarden master password: "
+      read -r BW_PASSWORD
+      
+      printf "LDAP server URL [ldap://10.11.25.3:389]: "
+      read -r LDAP_SERVER
+      LDAP_SERVER="${LDAP_SERVER:-ldap://10.11.25.3:389}"
+      
+      printf "LDAP base DN [dc=spojent,dc=cz]: "
+      read -r LDAP_BASE_DN
+      LDAP_BASE_DN="${LDAP_BASE_DN:-dc=spojent,dc=cz}"
+      
+      # Create /etc/mcprack/env with collected values
+      cat > /etc/mcprack/env <<-ENV_FILE
+# MCprack production configuration
+# Auto-generated during installation on $(date)
+
+# Flask security key (regenerate with: python3 -c "import secrets; print(secrets.token_hex(32))")
+SECRET_KEY=$SECRET_KEY
+
+# Database location (default: system-wide)
+SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
+
+# LDAP authentication
+LDAP_SERVER=$LDAP_SERVER
+LDAP_BASE_DN=$LDAP_BASE_DN
+LDAP_USER_OU=ou=Users,$LDAP_BASE_DN
+LDAP_USER_FILTER='(sAMAccountName=%(user)s)'
+LDAP_BIND_DN=
+LDAP_BIND_PASSWORD=
+
+# Vaultwarden (Bitwarden) - MCP server credentials storage
+BW_SERVER=$BW_SERVER
+BW_CLIENTID=$BW_CLIENTID
+BW_CLIENTSECRET=$BW_CLIENTSECRET
+BW_PASSWORD=$BW_PASSWORD
+BW_ITEM_PREFIX=MCP-
+BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
+BW_BIN=/usr/bin/bw
+ENV_FILE
+      
+      chmod 0600 /etc/mcprack/env
+      echo ""
+      echo "✅ Configuration saved to /etc/mcprack/env"
+      echo ""
+    fi
+
+    # Load configuration
     if [ -f /etc/mcprack/env ]; then
       set -a
       # shellcheck disable=SC1091
       . /etc/mcprack/env
       set +a
+      
+      echo "Running database migrations..."
       su -s /bin/sh www-data -c \
-        'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade' \
+        'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -m flask db upgrade' \
         || echo "mcprack: 'flask db upgrade' failed - check /etc/mcprack/env and run it manually." >&2
+      
+      echo "✅ Database initialized"
     else
-      echo "mcprack: /etc/mcprack/env not found yet - create it (see /usr/share/doc/mcprack/README.Debian), then run:"
-      echo "  su -s /bin/sh www-data -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade'"
+      echo "⚠️  /etc/mcprack/env not found - skipping database setup"
     fi
 
-    # Reload systemd daemon for mcprack-proxy.service
+    # Create log directory
+    install -d -o www-data -g www-data -m 0755 /var/log/mcprack
+
+    # Reload systemd daemon
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload || true
-      echo "mcprack: systemd service files installed. To enable the MCP HTTP proxy:"
-      echo "  systemctl enable --now mcprack-proxy.service"
+      echo ""
+      echo "========================================="
+      echo "MCprack services installed:"
+      echo "========================================="
+      echo ""
+      echo "To start MCprack web interface:"
+      echo "  sudo systemctl enable --now mcprack.service"
+      echo ""
+      echo "To start MCprack HTTP proxy for remote clients:"
+      echo "  sudo systemctl enable --now mcprack-proxy.service"
+      echo ""
+      echo "Configuration is in: /etc/mcprack/env"
+      echo "Log files: /var/log/mcprack/"
+      echo "Database: /var/lib/mcprack/mcprack.db"
+      echo ""
     fi
     ;;
 esac
