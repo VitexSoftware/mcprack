@@ -17,5 +17,4 @@ bin/mcprack /usr/bin/
 bin/mcprack-generate-proxy-config /usr/bin/
 bin/mcprack-mcp-manager /usr/bin/
 bin/mcprack-proxy-start /usr/bin/
-debian/mcprack.service /lib/systemd/system/
-debian/mcprack-proxy.service /lib/systemd/system/
+# Service files are installed via debian/rules override_dh_install
