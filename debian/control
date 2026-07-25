@@ -22,6 +22,8 @@ Depends:
  python3-ldap3,
  bw-cli,
  gunicorn,
+Recommends:
+ python3-fastmcp,
 Suggests:
  python3-psycopg2,
  python3-pymysql,

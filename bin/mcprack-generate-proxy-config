@@ -1,0 +1,54 @@
+#!/usr/bin/env python3
+"""Generate fastmcp HTTP proxy configuration from mcprack catalog.
+
+Reads enabled MCP servers from the mcprack database and generates a
+Claude-style mcp.json config file that fastmcp can use as an HTTP proxy.
+Only includes servers that have a local stdio command (no URL set).
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+# Load Flask app to access database
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from app import create_app
+from models import McpServer
+
+def main():
+    app = create_app()
+    
+    with app.app_context():
+        # Get all enabled servers with stdio commands (no URL = meant to run locally)
+        servers = McpServer.query.filter_by(enabled=True).filter(
+            McpServer.command.isnot(None),
+            McpServer.url.is_(None)
+        ).all()
+        
+        if not servers:
+            print("No stdio MCP servers found to proxy", file=sys.stderr)
+            # Create empty config so fastmcp doesn't fail
+            config = {"mcpServers": {}}
+        else:
+            config = {"mcpServers": {}}
+            for server in servers:
+                config["mcpServers"][server.name] = {
+                    "type": "stdio",
+                    "command": server.command,
+                    "args": server.args or []
+                }
+                # Note: env vars are in Vaultwarden - for proxy we may need to
+                # fetch them or rely on system env. For now, skip env vars as
+                # they should be set system-wide or in /etc/mcprack/proxy.env
+        
+        # Write config
+        output_path = Path("/var/lib/mcprack/proxy-mcp.json")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(output_path, "w") as f:
+            json.dump(config, f, indent=2)
+        
+        print(f"Generated proxy config with {len(config['mcpServers'])} servers", file=sys.stderr)
+
+if __name__ == "__main__":
+    main()

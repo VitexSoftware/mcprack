@@ -100,3 +100,29 @@ See `debian/` — builds a `.deb` following the same conventions as other
 VitexSoftware Flask apps (e.g. `abraflexi-yearend`): system Python packages,
 no virtualenv, `gunicorn` + systemd. See `debian/README.Debian` for the
 post-install configuration steps.
+
+## Remote access to stdio MCP servers
+
+If users run Claude or Copilot on a different machine than the one hosting
+your MCP servers, you need to expose stdio-based servers over HTTP. mcprack
+includes support for this via `fastmcp`:
+
+1. **Install python3-fastmcp** (Debian/Ubuntu):
+   ```bash
+   apt install python3-fastmcp
+   ```
+
+2. **In mcprack admin UI**, for each stdio server you want to expose remotely:
+   - Keep "Command" field filled (e.g., `/usr/bin/mastodon-mcp`)
+   - Add "URL": `http://YOUR-HOST:3100/mcp/`
+   - Set auth header/env key if needed
+
+3. **Enable the HTTP proxy service**:
+   ```bash
+   systemctl enable --now mcprack-proxy.service
+   ```
+
+4. When users download configs, they'll get network entries pointing to your
+   HTTP proxy instead of local stdio commands.
+
+See `debian/README.Debian` for full details on the proxy setup.

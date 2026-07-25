@@ -40,3 +40,51 @@ Then create the first admin account:
 Finally start the service:
 
   systemctl enable --now mcprack
+
+
+MCP HTTP Proxy (for remote access to stdio servers)
+====================================================
+
+If you want remote clients (e.g., Claude Desktop running on a different
+workstation) to connect to stdio-based MCP servers running on this host, you
+need to expose them over HTTP. mcprack includes a systemd service that uses
+fastmcp to proxy all registered stdio servers.
+
+1. Install fastmcp (recommended, not required):
+
+     apt install python3-fastmcp
+
+2. In the mcprack admin UI (/admin/servers), for each stdio server you want
+   to expose remotely:
+
+   a) Leave "Command" filled in (e.g., /usr/bin/mastodon-mcp)
+   b) Fill in "URL" as: http://YOUR-HOST-IP:3100/mcp/
+      (e.g., http://10.11.182.99:3100/mcp/)
+   c) Set "Auth header name" and "Auth env key" if your server needs
+      authentication tokens
+
+   This tells mcprack: "This server runs via stdio locally, but remote users
+   should connect to it via this HTTP endpoint."
+
+3. Enable and start the proxy service:
+
+     systemctl enable --now mcprack-proxy.service
+
+   The proxy will:
+   - Read all enabled stdio servers from the database
+   - Generate /var/lib/mcprack/proxy-mcp.json
+   - Start fastmcp on 0.0.0.0:3100 to expose them over HTTP
+
+4. When users download their config (e.g., Claude or Copilot), they'll
+   automatically get network entries pointing to http://YOUR-HOST:3100/mcp/
+   instead of local stdio commands.
+
+5. Optional: Set additional environment variables for the proxy in
+   /etc/mcprack/proxy.env (e.g., API tokens needed by the MCP servers).
+
+6. To restart the proxy after adding/removing servers:
+
+     systemctl restart mcprack-proxy.service
+
+Note: The proxy port (3100) must be accessible from client workstations. Make
+sure your firewall allows incoming connections on that port.

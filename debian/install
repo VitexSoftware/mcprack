@@ -14,3 +14,5 @@ templates/* /usr/lib/mcprack/templates/
 static/* /usr/lib/mcprack/static/
 migrations/* /usr/lib/mcprack/migrations/
 bin/mcprack /usr/bin/
+bin/mcprack-generate-proxy-config /usr/bin/
+debian/mcprack-proxy.service /lib/systemd/system/
