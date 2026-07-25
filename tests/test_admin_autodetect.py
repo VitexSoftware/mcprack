@@ -21,7 +21,7 @@ def test_autodetect_creates_new_servers(app, client):
             "name": "zabbix-mcp-server",
             "label": "Zabbix MCP Server",
             "transport": "http",
-            "url": "http://mcphost:3100/mcp/",
+            "url": "http://mcphost:3100/mcp",
             "category": "mcp-rack",
         },
         {
@@ -43,7 +43,7 @@ def test_autodetect_creates_new_servers(app, client):
     with app.app_context():
         servers = {s.name: s for s in McpServer.query.all()}
         assert servers["zabbix-mcp-server"].transport == "http"
-        assert servers["zabbix-mcp-server"].url == "http://mcphost:3100/mcp/"
+        assert servers["zabbix-mcp-server"].url == "http://mcphost:3100/mcp"
         assert servers["warden-mcp"].transport == "stdio"
         assert servers["warden-mcp"].command == "/usr/bin/warden-mcp"
         assert servers["warden-mcp"].args == ["--stdio"]

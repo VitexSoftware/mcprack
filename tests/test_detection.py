@@ -66,9 +66,9 @@ def test_detect_mcp_rack_proxies_parses_units():
     by_name = {e["name"]: e for e in entries}
     assert set(by_name) == {"zabbix-mcp-server", "warden-mcp"}
     assert by_name["zabbix-mcp-server"]["transport"] == "http"
-    assert by_name["zabbix-mcp-server"]["url"] == "http://mcphost.spojenet.cz:3100/mcp/"
+    assert by_name["zabbix-mcp-server"]["url"] == "http://mcphost.spojenet.cz:3100/mcp"
     assert by_name["zabbix-mcp-server"]["label"] == "Zabbix MCP Server"
-    assert by_name["warden-mcp"]["url"] == "http://mcphost.spojenet.cz:3106/mcp/"
+    assert by_name["warden-mcp"]["url"] == "http://mcphost.spojenet.cz:3106/mcp"
 
 
 def test_detect_mcp_rack_proxies_empty_when_systemctl_missing():
@@ -110,7 +110,7 @@ def test_detect_local_mcp_servers_combines_all_sources_without_duplicates():
     with patch("detection.detect_from_claude_config", return_value=[]), \
          patch(
              "detection.detect_mcp_rack_proxies",
-             return_value=[{"name": "warden-mcp", "label": "x", "transport": "http", "url": "http://h:1/mcp/", "category": "mcp-rack"}],
+             return_value=[{"name": "warden-mcp", "label": "x", "transport": "http", "url": "http://h:1/mcp", "category": "mcp-rack"}],
          ), \
          patch("detection.shutil.which", return_value="/usr/bin/warden-mcp"):
         entries = detection.detect_local_mcp_servers()

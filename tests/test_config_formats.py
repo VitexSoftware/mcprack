@@ -93,7 +93,7 @@ def test_stdio_server_with_url_renders_as_network_entry_not_local_spawn():
         "transport": "stdio",
         "command": "/usr/bin/zabbix-mcp-server",
         "args": [],
-        "url": "http://mcphost.spojenet.cz:3100/mcp/",
+        "url": "http://mcphost.spojenet.cz:3100/mcp",
         "auth_header_name": "Authorization",
         "auth_env_key": "AUTH_TOKEN",
         "env": {"AUTH_TOKEN": "proxy-token"},
@@ -102,7 +102,7 @@ def test_stdio_server_with_url_renders_as_network_entry_not_local_spawn():
     claude_result = render_claude_config([proxied_stdio])
     entry = claude_result["mcpServers"]["zabbix-mcp-server"]
     assert entry["type"] == "http"
-    assert entry["url"] == "http://mcphost.spojenet.cz:3100/mcp/"
+    assert entry["url"] == "http://mcphost.spojenet.cz:3100/mcp"
     assert entry["headers"] == {"Authorization": "proxy-token"}
     assert "command" not in entry
     assert "args" not in entry
@@ -110,7 +110,7 @@ def test_stdio_server_with_url_renders_as_network_entry_not_local_spawn():
     copilot_result = render_copilot_config([proxied_stdio])
     copilot_entry = copilot_result["servers"]["zabbix-mcp-server"]
     assert copilot_entry["type"] == "http"
-    assert copilot_entry["url"] == "http://mcphost.spojenet.cz:3100/mcp/"
+    assert copilot_entry["url"] == "http://mcphost.spojenet.cz:3100/mcp"
 
 
 def test_stdio_server_without_url_still_renders_as_local_spawn():
@@ -143,7 +143,7 @@ def test_proxy_host_converts_stdio_to_http():
     proxy_result = render_copilot_config([mastodon], proxy_host="10.11.182.99", proxy_port=3100)
     proxy_entry = proxy_result["servers"]["mastodon"]
     assert proxy_entry["type"] == "http"
-    assert proxy_entry["url"] == "http://10.11.182.99:3100/mcp/"
+    assert proxy_entry["url"] == "http://10.11.182.99:3100/mcp"
     assert "command" not in proxy_entry
 
 
@@ -182,4 +182,4 @@ def test_proxy_port_customization():
     result = render_copilot_config([server], proxy_host="10.11.182.99", proxy_port=3200)
     entry = result["servers"]["test"]
     assert entry["type"] == "http"
-    assert entry["url"] == "http://10.11.182.99:3200/mcp/"
+    assert entry["url"] == "http://10.11.182.99:3200/mcp"

@@ -77,10 +77,10 @@ def test_check_reachable_prefers_url_for_proxied_stdio_server():
     """A stdio server that's also proxied onto the network (url set) should
     be health-checked over the network, not by looking for a local binary —
     remote users connect via the proxy, not by spawning the command."""
-    proxied_stdio_server = FakeServer("stdio", command="foo", url="http://mcphost:3100/mcp/")
+    proxied_stdio_server = FakeServer("stdio", command="foo", url="http://mcphost:3100/mcp")
 
     with patch("health.check_http_reachable", return_value=True) as mock_http, \
          patch("health.check_stdio_command") as mock_stdio:
         assert health.check_reachable(proxied_stdio_server) is True
-        mock_http.assert_called_once_with("http://mcphost:3100/mcp/")
+        mock_http.assert_called_once_with("http://mcphost:3100/mcp")
         mock_stdio.assert_not_called()

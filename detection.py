@@ -145,7 +145,7 @@ def detect_mcp_rack_proxies():
                 "name": name,
                 "label": label,
                 "transport": "http",
-                "url": f"http://{_reachable_host(bind_host)}:{port}/mcp/",
+                "url": f"http://{_reachable_host(bind_host)}:{port}/mcp",
                 "category": "mcp-rack",
             }
         )

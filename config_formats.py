@@ -46,7 +46,7 @@ def _stdio_entry(server, include_type):
 def _network_entry(server, proxy_url=None):
     """Render a server as a network entry.
     
-    If proxy_url is provided (e.g. "http://10.11.182.99:3100/mcp/"), use that
+    If proxy_url is provided (e.g. "http://10.11.182.99:3100/mcp"), use that
     instead of server["url"] — this handles proxied stdio servers.
     """
     url = proxy_url or server["url"]
@@ -78,7 +78,7 @@ def _render(servers, include_stdio_type, proxy_host=None, proxy_port=3100):
     - Else use _stdio_entry (local spawn)
     """
     result = {}
-    proxy_url = f"http://{proxy_host}:{proxy_port}/mcp/" if proxy_host else None
+    proxy_url = f"http://{proxy_host}:{proxy_port}/mcp" if proxy_host else None
     
     for server in servers:
         if server.get("url"):
