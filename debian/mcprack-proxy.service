@@ -10,11 +10,14 @@ User=mcprack
 Group=mcprack
 WorkingDirectory=/var/lib/mcprack
 Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-/etc/mcprack/env
 EnvironmentFile=-/etc/mcprack/proxy.env
 
-# Generate proxy config from mcprack catalog and run fastmcp
+# Generate proxy config from mcprack catalog
 ExecStartPre=/usr/bin/mcprack-generate-proxy-config
-ExecStart=/usr/bin/fastmcp run /var/lib/mcprack/proxy-mcp.json --transport http --host 0.0.0.0 --port 3100 --log-level INFO
+
+# Run fastmcp proxy with host/port from /etc/mcprack/proxy.env
+ExecStart=/usr/bin/mcprack-proxy-start
 
 Restart=always
 RestartSec=10

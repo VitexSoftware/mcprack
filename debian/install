@@ -15,4 +15,6 @@ static/* /usr/lib/mcprack/static/
 migrations/* /usr/lib/mcprack/migrations/
 bin/mcprack /usr/bin/
 bin/mcprack-generate-proxy-config /usr/bin/
+bin/mcprack-proxy-start /usr/bin/
+debian/mcprack.service /lib/systemd/system/
 debian/mcprack-proxy.service /lib/systemd/system/

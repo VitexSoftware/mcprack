@@ -52,6 +52,56 @@ case "$1" in
       read -r LDAP_BASE_DN
       LDAP_BASE_DN="${LDAP_BASE_DN:-dc=spojent,dc=cz}"
       
+      # Ask about FastMCP HTTP proxy for remote clients
+      echo ""
+      echo "========================================="
+      echo "FastMCP HTTP Proxy Configuration (Optional)"
+      echo "========================================="
+      echo ""
+      echo "The FastMCP proxy allows remote clients to access MCP servers via HTTP."
+      echo "It's optional - local users can spawn servers directly."
+      printf "Enable FastMCP HTTP proxy? (y/N): "
+      read -r ENABLE_PROXY
+      
+      if [ "$ENABLE_PROXY" = "y" ] || [ "$ENABLE_PROXY" = "Y" ]; then
+        printf "Proxy listen address (127.0.0.1, 0.0.0.0, or specific IP) [127.0.0.1]: "
+        read -r PROXY_HOST
+        PROXY_HOST="${PROXY_HOST:-127.0.0.1}"
+        
+        if [ "$PROXY_HOST" = "0.0.0.0" ]; then
+          echo "⚠️  Listening on 0.0.0.0 - configure firewall004 to allow external access"
+        fi
+        
+        printf "Proxy listen port [3100]: "
+        read -r PROXY_PORT
+        PROXY_PORT="${PROXY_PORT:-3100}"
+        
+        # Create /etc/mcprack/proxy.env for fastmcp service
+        cat > /etc/mcprack/proxy.env <<-PROXY_FILE
+# MCprack FastMCP HTTP Proxy Configuration
+# Auto-generated during installation on $(date)
+
+# FastMCP proxy bind address (0.0.0.0 = all interfaces; configure firewall004)
+FASTMCP_HOST=$PROXY_HOST
+
+# FastMCP proxy bind port
+FASTMCP_PORT=$PROXY_PORT
+
+# Optional: proxy authentication token (if needed)
+# FASTMCP_TOKEN=
+
+# Optional: TLS certificate (for HTTPS)
+# FASTMCP_TLS_CERT=
+# FASTMCP_TLS_KEY=
+PROXY_FILE
+        
+        chmod 0640 /etc/mcprack/proxy.env
+        chown root:mcprack /etc/mcprack/proxy.env
+        echo ""
+        echo "✅ Proxy configuration saved to /etc/mcprack/proxy.env"
+        echo ""
+      fi
+      
       # Create /etc/mcprack/env with collected values
       cat > /etc/mcprack/env <<-ENV_FILE
 # MCprack production configuration
@@ -112,18 +162,29 @@ ENV_FILE
       systemctl daemon-reload || true
       echo ""
       echo "========================================="
-      echo "MCprack services installed:"
+      echo "MCprack Installation Complete"
       echo "========================================="
       echo ""
-      echo "To start MCprack web interface:"
+      echo "📋 Configuration Files:"
+      echo "  • Main config: /etc/mcprack/env"
+      if [ -f /etc/mcprack/proxy.env ]; then
+        echo "  • Proxy config: /etc/mcprack/proxy.env"
+      fi
+      echo "  • Database: /var/lib/mcprack/mcprack.db"
+      echo "  • Logs: /var/log/mcprack/"
+      echo ""
+      echo "🚀 Start Services:"
+      echo "  # MCprack web interface (users login here):"
       echo "  sudo systemctl enable --now mcprack.service"
       echo ""
-      echo "To start MCprack HTTP proxy for remote clients:"
-      echo "  sudo systemctl enable --now mcprack-proxy.service"
+      if [ -f /etc/mcprack/proxy.env ]; then
+        echo "  # FastMCP HTTP proxy (for remote clients):"
+        echo "  sudo systemctl enable --now mcprack-proxy.service"
+        echo ""
+        echo "⚠️  If proxy listens on 0.0.0.0, configure firewall004 for external access"
+      fi
       echo ""
-      echo "Configuration is in: /etc/mcprack/env"
-      echo "Log files: /var/log/mcprack/"
-      echo "Database: /var/lib/mcprack/mcprack.db"
+      echo "✅ MCprack is ready for use"
       echo ""
     fi
     ;;

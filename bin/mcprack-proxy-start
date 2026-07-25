@@ -1,0 +1,28 @@
+#!/bin/bash
+# MCprack FastMCP Proxy Launcher
+# Reads configuration from /etc/mcprack/proxy.env and starts fastmcp with the correct parameters
+
+set -e
+
+# Load proxy configuration
+if [ -f /etc/mcprack/proxy.env ]; then
+    # shellcheck disable=SC1091
+    . /etc/mcprack/proxy.env
+fi
+
+# Use defaults if variables not set
+FASTMCP_HOST="${FASTMCP_HOST:-127.0.0.1}"
+FASTMCP_PORT="${FASTMCP_PORT:-3100}"
+
+# Log configuration
+echo "Starting FastMCP proxy:" >&2
+echo "  Host: $FASTMCP_HOST" >&2
+echo "  Port: $FASTMCP_PORT" >&2
+echo "  Config: /var/lib/mcprack/proxy-mcp.json" >&2
+
+# Run fastmcp with configured host and port
+exec /usr/bin/fastmcp run /var/lib/mcprack/proxy-mcp.json \
+    --transport http \
+    --host "$FASTMCP_HOST" \
+    --port "$FASTMCP_PORT" \
+    --log-level INFO
