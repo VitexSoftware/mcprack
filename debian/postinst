@@ -177,6 +177,27 @@ ENV_FILE
         'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -m flask db upgrade' \
         || echo "mcprack: 'flask db upgrade' failed - check /etc/mcprack/env and run it manually." >&2
       
+      echo "Creating default admin account..."
+      su -s /bin/sh mcprack -c \
+        'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -c "
+from app import create_app
+from models import User
+from extensions import db
+app = create_app()
+with app.app_context():
+    existing = User.query.filter_by(username=\"admin\").first()
+    if not existing:
+        admin = User(username=\"admin\", auth_type=\"local\", is_admin=True)
+        admin.is_active_flag = True
+        admin.set_password(\"admin123\")
+        db.session.add(admin)
+        db.session.commit()
+        print(\"✅ Admin user created: admin/admin123\")
+    else:
+        print(\"ℹ️  Admin user already exists\")
+"' \
+        || echo "mcprack: admin account creation failed (might already exist)" >&2
+      
       echo "✅ Database initialized"
     else
       echo "⚠️  /etc/mcprack/env not found - skipping database setup"
@@ -211,6 +232,14 @@ ENV_FILE
         echo ""
         echo "⚠️  If proxy listens on 0.0.0.0, configure firewall004 for external access"
       fi
+      echo ""
+      echo "🔐 Default Admin Account:"
+      echo "  • Username: admin"
+      echo "  • Password: admin123"
+      echo "  • ⚠️  Please change this password after first login!"
+      echo ""
+      echo "📖 Documentation:"
+      echo "  • See /usr/share/doc/mcprack/README.Debian for setup instructions"
       echo ""
       echo "✅ MCprack is ready for use"
       echo ""
