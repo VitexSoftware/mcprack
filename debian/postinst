@@ -189,10 +189,10 @@ with app.app_context():
     if not existing:
         admin = User(username=\"admin\", auth_type=\"local\", is_admin=True)
         admin.is_active_flag = True
-        admin.set_password(\"admin123\")
+        admin.set_password("mcprack-test-2026")
         db.session.add(admin)
         db.session.commit()
-        print(\"✅ Admin user created: admin/admin123\")
+        print("✅ Admin user created: admin/mcprack-test-2026")
     else:
         print(\"ℹ️  Admin user already exists\")
 "' \
@@ -235,7 +235,7 @@ with app.app_context():
       echo ""
       echo "🔐 Default Admin Account:"
       echo "  • Username: admin"
-      echo "  • Password: admin123"
+      echo "  • Password: mcprack-test-2026"
       echo "  • ⚠️  Please change this password after first login!"
       echo ""
       echo "📖 Documentation:"

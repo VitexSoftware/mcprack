@@ -57,15 +57,23 @@ instead of a raw "bw login failed" error. Re-run it after every edit to
 
 ### Manual Setup Steps (if needed)
 
-After creating `/etc/mcprack/env`, run database migrations:
+After creating `/etc/mcprack/env`, run database migrations and create admin account:
 
-    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade'
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -c "
+from app import create_app
+from models import User
+from extensions import db
+app = create_app()
+with app.app_context():
+    admin = User(username=\"admin\", auth_type=\"local\", is_admin=True)
+    admin.is_active_flag = True
+    admin.set_password(\"mcprack-test-2026\")
+    db.session.add(admin)
+    db.session.commit()
+    print(\"Admin account created: admin/mcprack-test-2026\")
+"'
 
-Then create the first admin account:
-
-    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask create-admin'
-
-Finally start the service:
+Then start the service:
 
     systemctl enable --now mcprack.service
 
