@@ -1,90 +1,114 @@
 mcprack for Debian
 ===================
 
-Configuration lives in /etc/mcprack/env (create it before the first start —
-see the systemd unit's EnvironmentFile). Required variables:
+## Installation
 
-  SECRET_KEY=<random-string>
-  SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
-  # or postgresql+psycopg2://... / mysql+pymysql://... (install python3-psycopg2
-  # or python3-pymysql respectively — see Suggests in debian/control)
+Run the package installer, which will prompt for configuration interactively:
 
-  LDAP_SERVER=ldap://10.11.25.3:389
-  LDAP_BASE_DN=dc=spojent,dc=cz
-  LDAP_USER_OU=ou=Users,dc=spojent,dc=cz
-  LDAP_USER_FILTER=(sAMAccountName=%(user)s)
+    sudo dpkg -i mcprack_*.deb
 
-  BW_SERVER=https://vaultwarden-dev.proxy.spojenet.cz
-  BW_CLIENTID=...
-  BW_CLIENTSECRET=...
-  BW_PASSWORD=...
-  BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
+The installer will ask for:
+- Vaultwarden (Bitwarden) server URL, client ID, client secret, master password
+- Whether to enable LDAP authentication (optional, disabled by default)
+- If LDAP enabled: server URL, base DN, bind DN, bind password
+- Whether to enable the FastMCP HTTP proxy (optional, for remote client access)
+- If proxy enabled: listen address (127.0.0.1, 0.0.0.0, or custom IP) and port
 
-Get BW_CLIENTID/BW_CLIENTSECRET from the Vaultwarden web vault: Account
-Settings -> Security -> Keys (API Key). BW_PASSWORD is that same account's
+All configuration is saved to `/etc/mcprack/env` and (if enabled) `/etc/mcprack/proxy.env`.
+Database migrations and initial setup run automatically.
+
+## Manual Configuration (if not using interactive install)
+
+Configuration lives in `/etc/mcprack/env`. Required variables:
+
+    SECRET_KEY=<random-string>
+    SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
+    # or postgresql+psycopg2://... / mysql+pymysql://... (install python3-psycopg2
+    # or python3-pymysql respectively — see Suggests in debian/control)
+
+### Authentication (optional, LDAP disabled by default)
+
+    LDAP_ENABLED=false
+    # To enable LDAP:
+    LDAP_ENABLED=true
+    LDAP_SERVER=ldap://10.11.25.3:389
+    LDAP_BASE_DN=dc=spojent,dc=cz
+    LDAP_USER_OU=ou=Users,dc=spojent,dc=cz
+    LDAP_USER_FILTER=(sAMAccountName=%(user)s)
+    LDAP_BIND_DN=cn=admin,dc=spojent,dc=cz
+    LDAP_BIND_PASSWORD=...
+
+### Vaultwarden (Bitwarden) Credentials
+
+    BW_SERVER=https://vaultwarden-dev.proxy.spojenet.cz
+    BW_CLIENTID=...
+    BW_CLIENTSECRET=...
+    BW_PASSWORD=...
+    BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
+
+Get `BW_CLIENTID`/`BW_CLIENTSECRET` from the Vaultwarden web vault: Account
+Settings → Security → Keys (API Key). `BW_PASSWORD` is that same account's
 master password. After setting these, log in to mcprack as an admin and open
-"Vaultwarden diagnostics" in the nav bar (/admin/vaultwarden/wizard) — it
-checks the bw binary, BW_SERVER reachability, the API key, and the master
+"Vaultwarden diagnostics" in the nav bar (`/admin/vaultwarden/wizard`) — it
+checks the `bw` binary, `BW_SERVER` reachability, the API key, and the master
 password one at a time and tells you exactly which one is still wrong,
 instead of a raw "bw login failed" error. Re-run it after every edit to
-/etc/mcprack/env; no service restart is needed.
+`/etc/mcprack/env`; no service restart is needed.
 
-After creating /etc/mcprack/env, run the database migration once:
+### Manual Setup Steps (if needed)
 
-  su -s /bin/sh www-data -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade'
+After creating `/etc/mcprack/env`, run database migrations:
+
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask db upgrade'
 
 Then create the first admin account:
 
-  su -s /bin/sh www-data -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask create-admin'
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app flask create-admin'
 
 Finally start the service:
 
-  systemctl enable --now mcprack
+    systemctl enable --now mcprack.service
 
 
-MCP HTTP Proxy (for remote access to stdio servers)
-====================================================
+## MCP HTTP Proxy (for remote access to stdio servers)
 
 If you want remote clients (e.g., Claude Desktop running on a different
 workstation) to connect to stdio-based MCP servers running on this host, you
-need to expose them over HTTP. mcprack includes a systemd service that uses
-fastmcp to proxy all registered stdio servers.
+can optionally enable the HTTP proxy during installation.
 
-1. Install fastmcp (recommended, not required):
+### During Installation
 
-     apt install python3-fastmcp
+When you run `sudo dpkg -i`, the installer will ask:
+- "Enable FastMCP HTTP proxy? (y/N)"
+- If yes: proxy listen address (127.0.0.1, 0.0.0.0, or custom IP)
+- If yes: proxy listen port (default 3100)
 
-2. In the mcprack admin UI (/admin/servers), for each stdio server you want
-   to expose remotely:
+If you choose `0.0.0.0`, make sure to configure your firewall (firewall004)
+to allow external access on the proxy port.
 
-   a) Leave "Command" filled in (e.g., /usr/bin/mastodon-mcp)
-   b) Fill in "URL" as: http://YOUR-HOST-IP:3100/mcp/
-      (e.g., http://10.11.182.99:3100/mcp/)
-   c) Set "Auth header name" and "Auth env key" if your server needs
-      authentication tokens
+### Manual Configuration (if needed)
 
-   This tells mcprack: "This server runs via stdio locally, but remote users
-   should connect to it via this HTTP endpoint."
+Edit `/etc/mcprack/proxy.env`:
 
-3. Enable and start the proxy service:
+    FASTMCP_HOST=127.0.0.1    # or 0.0.0.0 for remote access
+    FASTMCP_PORT=3100
 
-     systemctl enable --now mcprack-proxy.service
+Enable and start the proxy service:
 
-   The proxy will:
-   - Read all enabled stdio servers from the database
-   - Generate /var/lib/mcprack/proxy-mcp.json
-   - Start fastmcp on 0.0.0.0:3100 to expose them over HTTP
+    systemctl enable --now mcprack-proxy.service
 
-4. When users download their config (e.g., Claude or Copilot), they'll
-   automatically get network entries pointing to http://YOUR-HOST:3100/mcp/
-   instead of local stdio commands.
+The proxy will:
+- Read all enabled stdio servers from the database
+- Generate `/var/lib/mcprack/proxy-mcp.json`
+- Start fastmcp on the configured host/port to expose servers over HTTP
 
-5. Optional: Set additional environment variables for the proxy in
-   /etc/mcprack/proxy.env (e.g., API tokens needed by the MCP servers).
+When users download their config (e.g., Claude or Copilot), they'll
+automatically get network entries pointing to `http://YOUR-HOST:3100/mcp/`
+instead of local stdio commands.
 
-6. To restart the proxy after adding/removing servers:
+To restart the proxy after adding/removing servers:
 
-     systemctl restart mcprack-proxy.service
+    systemctl restart mcprack-proxy.service
 
-Note: The proxy port (3100) must be accessible from client workstations. Make
+Note: The proxy port must be accessible from client workstations. Make
 sure your firewall allows incoming connections on that port.

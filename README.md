@@ -3,7 +3,7 @@
 Self-service MCP server catalog and client config generator.
 
 An admin registers each available MCP (Model Context Protocol) server once.
-Users log in — with a local account or their Active Directory credentials —
+Users log in — with a local account or (optionally) their Active Directory credentials —
 tick which servers they need and pick a target client (Claude or GitHub
 Copilot), and download a ready-to-use config file for that client.
 
@@ -12,6 +12,10 @@ Vaultwarden (the same `bw-cli` / Secure Note pattern already used by the
 `mcp_rack` Ansible role): the admin sets default credentials/env vars per
 server, and a user may optionally override them with their own for their
 personal downloads.
+
+## Authentication
+
+**Local accounts** are always available. **LDAP/Active Directory** is optional and disabled by default — enable it during installation if you want users to authenticate with AD credentials instead.
 
 ## Quick start (development)
 
