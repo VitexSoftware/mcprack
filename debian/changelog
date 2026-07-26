@@ -1,3 +1,10 @@
+mcprack (0.2.4) unstable; urgency=medium
+
+  * Automatically create missing database tables (such as `audit_log_entries`)
+    on application startup to prevent 500 errors when upgrading existing databases.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 00:43:00 +0200
+
 mcprack (0.2.3) unstable; urgency=medium
 
   * Harden the per-user MCP proxy: bounded handshake probe with auto-

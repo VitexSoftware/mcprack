@@ -25,6 +25,10 @@ def create_app(config_object=Config):
 
     telemetry.init_app(app)
 
+    import models  # noqa: F401 - Register models for table creation
+    with app.app_context():
+        db.create_all()
+
     register_cli(app)
     register_static_routes(app)
 
