@@ -178,6 +178,61 @@ class UserServerOverride(db.Model):
     server = db.relationship("McpServer", back_populates="overrides")
 
 
+class AuditLogEntry(db.Model):
+    """Append-only security audit trail. Rows are written once by
+    audit.log_audit_event() and never modified — this model deliberately
+    exposes no update/delete helpers, and no admin route may edit or delete
+    a row (see admin.py audit_log view). Never store request/response
+    bodies or credential values here — only that an action happened, by
+    whom, against which server, and its outcome."""
+
+    __tablename__ = "audit_log_entries"
+
+    ACTIONS = (
+        "tool_call",
+        "config_download",
+        "credential_access",
+        "proxy_start",
+        "proxy_stop",
+        "admin_change",
+        "login",
+        "login_failed",
+    )
+    RESULTS = ("success", "error")
+
+    id = db.Column(db.Integer, primary_key=True)
+    timestamp = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow, index=True)
+
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    server_id = db.Column(
+        db.Integer, db.ForeignKey("mcp_servers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # Denormalized snapshot of the server's name at the time of the event,
+    # so history stays readable even after the McpServer row is deleted.
+    server_name = db.Column(db.String(150), nullable=True)
+
+    action = db.Column(db.String(30), nullable=False)
+    result = db.Column(db.String(10), nullable=False, default="success")
+    error_code = db.Column(db.String(50), nullable=True)
+    error_message = db.Column(db.String(500), nullable=True)
+
+    source_ip = db.Column(db.String(64), nullable=True)
+    hostname = db.Column(db.String(255), nullable=True)
+
+    duration_ms = db.Column(db.Integer, nullable=True)
+    request_id = db.Column(db.String(36), nullable=True, index=True)
+
+    __table_args__ = (
+        db.Index("ix_audit_server_timestamp", "server_id", "timestamp"),
+        db.Index("ix_audit_user_timestamp", "user_id", "timestamp"),
+    )
+
+    user = db.relationship("User")
+    server = db.relationship("McpServer")
+
+
 class UserServerPermission(db.Model):
     """Explicit per-user server access policy.
 

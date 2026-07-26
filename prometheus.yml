@@ -1,0 +1,12 @@
+# Scrape config for the local docker-compose.otel.yml Prometheus service.
+# Only used with `docker compose -f docker-compose.otel.yml --profile collector --profile grafana up -d`
+# — points at the OTEL Collector's Prometheus exporter (see otel-collector-config.yaml),
+# which is where mcprack's mcp_server_calls_total / mcp_server_call_duration_seconds /
+# config_downloads_total metrics end up.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: otel-collector
+    static_configs:
+      - targets: ["otel-collector:8889"]

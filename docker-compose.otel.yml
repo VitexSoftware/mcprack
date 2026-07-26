@@ -1,0 +1,83 @@
+# Local OpenTelemetry stack for trying out mcprack's tracing/metrics
+# support without touching the shared 10.11.56.226 Grafana/Alloy instance.
+#
+# Usage:
+#   docker compose -f docker-compose.otel.yml up -d
+#   Jaeger UI:        http://localhost:16686
+#   OTLP http/protobuf: http://localhost:4318
+#   OTLP grpc:           http://localhost:4317
+#
+# Then run mcprack with:
+#   OTEL_ENABLED=true
+#   OTEL_SERVICE_NAME=mcprack-local
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+#   OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+#
+# For metrics + the Grafana dashboard (grafana/mcprack-otel-dashboard.json),
+# bring up the Collector and Grafana profiles too, and point mcprack at the
+# Collector's OTLP ports instead (4319/4320, offset to avoid clashing with
+# Jaeger's own OTLP receiver above):
+#   docker compose -f docker-compose.otel.yml --profile collector --profile grafana up -d
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4319
+#   Grafana UI: http://localhost:3001 (admin/admin) — the "Prometheus (mcprack
+#   local OTEL stack)" datasource is pre-provisioned; import
+#   grafana/mcprack-otel-dashboard.json via Dashboards → Import and pick it
+#   for ${DS_PROMETHEUS}. Skip ${DS_TRACES} (no local Tempo here) or point it
+#   at a Tempo instance if you have one — this local stack uses Jaeger's own
+#   UI (http://localhost:16686) for trace viewing instead.
+#
+# See README.md "Observability (OpenTelemetry)" for details.
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: mcprack-otel-jaeger
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC receiver (built into Jaeger all-in-one)
+      - "4318:4318"     # OTLP HTTP receiver
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.109.0
+    container_name: mcprack-otel-collector
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    ports:
+      - "4319:4318"     # OTLP HTTP receiver (offset to avoid clashing with Jaeger above)
+      - "4320:4317"     # OTLP gRPC receiver
+      - "8889:8889"     # Prometheus metrics scrape endpoint
+    depends_on:
+      - jaeger
+    profiles:
+      - collector
+      - grafana
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: mcprack-otel-prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      - otel-collector
+    profiles:
+      - grafana
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: mcprack-otel-grafana
+    ports:
+      - "3001:3000"     # offset from the shared 10.11.56.226:3000 Grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    profiles:
+      - grafana

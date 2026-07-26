@@ -1,3 +1,16 @@
+mcprack (0.2.3) unstable; urgency=medium
+
+  * Harden the per-user MCP proxy: bounded handshake probe with auto-
+    heal, deterministic JSON-RPC errors on upstream failure,
+    unauthenticated /health endpoint, admin stdio 'Test' action, and a
+    server-subscriptions view.
+  * Implement database-backed audit logging with event retention management
+    (`flask audit-archive`).
+  * Add experimental OpenTelemetry (OTEL) traces and metrics support with
+    admin setup wizard and Grafana dashboards.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Sun, 26 Jul 2026 17:04:12 +0200
+
 mcprack (0.2.2) unstable; urgency=medium
 
   * Split secrets (Vaultwarden) from plain config (DB); per-user proxy

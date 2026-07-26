@@ -1,48 +1,102 @@
 {% extends "base.html" %}
-{% block title %}Per-user proxy instances — mcprack{% endblock %}
+{% block title %}Proxy instances & subscriptions — mcprack{% endblock %}
 {% block content %}
-<h1>Per-user proxy instances</h1>
-<p><small>Only stdio servers without a fixed URL are started here, on demand, per user+server pair.</small></p>
 
-<table>
-  <thead>
-    <tr>
-      <th>User</th>
-      <th>Server</th>
-      <th>PID</th>
-      <th>Port</th>
-      <th>Status</th>
-      <th>Idle</th>
-      <th>Log</th>
-      <th></th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for row in rows %}
-    <tr>
-      <td>{{ row.username }}</td>
-      <td>{{ row.server_name }}</td>
-      <td>{{ row.pid or "-" }}</td>
-      <td>{{ row.port }}</td>
-      <td>
-        {% if row.running %}
-        <span class="badge badge-ok">running</span>
+<section class="section">
+  <h1>🔷 Server subscriptions</h1>
+  <p class="text-muted">Which users have selected which MCP servers, and whether a live
+  per-user proxy instance is currently running for that pair.</p>
+
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Server</th>
+          <th>Selected</th>
+          <th>Proxy status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in subscription_rows %}
+        <tr>
+          <td><a href="{{ url_for('admin.user_edit', user_id=row.user_id) }}">{{ row.username }}</a></td>
+          <td><a href="{{ url_for('admin.server_edit', server_id=row.server_id) }}"><code>{{ row.server_name }}</code></a></td>
+          <td>{{ row.selected_at.strftime('%Y-%m-%d %H:%M') if row.selected_at else '—' }}</td>
+          <td>
+            {% if row.proxy_running %}
+              <span class="badge badge-success">✓ running</span>
+            {% elif row.is_stdio_proxy_candidate %}
+              <span class="badge badge-warning">not started yet</span>
+            {% else %}
+              <span class="text-muted">— (network endpoint, no proxy needed)</span>
+            {% endif %}
+          </td>
+        </tr>
         {% else %}
-        <span class="badge badge-warn">stale</span>
-        {% endif %}
-      </td>
-      <td>{{ (row.idle_seconds|string + " s") if row.idle_seconds is not none else "-" }}</td>
-      <td><small>{{ row.log_path }}</small></td>
-      <td>
-        <form class="inline" method="post" action="{{ url_for('admin.proxy_instance_stop', user_id=row.user_id, server_id=row.server_id) }}"
-              onsubmit="return confirm('Stop proxy for {{ row.username }} / {{ row.server_name }}?');">
-          <button type="submit">Stop</button>
-        </form>
-      </td>
-    </tr>
-    {% else %}
-    <tr><td colspan="8">No per-user proxy instances found.</td></tr>
-    {% endfor %}
-  </tbody>
-</table>
+        <tr>
+          <td colspan="4" style="text-align: center; padding: var(--space-lg);">
+            <p class="text-muted">No users have selected any servers yet.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <h2>Running per-user proxy instances</h2>
+  <p class="text-muted">Only stdio servers without a fixed network URL are started here, on demand,
+  one isolated instance per (user, server) pair.</p>
+
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>User</th>
+          <th>Server</th>
+          <th>PID</th>
+          <th>Port</th>
+          <th>Status</th>
+          <th>Idle</th>
+          <th>Log</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td><a href="{{ url_for('admin.user_edit', user_id=row.user_id) }}">{{ row.username }}</a></td>
+          <td><a href="{{ url_for('admin.server_edit', server_id=row.server_id) }}"><code>{{ row.server_name }}</code></a></td>
+          <td>{{ row.pid or "-" }}</td>
+          <td>{{ row.port }}</td>
+          <td>
+            {% if row.running %}
+            <span class="badge badge-success">✓ running</span>
+            {% else %}
+            <span class="badge badge-warning">stale</span>
+            {% endif %}
+          </td>
+          <td>{{ (row.idle_seconds|string + " s") if row.idle_seconds is not none else "-" }}</td>
+          <td><small class="text-muted">{{ row.log_path }}</small></td>
+          <td>
+            <form class="inline" method="post" action="{{ url_for('admin.proxy_instance_stop', user_id=row.user_id, server_id=row.server_id) }}"
+                  onsubmit="return confirm('Stop proxy for {{ row.username }} / {{ row.server_name }}?');">
+              <button type="submit" class="btn btn-sm btn-danger">Stop</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" style="text-align: center; padding: var(--space-lg);">
+            <p class="text-muted">No per-user proxy instances running right now.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
 {% endblock %}

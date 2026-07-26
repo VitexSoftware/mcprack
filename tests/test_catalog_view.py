@@ -222,6 +222,75 @@ def test_user_proxy_route_rejects_invalid_token(app, client):
     assert resp.status_code == 403
 
 
+def test_user_proxy_route_returns_clean_jsonrpc_error_on_broken_upstream(app, client):
+    """A permanently broken upstream (e.g. a stdio command that crashes on
+    every invocation) must fail deterministically with a proper JSON-RPC
+    error body, not a bare 502 or an unbounded hang."""
+    import user_proxy
+
+    user_id = _login(client)
+    with app.app_context():
+        stdio = McpServer(
+            name="broken-proxy-stdio", label="Broken", transport="stdio",
+            command="/bin/broken", enabled=True,
+        )
+        db.session.add(stdio)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=stdio.id))
+        db.session.commit()
+        server_id = stdio.id
+
+    with app.app_context():
+        from catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 42, "method": "initialize"})
+    with patch(
+        "catalog.user_proxy.ensure_user_server_proxy",
+        side_effect=user_proxy.UserProxyError("Upstream MCP server 'broken' failed its startup handshake"),
+    ):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 502
+    payload = json.loads(resp.data)
+    assert payload["jsonrpc"] == "2.0"
+    assert payload["id"] == 42
+    assert "failed its startup handshake" in payload["error"]["message"]
+
+
+def test_forward_to_user_proxy_returns_clean_jsonrpc_error_on_timeout(app, client):
+    import socket as _socket
+
+    import catalog
+
+    user_id = _login(client)
+    with app.app_context():
+        stdio = McpServer(
+            name="slow-proxy-stdio", label="Slow", transport="stdio",
+            command="/bin/slow", enabled=True,
+        )
+        db.session.add(stdio)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=stdio.id))
+        db.session.commit()
+        server_id = stdio.id
+
+    with app.app_context():
+        from catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": "abc", "method": "initialize"})
+    with patch("catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
+         patch("catalog.http.client.HTTPConnection") as mock_conn_cls:
+        mock_conn_cls.return_value.request.side_effect = _socket.timeout("timed out")
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 502
+    payload = json.loads(resp.data)
+    assert payload["id"] == "abc"
+    assert "did not respond within" in payload["error"]["message"]
+
+
 def test_view_always_uses_user_proxy_urls_for_stdio_servers(app, client):
     """Users always connect remotely — a stdio server never gets embedded
     into the config as a raw local spawn command, regardless of the

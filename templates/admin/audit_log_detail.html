@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Request Detail — mcprack{% endblock %}
+{% block content %}
+
+<section class="section">
+  <h1>🔗 Audit Trail for Request</h1>
+  <p class="text-muted"><code>{{ request_id }}</code></p>
+  <p>
+    <a href="{{ url_for('admin.audit_log') }}" class="btn btn-secondary">&larr; Back to Audit Log</a>
+    {% if trace_url %}
+    <a href="{{ trace_url }}" target="_blank" rel="noopener" class="btn btn-primary">🔭 View trace</a>
+    {% else %}
+    <span class="text-muted" title="Set OTEL_TRACE_UI_URL_TEMPLATE to enable this link">🔭 View trace (not configured)</span>
+    {% endif %}
+  </p>
+
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp (UTC)</th>
+          <th>User</th>
+          <th>Server</th>
+          <th>Action</th>
+          <th>Result</th>
+          <th>Detail</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr class="{% if e.result == 'error' %}row-warn{% endif %}">
+          <td style="white-space: nowrap;">{{ e.timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] }}</td>
+          <td>{{ e.user.username if e.user else ('#' ~ e.user_id if e.user_id else '—') }}</td>
+          <td>{{ e.server.name if e.server else (e.server_name or ('#' ~ e.server_id if e.server_id else '—')) }}</td>
+          <td><code>{{ e.action }}</code></td>
+          <td>
+            {% if e.result == 'success' %}
+              <span class="badge badge-success">✓ success</span>
+            {% else %}
+              <span class="badge badge-error">✗ error</span>
+            {% endif %}
+          </td>
+          <td>{{ e.error_message or '—' }}</td>
+          <td>{{ (e.duration_ms ~ ' ms') if e.duration_ms is not none else '—' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" style="text-align: center; padding: var(--space-lg);">
+            <p class="text-muted">No entries found for this request id.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{% endblock %}

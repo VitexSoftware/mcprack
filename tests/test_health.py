@@ -84,3 +84,44 @@ def test_check_reachable_prefers_url_for_proxied_stdio_server():
         assert health.check_reachable(proxied_stdio_server) is True
         mock_http.assert_called_once_with("http://mcphost:3100/mcp")
         mock_stdio.assert_not_called()
+
+
+def test_check_stdio_startup_no_command():
+    ok, detail = health.check_stdio_startup(None)
+    assert ok is False
+    assert "No command" in detail
+
+
+def test_check_stdio_startup_missing_binary():
+    ok, detail = health.check_stdio_startup("/definitely/does/not/exist-mcp")
+    assert ok is False
+    assert "Could not start" in detail
+
+
+def test_check_stdio_startup_detects_immediate_crash():
+    """Mirrors the real bug this was written for: a script that's a valid,
+    executable file but crashes immediately at import time (e.g. a missing
+    runtime dependency) — must be reported as broken, not just 'the file
+    exists'."""
+    ok, detail = health.check_stdio_startup(
+        "python3", ["-c", "import nonexistent_module_xyz"], timeout=2.0
+    )
+    assert ok is False
+    assert "Exited with code" in detail
+    assert "nonexistent_module_xyz" in detail or "ModuleNotFoundError" in detail
+
+
+def test_check_stdio_startup_treats_still_running_as_healthy():
+    """A well-behaved MCP stdio server blocks waiting on stdin — still
+    running after the grace period is the expected, healthy outcome."""
+    ok, detail = health.check_stdio_startup(
+        "python3", ["-c", "import time; time.sleep(30)"], timeout=1.0
+    )
+    assert ok is True
+    assert "still running" in detail
+
+
+def test_check_stdio_startup_treats_clean_exit_as_healthy():
+    ok, detail = health.check_stdio_startup("python3", ["-c", "pass"], timeout=2.0)
+    assert ok is True
+    assert "cleanly" in detail

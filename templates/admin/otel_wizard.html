@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}OTEL diagnostics — mcprack{% endblock %}
+{% block content %}
+<h1>OpenTelemetry diagnostics</h1>
+<p>Status of tracing/metrics export, and an on-demand test signal — see
+<a href="https://github.com/VitexSoftware/mcprack#observability-opentelemetry">README "Observability"</a>
+for how to configure this.</p>
+
+<ol class="wizard">
+  <li class="wizard-step wizard-{{ 'ok' if state.enabled else 'skipped' }}">
+    <span class="wizard-icon">{% if state.enabled %}&#10003;{% else %}&#8213;{% endif %}</span>
+    <div class="wizard-body">
+      <div class="wizard-label">OTEL_ENABLED</div>
+      <div class="wizard-detail">
+        {% if state.enabled %}
+          Enabled — traces and metrics are being exported.
+        {% else %}
+          Disabled (no-op) — set <code>OTEL_ENABLED=true</code> in
+          <code>/etc/mcprack/env</code> and restart the service to turn this on.
+          {% if state.init_error %}<br>Last initialization error: {{ state.init_error }}{% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </li>
+
+  <li class="wizard-step wizard-{{ 'ok' if state.endpoint else 'fail' if state.enabled else 'skipped' }}">
+    <span class="wizard-icon">{% if state.endpoint %}&#10003;{% else %}&#10007;{% endif %}</span>
+    <div class="wizard-body">
+      <div class="wizard-label">OTEL_EXPORTER_OTLP_ENDPOINT</div>
+      <div class="wizard-detail">
+        {% if state.endpoint %}{{ state.endpoint }}{% else %}Not set.{% endif %}
+      </div>
+    </div>
+  </li>
+
+  <li class="wizard-step wizard-{{ 'warn' if state.protocol_fell_back else 'ok' if state.effective_protocol else 'skipped' }}">
+    <span class="wizard-icon">{% if state.protocol_fell_back %}&#9888;{% elif state.effective_protocol %}&#10003;{% else %}&#8213;{% endif %}</span>
+    <div class="wizard-body">
+      <div class="wizard-label">Protocol</div>
+      <div class="wizard-detail">
+        {% if state.effective_protocol %}
+          Using <code>{{ state.effective_protocol }}</code>
+          {% if state.protocol_fell_back %}
+            — fell back from requested <code>{{ state.requested_protocol }}</code>.
+            {% if state.requested_protocol and state.requested_protocol|lower == 'http/json' %}
+              The Python OTLP exporter has no <code>http/json</code> transport (unlike the
+              JS SDK) — only <code>grpc</code> and <code>http/protobuf</code> are supported.
+            {% endif %}
+          {% endif %}
+        {% else %}
+          Not initialized.
+        {% endif %}
+      </div>
+    </div>
+  </li>
+
+  <li class="wizard-step wizard-skipped">
+    <span class="wizard-icon">&#8213;</span>
+    <div class="wizard-body">
+      <div class="wizard-label">Service name</div>
+      <div class="wizard-detail"><code>{{ state.service_name }}</code></div>
+    </div>
+  </li>
+</ol>
+
+<section class="section">
+  <h2>Test connectivity</h2>
+  <p class="text-muted">Sends one test span and one test metric point and force-flushes them —
+  this proves the exporter can talk to <code>{{ state.endpoint or '(no endpoint configured)' }}</code>
+  without raising, but a "success" here does not guarantee the Collector actually stored the
+  data (that background export path doesn't surface errors synchronously).</p>
+  <form method="post" action="{{ url_for('admin.otel_wizard_test') }}">
+    <button type="submit" class="btn btn-primary" {{ "disabled" if not state.enabled else "" }}>
+      🔭 Send test span + metric
+    </button>
+  </form>
+  {% if not state.enabled %}
+  <p class="text-muted" style="font-size: var(--font-size-xs);">Requires OTEL_ENABLED=true.</p>
+  {% endif %}
+</section>
+
+<p><a href="{{ url_for('admin.otel_wizard') }}">Re-run diagnostics</a></p>
+{% endblock %}

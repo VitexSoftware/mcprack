@@ -9,6 +9,7 @@ credentials.
 import os
 import shutil
 import socket
+import subprocess
 from urllib.parse import urlsplit
 
 DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -35,6 +36,60 @@ def check_http_reachable(url, timeout=1.5):
             return True
     except OSError:
         return False
+
+
+def check_stdio_startup(command, args=None, env=None, timeout=2.0):
+    """Actually try to start a stdio command and see if it survives its own
+    import/startup phase — `check_stdio_command` alone only proves the file
+    exists and is executable, not that it actually runs (a missing runtime
+    dependency, e.g., produces exactly this: a valid, executable script
+    that crashes on the first line of real code).
+
+    Unlike the rest of this module, this has a real (bounded, brief) side
+    effect: it spawns the real process for up to `timeout` seconds with
+    stdin closed. Only call this on-demand (an admin "Test" action), never
+    automatically on every page load.
+
+    Returns (ok: bool, detail: str).
+    """
+    if not command:
+        return False, "No command configured."
+
+    full_env = dict(os.environ)
+    if env:
+        full_env.update(env)
+
+    try:
+        proc = subprocess.Popen(
+            [command, *(args or [])],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            env=full_env,
+            text=True,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        return False, f"Could not start '{command}': {exc}"
+
+    try:
+        _, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        # Still running after the grace period — for an MCP stdio server
+        # this is the expected, healthy state (it's waiting on stdin for a
+        # JSON-RPC request that will never come from this probe).
+        proc.kill()
+        proc.communicate()
+        return True, f"Started and was still running after {timeout:.0f}s (expected for a stdio server waiting on input)."
+
+    if proc.returncode == 0:
+        return True, "Exited cleanly (return code 0)."
+
+    tail = "\n".join((stderr or "").strip().splitlines()[-5:])
+    detail = f"Exited with code {proc.returncode} within {timeout:.0f}s — likely broken."
+    if tail:
+        detail += f"\n{tail}"
+    return False, detail
 
 
 def check_reachable(server):

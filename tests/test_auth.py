@@ -71,6 +71,7 @@ def test_local_login_wrong_password_rejected(app, client):
 
 
 def test_ldap_login_search_then_bind_provisions_user(app, client):
+    app.config["LDAP_ENABLED"] = True
     entry = FakeEntry(
         "CN=Carol,OU=Users,DC=spojent,DC=cz",
         {"givenName": "Carol", "sn": "Danvers", "mail": "carol@spojent.cz"},
@@ -113,6 +114,7 @@ def test_ldap_login_search_then_bind_provisions_user(app, client):
 
 
 def test_ldap_login_wrong_password_rejected(app, client):
+    app.config["LDAP_ENABLED"] = True
     entry = FakeEntry("CN=Dave,OU=Users,DC=spojent,DC=cz", {})
     search_conn = _make_search_connection([entry])
 

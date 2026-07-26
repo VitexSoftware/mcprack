@@ -1,0 +1,10 @@
+# Optional — install these to enable OpenTelemetry tracing/metrics export.
+# See README.md "Observability (OpenTelemetry)". Not required for mcprack
+# to run: with OTEL_ENABLED unset/false, telemetry.py is a no-op and none
+# of this needs to be installed at all.
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-flask
+opentelemetry-instrumentation-sqlalchemy
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-grpc

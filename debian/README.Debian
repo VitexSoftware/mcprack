@@ -94,3 +94,44 @@ if several users have it selected at once. Idle instances (no traffic for 15
 minutes) are cleaned up automatically; see Admin → Proxy instances for a live
 list, and `python3-fastmcp` must be installed (see Recommends in
 `debian/control`) for this to work.
+
+
+## OpenTelemetry (optional — packaging gap on Debian, read before enabling)
+
+`OTEL_ENABLED=true` in `/etc/mcprack/env` turns on trace/metric export (see
+README.md "Observability (OpenTelemetry)"). It is safe to enable even
+without every dependency installed — `telemetry.py` catches any import
+failure at startup, logs it, and falls back to fully disabled rather than
+crashing the service.
+
+As of Debian trixie, only two of the required Python packages are actually
+available via `apt`:
+
+    python3-opentelemetry-api
+    python3-opentelemetry-sdk
+    python3-opentelemetry-instrumentation   (base instrumentation library)
+
+There is **no Debian package** (checked via `apt-cache search opentelemetry`
+on trixie) for:
+
+    opentelemetry-instrumentation-flask
+    opentelemetry-instrumentation-sqlalchemy
+    opentelemetry-exporter-otlp-proto-http
+    opentelemetry-exporter-otlp-proto-grpc
+
+Without these four, `OTEL_ENABLED=true` will safely no-op (nothing is
+exported, no crash). To actually export anything, either:
+
+- Package those four for Debian (see the `package-python-debian` workflow
+  used for other VitexSoftware Python packaging), or
+- Install them into a dedicated venv and point mcprack's systemd unit at
+  that venv's Python instead of the system interpreter — this deviates
+  from mcprack's normal "no virtualenv, system Python packages" packaging
+  model (see main README "Packaging"), so treat it as a stopgap, not the
+  long-term fix.
+
+Check **Admin → OTEL Diagnostics** (`/admin/otel/wizard`) after enabling —
+if `OTEL_ENABLED` shows as *disabled* there even though you set it to
+`true` in `/etc/mcprack/env`, initialization failed (missing package) and
+the page shows the exact import error under "Last initialization error".
+The same error is also in `journalctl -u mcprack.service`.

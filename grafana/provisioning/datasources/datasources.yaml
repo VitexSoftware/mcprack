@@ -1,0 +1,13 @@
+# Auto-provisioned into the local Grafana container by docker-compose.otel.yml.
+# Datasource UID "prometheus" here matches the ${DS_PROMETHEUS} input you'll be
+# asked for when importing grafana/mcprack-otel-dashboard.json through the UI.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus (mcprack local OTEL stack)
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true

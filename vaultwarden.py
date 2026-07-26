@@ -21,7 +21,9 @@ import time
 
 from flask import current_app
 
+import audit
 import health
+import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -213,19 +215,26 @@ def _find_item_id(session, item_name):
 
 def get_notes(session, item_name):
     """Fetch the Secure Note for `item_name` and parse KEY=value lines into a
-    dict. Returns {} if the item doesn't exist."""
-    result = _run(["get", "notes", item_name, "--session", session], check=False)
-    notes = result.stdout or ""
-    values = {}
-    for line in notes.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, val = line.partition("=")
-        key = key.strip()
-        if key.isidentifier():
-            values[key] = val
-    return values
+    dict. Returns {} if the item doesn't exist.
+
+    Traced as "vaultwarden.lookup" with only a one-way hash of the item
+    name as an attribute — never the item name itself (it can embed a
+    username) and never any resolved value."""
+    with telemetry.span(
+        "vaultwarden.lookup", {"secret_name_hash": telemetry.hash_secret_name(item_name)}
+    ):
+        result = _run(["get", "notes", item_name, "--session", session], check=False)
+        notes = result.stdout or ""
+        values = {}
+        for line in notes.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            if key.isidentifier():
+                values[key] = val
+        return values
 
 
 def _render_notes(values):
@@ -274,12 +283,22 @@ def missing_credential_keys(server, values):
 
 def resolve_env(session, server, user=None):
     """Fetch a server's default env values, merged with the user's personal
-    override (if any) — override keys win per-key, not all-or-nothing."""
-    values = get_notes(session, server.vault_item)
-    if user is not None:
-        override_item = f"{server.vault_item}-user-{user.username}"
-        overrides = get_notes(session, override_item)
-        values.update(overrides)
+    override (if any) — override keys win per-key, not all-or-nothing.
+
+    Logs only that a credential access happened (server + user) — never the
+    resolved values themselves."""
+    try:
+        values = get_notes(session, server.vault_item)
+        if user is not None:
+            override_item = f"{server.vault_item}-user-{user.username}"
+            overrides = get_notes(session, override_item)
+            values.update(overrides)
+    except VaultwardenError as exc:
+        audit.log_audit_event(
+            "credential_access", "error", user=user, server=server, error_message=str(exc)[:500]
+        )
+        raise
+    audit.log_audit_event("credential_access", "success", user=user, server=server)
     return values
 
 

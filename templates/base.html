@@ -36,7 +36,9 @@
             <a href="{{ url_for('admin.servers_list') }}" class="header-nav-link is-admin">Servers</a>
             <a href="{{ url_for('admin.users_list') }}" class="header-nav-link is-admin">Users</a>
             <a href="{{ url_for('admin.proxy_instances') }}" class="header-nav-link is-admin">Proxy</a>
+            <a href="{{ url_for('admin.audit_log') }}" class="header-nav-link is-admin">Audit Log</a>
             <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-nav-link is-admin">Diagnostics</a>
+            <a href="{{ url_for('admin.otel_wizard') }}" class="header-nav-link is-admin">OTEL</a>
           {% endif %}
         </nav>
 
@@ -57,7 +59,9 @@
                 <a href="{{ url_for('admin.servers_list') }}" class="header-user-menu-item">All Servers</a>
                 <a href="{{ url_for('admin.users_list') }}" class="header-user-menu-item">All Users</a>
                 <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">Proxy Instances</a>
+                <a href="{{ url_for('admin.audit_log') }}" class="header-user-menu-item">Audit Log</a>
                 <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">Vaultwarden Setup</a>
+                <a href="{{ url_for('admin.otel_wizard') }}" class="header-user-menu-item">OTEL Diagnostics</a>
               {% endif %}
               <div class="header-user-menu-divider"></div>
               <a href="{{ url_for('auth.logout') }}" class="header-user-menu-item danger">Log out</a>

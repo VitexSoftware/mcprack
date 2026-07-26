@@ -1,3 +1,4 @@
+import http.client
 import json
 import os
 import re
@@ -6,9 +7,25 @@ import subprocess
 import time
 from pathlib import Path
 
+import audit
+import telemetry
+
 
 STATE_DIR = Path("/var/lib/mcprack/user-proxies")
 _KEY_RE = re.compile(r"^u(?P<user_id>\d+)-s(?P<server_id>\d+)$")
+
+# How long a spawn-time handshake probe result stays trusted before an
+# already-running instance gets re-verified on its next use. Keeps the
+# common (healthy) path fast — most requests just check a timestamp — while
+# still catching an upstream that broke sometime after it was last proven
+# to work (e.g. the backing command started crashing on every real
+# connection after a package got corrupted underneath it).
+HEALTH_RECHECK_INTERVAL = 30  # seconds
+# Bounded connect+handshake timeout for the liveness probe itself. A dead
+# or crash-looping upstream must fail within this window, not hang
+# indefinitely or take an unpredictable number of seconds depending on
+# fastmcp's own internal retry timing.
+HANDSHAKE_TIMEOUT = 5  # seconds
 
 
 class UserProxyError(RuntimeError):
@@ -31,6 +48,7 @@ def _paths(user_id, server_id):
         "meta": base.with_suffix(".meta.json"),
         "pid": base.with_suffix(".pid"),
         "last_used": base.with_suffix(".last_used"),
+        "healthy_at": base.with_suffix(".healthy_at"),
         "log": base.with_suffix(".log"),
     }
 
@@ -55,6 +73,16 @@ def _read_pid(path):
         return None
     try:
         return int(raw.strip())
+    except ValueError:
+        return None
+
+
+def _read_float(path):
+    raw = _read_text(path)
+    if not raw:
+        return None
+    try:
+        return float(raw.strip())
     except ValueError:
         return None
 
@@ -100,29 +128,72 @@ def _desired_config(server_name, command, args, env):
     }
 
 
-def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env):
-    if not command:
-        raise UserProxyError("Cannot start user proxy for server without command")
+def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT):
+    """Bounded, best-effort liveness probe against a fastmcp proxy
+    instance — does its backing stdio command actually respond, or does
+    every real request fail? A broken backend (crashes on import, wrong
+    path, missing dependency, ...) should never be handed out as if it
+    were usable; this catches that in a fixed, short window instead of the
+    caller discovering it after an unpredictable hang or delay.
 
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    paths = _paths(user_id, server_id)
-    port = _port_for(user_id, server_id)
+    Deliberately permissive on anything short of a clear failure signal:
+    a transport-level failure (refused/timed-out connection) or an
+    explicit top-level JSON-RPC "error" in the response means unhealthy.
+    Anything else — a real result, a non-JSON body (e.g. an SSE stream),
+    an unexpected-but-non-error shape — is treated as probably fine. The
+    goal is to catch a definitely-broken upstream, not to fully validate
+    protocol compliance and risk false positives against a healthy one.
+    """
+    payload = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": "mcprack-health-probe",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "mcprack-health-probe", "version": "1.0"},
+            },
+        }
+    ).encode()
 
-    desired_config = _desired_config(server_name, command, args, env)
-    desired_json = json.dumps(desired_config, sort_keys=True)
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
+    try:
+        conn.request(
+            "POST",
+            "/mcp",
+            body=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json, text/event-stream",
+            },
+        )
+        resp = conn.getresponse()
+        body = resp.read()
+    except (OSError, http.client.HTTPException):
+        return False
+    finally:
+        conn.close()
 
-    meta_current = _read_text(paths["meta"])
-    pid = _read_pid(paths["pid"])
-    running = _pid_running(pid)
+    try:
+        data = json.loads(body)
+    except ValueError:
+        return True
 
-    needs_restart = (not running) or (meta_current != desired_json)
-    if not needs_restart:
-        paths["last_used"].write_text(str(int(time.time())))
-        return port
+    if isinstance(data, dict) and "error" in data:
+        return False
+    return True
 
-    if running:
-        _stop_pid(pid)
 
+def _clear_state_files(paths):
+    for key in ("pid", "meta", "config", "healthy_at"):
+        try:
+            paths[key].unlink()
+        except OSError:
+            pass
+
+
+def _spawn(paths, port, server_name, desired_config, desired_json):
     paths["config"].write_text(json.dumps(desired_config, indent=2))
     paths["meta"].write_text(desired_json)
 
@@ -150,8 +221,85 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
     paths["last_used"].write_text(str(int(time.time())))
     time.sleep(0.2)
     if proc.poll() is not None:
+        _clear_state_files(paths)
         raise UserProxyError(f"User proxy process exited early for {server_name}")
 
+    if not _probe_upstream_health(port):
+        _stop_pid(proc.pid)
+        _clear_state_files(paths)
+        raise UserProxyError(
+            f"Upstream MCP server '{server_name}' failed its startup handshake within "
+            f"{HANDSHAKE_TIMEOUT}s — the registered command is likely broken (check its "
+            f"log at {paths['log']}, or its registration in Admin → Servers)."
+        )
+
+    paths["healthy_at"].write_text(str(time.time()))
+
+
+def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env):
+    if not command:
+        raise UserProxyError("Cannot start user proxy for server without command")
+
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    paths = _paths(user_id, server_id)
+    port = _port_for(user_id, server_id)
+
+    desired_config = _desired_config(server_name, command, args, env)
+    desired_json = json.dumps(desired_config, sort_keys=True)
+
+    meta_current = _read_text(paths["meta"])
+    pid = _read_pid(paths["pid"])
+    running = _pid_running(pid)
+
+    needs_restart = (not running) or (meta_current != desired_json)
+
+    if not needs_restart:
+        healthy_at = _read_float(paths["healthy_at"])
+        if healthy_at is not None and (time.time() - healthy_at) < HEALTH_RECHECK_INTERVAL:
+            paths["last_used"].write_text(str(int(time.time())))
+            return port
+
+        # Health verification is stale (or this instance predates the
+        # health-tracking columns) — re-probe an already-running instance
+        # before handing it out again, so an upstream that started failing
+        # sometime after it was last proven to work gets caught and
+        # restarted here instead of failing unpredictably per-request.
+        if _probe_upstream_health(port):
+            paths["healthy_at"].write_text(str(time.time()))
+            paths["last_used"].write_text(str(int(time.time())))
+            return port
+
+        _stop_pid(pid)
+    elif running:
+        _stop_pid(pid)
+
+    start_time = time.monotonic()
+    with telemetry.span("mcp.proxy.start", {"server_name": server_name}) as current_span:
+        try:
+            _spawn(paths, port, server_name, desired_config, desired_json)
+        except UserProxyError as exc:
+            audit.log_audit_event(
+                "proxy_start",
+                "error",
+                user_id=user_id,
+                server_id=server_id,
+                server_name=server_name,
+                error_message=str(exc)[:500],
+                duration_ms=int((time.monotonic() - start_time) * 1000),
+            )
+            if current_span is not None:
+                current_span.set_attribute("mcp.result", "error")
+            raise
+        audit.log_audit_event(
+            "proxy_start",
+            "success",
+            user_id=user_id,
+            server_id=server_id,
+            server_name=server_name,
+            duration_ms=int((time.monotonic() - start_time) * 1000),
+        )
+        if current_span is not None:
+            current_span.set_attribute("mcp.result", "success")
     return port
 
 
@@ -177,18 +325,29 @@ def cleanup_idle_proxies(max_idle_seconds=900):
 
         if (now - last_used) > max_idle_seconds:
             _stop_pid(pid)
+            user_id, server_id = _parse_key(pid_path.stem)
+            if user_id is not None:
+                audit.log_audit_event(
+                    "proxy_stop",
+                    "success",
+                    user_id=user_id,
+                    server_id=server_id,
+                    error_message="idle timeout",
+                )
 
 
 def stop_user_server_proxy(user_id, server_id):
-    paths = _paths(user_id, server_id)
-    pid = _read_pid(paths["pid"])
-    if pid:
-        _stop_pid(pid)
-    for key in ("pid", "last_used", "meta", "config"):
-        try:
-            paths[key].unlink()
-        except OSError:
-            pass
+    with telemetry.span("mcp.proxy.stop", {"server_id": server_id}):
+        paths = _paths(user_id, server_id)
+        pid = _read_pid(paths["pid"])
+        if pid:
+            _stop_pid(pid)
+        for key in ("pid", "last_used", "meta", "config", "healthy_at"):
+            try:
+                paths[key].unlink()
+            except OSError:
+                pass
+        audit.log_audit_event("proxy_stop", "success", user_id=user_id, server_id=server_id)
 
 
 def list_proxy_instances():

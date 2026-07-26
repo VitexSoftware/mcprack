@@ -5,8 +5,43 @@
 <section class="section">
   <h1>MCP Server Catalog</h1>
   <p class="text-muted">Select the AI tools and services you want to use, save your selection, then download or copy the config for your client. You can change your selection anytime.</p>
+</section>
 
-  <form method="post" action="{{ url_for('catalog.selection') }}" class="section">
+<section class="section">
+  <h2>Download Your Config</h2>
+  <p class="text-muted">Once you've selected the servers you need, download or copy the config for your AI client:</p>
+
+  <div class="action-links">
+    <div class="client-card">
+      <h4>Claude Desktop</h4>
+      <p class="text-sm text-muted">Works with Claude for Desktop application.</p>
+      <div class="client-card-actions">
+        <a href="{{ url_for('catalog.download', client='claude') }}" class="btn btn-secondary" download>
+          ⬇️ Download Config
+        </a>
+        <a href="{{ url_for('catalog.view', client='claude') }}" class="btn btn-secondary">
+          👁️ View & Copy
+        </a>
+      </div>
+    </div>
+
+    <div class="client-card">
+      <h4>GitHub Copilot</h4>
+      <p class="text-sm text-muted">Works with VS Code Copilot and other GitHub Copilot clients.</p>
+      <div class="client-card-actions">
+        <a href="{{ url_for('catalog.download', client='copilot') }}" class="btn btn-secondary" download>
+          ⬇️ Download Config
+        </a>
+        <a href="{{ url_for('catalog.view', client='copilot') }}" class="btn btn-secondary">
+          👁️ View & Copy
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section">
+  <form method="post" action="{{ url_for('catalog.selection') }}">
     <h2>Available Servers</h2>
 
     {% if servers %}
@@ -50,39 +85,6 @@
       </button>
     </div>
   </form>
-</section>
-
-<section class="section">
-  <h2>Download Your Config</h2>
-  <p class="text-muted">Once you've selected the servers you need, download or copy the config for your AI client:</p>
-  
-  <div class="action-links">
-    <div class="client-card">
-      <h4>Claude Desktop</h4>
-      <p class="text-sm text-muted">Works with Claude for Desktop application.</p>
-      <div class="client-card-actions">
-        <a href="{{ url_for('catalog.download', client='claude') }}" class="btn btn-secondary" download>
-          ⬇️ Download Config
-        </a>
-        <a href="{{ url_for('catalog.view', client='claude') }}" class="btn btn-secondary">
-          👁️ View & Copy
-        </a>
-      </div>
-    </div>
-
-    <div class="client-card">
-      <h4>GitHub Copilot</h4>
-      <p class="text-sm text-muted">Works with VS Code Copilot and other GitHub Copilot clients.</p>
-      <div class="client-card-actions">
-        <a href="{{ url_for('catalog.download', client='copilot') }}" class="btn btn-secondary" download>
-          ⬇️ Download Config
-        </a>
-        <a href="{{ url_for('catalog.view', client='copilot') }}" class="btn btn-secondary">
-          👁️ View & Copy
-        </a>
-      </div>
-    </div>
-  </div>
 </section>
 
 {% endblock %}

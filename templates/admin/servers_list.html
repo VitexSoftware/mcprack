@@ -67,6 +67,13 @@
           </td>
           <td style="white-space: nowrap;">
             <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+            {% if not server.url %}
+            <form class="inline" method="post" action="{{ url_for('admin.server_test_stdio', server_id=server.id) }}">
+              <button type="submit" class="btn btn-sm btn-secondary" title="Actually start the command briefly to catch runtime-broken registrations (e.g. a missing dependency) that 'file exists and is executable' alone can't.">
+                🩺 Test
+              </button>
+            </form>
+            {% endif %}
             <form class="inline" method="post" action="{{ url_for('admin.server_delete', server_id=server.id) }}"
                   onsubmit="return confirm('Delete &quot;{{ server.name }}&quot;?');">
               <button type="submit" class="btn btn-sm btn-danger">Delete</button>

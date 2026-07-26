@@ -1,6 +1,7 @@
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from datetime import datetime
 
+import audit
 import detection
 import health
 import appstream_icons
@@ -9,7 +10,8 @@ import user_proxy
 import vaultwarden
 from auth import admin_required
 from extensions import db
-from models import McpServer, User, UserServerPermission
+from flask_login import current_user
+from models import AuditLogEntry, McpServer, User, UserServerPermission, UserServerSelection
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -126,6 +128,9 @@ def server_new():
         db.session.add(server)
         db.session.commit()
         _invalidate_health_cache()
+        audit.log_audit_event(
+            "admin_change", "success", user=current_user, server=server, error_message="server created"
+        )
         flash(f"Server '{server.name}' created.", "success")
         return redirect(url_for("admin.servers_list"))
     return render_template("admin/server_form.html", server=None, env_rows=[])
@@ -140,6 +145,9 @@ def server_edit(server_id):
         _apply_server_form(server, request.form)
         db.session.commit()
         _invalidate_health_cache()
+        audit.log_audit_event(
+            "admin_change", "success", user=current_user, server=server, error_message="server updated"
+        )
         flash(f"Server '{server.name}' updated.", "success")
         return redirect(url_for("admin.servers_list"))
 
@@ -292,10 +300,44 @@ def servers_autodetect():
 @admin_required
 def server_delete(server_id):
     server = db.get_or_404(McpServer, server_id)
+    server_name = server.name
     db.session.delete(server)
     db.session.commit()
     _invalidate_health_cache()
-    flash(f"Server '{server.name}' deleted.", "success")
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server_name=server_name,
+        error_message="server deleted",
+    )
+    flash(f"Server '{server_name}' deleted.", "success")
+    return redirect(url_for("admin.servers_list"))
+
+
+@bp.route("/servers/<int:server_id>/test", methods=["POST"])
+@admin_required
+def server_test_stdio(server_id):
+    """On-demand only (never automatic on page load — it really spawns the
+    registered command). Catches registrations that look fine by
+    `check_stdio_command` (file exists, executable) but are actually broken
+    at runtime — e.g. a missing dependency that crashes on import."""
+    server = db.get_or_404(McpServer, server_id)
+    if server.url:
+        flash(f"'{server.name}' is a network endpoint, not a local stdio command — nothing to test here.", "error")
+        return redirect(url_for("admin.servers_list"))
+
+    try:
+        env = secret_store.resolve_server_env(server)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        flash(f"Could not resolve credentials to test '{server.name}': {exc}", "error")
+        return redirect(url_for("admin.servers_list"))
+
+    ok, detail = health.check_stdio_startup(server.command, server.args, env)
+    if ok:
+        flash(f"✓ '{server.name}' started successfully. {detail}", "success")
+    else:
+        flash(f"✗ '{server.name}' failed to start: {detail}", "error")
     return redirect(url_for("admin.servers_list"))
 
 
@@ -308,6 +350,27 @@ def vaultwarden_wizard():
         steps=steps,
         vaultwarden_configured=secret_store.is_vaultwarden_configured(),
     )
+
+
+@bp.route("/otel/wizard")
+@admin_required
+def otel_wizard():
+    """Read-only status page + on-demand connectivity test — same pattern
+    as the Vaultwarden wizard above, but for OpenTelemetry export."""
+    import telemetry
+
+    state = telemetry.status()
+    return render_template("admin/otel_wizard.html", state=state)
+
+
+@bp.route("/otel/wizard/test", methods=["POST"])
+@admin_required
+def otel_wizard_test():
+    import telemetry
+
+    ok, detail = telemetry.send_test_signal()
+    flash(detail, "success" if ok else "error")
+    return redirect(url_for("admin.otel_wizard"))
 
 
 def _flash_migration_summary(summary, moved_key, verb):
@@ -362,10 +425,19 @@ def proxy_instances():
     user_proxy.cleanup_idle_proxies()
     rows = user_proxy.list_proxy_instances()
 
-    user_ids = {row["user_id"] for row in rows}
-    server_ids = {row["server_id"] for row in rows}
+    selections = (
+        UserServerSelection.query.join(User)
+        .join(McpServer)
+        .order_by(User.username, McpServer.name)
+        .all()
+    )
+
+    user_ids = {row["user_id"] for row in rows} | {s.user_id for s in selections}
+    server_ids = {row["server_id"] for row in rows} | {s.server_id for s in selections}
     users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
     servers = {s.id: s for s in McpServer.query.filter(McpServer.id.in_(server_ids)).all()} if server_ids else {}
+
+    running_pairs = {(row["user_id"], row["server_id"]) for row in rows if row["running"]}
 
     for row in rows:
         user = users.get(row["user_id"])
@@ -373,7 +445,22 @@ def proxy_instances():
         row["username"] = user.username if user else f"user#{row['user_id']}"
         row["server_name"] = server.name if server else f"server#{row['server_id']}"
 
-    return render_template("admin/proxy_instances.html", rows=rows)
+    subscription_rows = [
+        {
+            "user_id": sel.user_id,
+            "server_id": sel.server_id,
+            "username": (users.get(sel.user_id).username if users.get(sel.user_id) else f"user#{sel.user_id}"),
+            "server_name": (servers.get(sel.server_id).name if servers.get(sel.server_id) else f"server#{sel.server_id}"),
+            "selected_at": sel.selected_at,
+            "proxy_running": (sel.user_id, sel.server_id) in running_pairs,
+            "is_stdio_proxy_candidate": bool(servers.get(sel.server_id) and servers[sel.server_id].command and not servers[sel.server_id].url),
+        }
+        for sel in selections
+    ]
+
+    return render_template(
+        "admin/proxy_instances.html", rows=rows, subscription_rows=subscription_rows
+    )
 
 
 @bp.route("/proxy-instances/stop/<int:user_id>/<int:server_id>", methods=["POST"])
@@ -404,6 +491,12 @@ def user_new():
         user.set_password(request.form["password"])
         db.session.add(user)
         db.session.commit()
+        audit.log_audit_event(
+            "admin_change",
+            "success",
+            user=current_user,
+            error_message=f"user '{user.username}' created",
+        )
         flash(f"Local user '{user.username}' created.", "success")
         return redirect(url_for("admin.users_list"))
     return render_template("admin/user_form.html", user=None)
@@ -438,6 +531,12 @@ def user_edit(user_id):
             )
 
         db.session.commit()
+        audit.log_audit_event(
+            "admin_change",
+            "success",
+            user=current_user,
+            error_message=f"user '{user.username}' updated",
+        )
         flash(f"User '{user.username}' updated.", "success")
         return redirect(url_for("admin.users_list"))
 
@@ -447,3 +546,92 @@ def user_edit(user_id):
         available_servers=available_servers,
         permission_map=permission_map,
     )
+
+
+@bp.route("/audit-log")
+@admin_required
+def audit_log():
+    """Read-only, filterable view of the append-only audit trail. No route
+    exists to edit or delete individual entries — see AuditLogEntry."""
+    query = AuditLogEntry.query
+
+    server_id = request.args.get("server_id", type=int)
+    if server_id:
+        query = query.filter(AuditLogEntry.server_id == server_id)
+
+    user_id = request.args.get("user_id", type=int)
+    if user_id:
+        query = query.filter(AuditLogEntry.user_id == user_id)
+
+    since = request.args.get("since", "").strip()
+    if since:
+        parsed = _parse_datetime_local(since)
+        if parsed:
+            query = query.filter(AuditLogEntry.timestamp >= parsed)
+
+    until = request.args.get("until", "").strip()
+    if until:
+        parsed = _parse_datetime_local(until)
+        if parsed:
+            query = query.filter(AuditLogEntry.timestamp <= parsed)
+
+    errors_only = request.args.get("errors_only") == "on"
+    if errors_only:
+        query = query.filter(AuditLogEntry.result == "error")
+
+    entries = query.order_by(AuditLogEntry.timestamp.desc()).limit(500).all()
+
+    servers = McpServer.query.order_by(McpServer.name).all()
+    users = User.query.order_by(User.username).all()
+
+    return render_template(
+        "admin/audit_log.html",
+        entries=entries,
+        servers=servers,
+        users=users,
+        filters={
+            "server_id": server_id,
+            "user_id": user_id,
+            "since": since,
+            "until": until,
+            "errors_only": errors_only,
+        },
+        retention_days=current_app.config.get("AUDIT_RETENTION_DAYS"),
+    )
+
+
+@bp.route("/audit-log/request/<request_id>")
+@admin_required
+def audit_log_request(request_id):
+    """All entries sharing one request_id — the full proxy -> server ->
+    response chain for a single incoming request, for troubleshooting."""
+    entries = (
+        AuditLogEntry.query.filter_by(request_id=request_id)
+        .order_by(AuditLogEntry.timestamp.asc())
+        .all()
+    )
+    trace_url_template = current_app.config.get("OTEL_TRACE_UI_URL_TEMPLATE")
+    trace_url = None
+    if trace_url_template:
+        try:
+            trace_url = trace_url_template.format(request_id=request_id, trace_id=request_id)
+        except (KeyError, IndexError):
+            trace_url = None
+    return render_template(
+        "admin/audit_log_detail.html",
+        entries=entries,
+        request_id=request_id,
+        trace_url=trace_url,
+    )
+
+
+def _parse_datetime_local(value):
+    """Parse an HTML <input type="datetime-local"> value ('YYYY-MM-DDTHH:MM')."""
+    from datetime import datetime
+
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None

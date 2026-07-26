@@ -173,3 +173,56 @@ def test_server_without_secrets_skips_vaultwarden_on_create(app, client):
         server = McpServer.query.filter_by(name="filesystem").first()
         assert server.env_config == {"LOG_LEVEL": "debug"}
         assert server.env_var_names == []
+
+
+def test_server_test_stdio_reports_broken_command(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="broken-mcp", label="Broken", transport="stdio",
+            command="python3", enabled=True,
+        )
+        server.args = ["-c", "import nonexistent_module_xyz"]
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    resp = client.post(f"/admin/servers/{server_id}/test", follow_redirects=True)
+    assert resp.status_code == 200
+    assert b"failed to start" in resp.data
+
+
+def test_server_test_stdio_reports_healthy_command(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="healthy-mcp", label="Healthy", transport="stdio",
+            command="python3", enabled=True,
+        )
+        server.args = ["-c", "import time; time.sleep(30)"]
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    resp = client.post(f"/admin/servers/{server_id}/test", follow_redirects=True)
+    assert resp.status_code == 200
+    assert b"started successfully" in resp.data
+
+
+def test_server_test_stdio_rejects_network_servers(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="http-svc", label="HTTP", transport="http",
+            url="https://example.test/mcp", enabled=True,
+        )
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    resp = client.post(f"/admin/servers/{server_id}/test", follow_redirects=True)
+    assert resp.status_code == 200
+    assert b"nothing to test here" in resp.data

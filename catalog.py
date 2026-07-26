@@ -1,5 +1,7 @@
 import json
 import http.client
+import socket
+import time
 
 from flask import (
     Blueprint,
@@ -16,7 +18,9 @@ from flask_login import current_user, login_required
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 import appstream_icons
+import audit
 import secret_store
+import telemetry
 import user_proxy
 import vaultwarden
 from config_formats import render_claude_config, render_copilot_config
@@ -57,7 +61,29 @@ def _parse_proxy_token(token):
         return None
 
 
-def _forward_to_user_proxy(port):
+# Bounded well under gunicorn's worker timeout (30s), so a dead or
+# crash-looping upstream produces a clean JSON-RPC error response instead
+# of hanging the whole worker (and, transitively, every other request
+# queued behind it) until the worker gets killed.
+_PROXY_REQUEST_TIMEOUT = 10  # seconds
+
+
+def _jsonrpc_request_id(body):
+    try:
+        data = json.loads(body) if body else None
+    except ValueError:
+        return None
+    return data.get("id") if isinstance(data, dict) else None
+
+
+def _jsonrpc_error_response(request_id, message, status=502):
+    payload = json.dumps(
+        {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32000, "message": message}}
+    ).encode()
+    return Response(payload, status=status, mimetype="application/json")
+
+
+def _forward_to_user_proxy(port, server_name=None):
     body = request.get_data()
     headers = {}
     for key, value in request.headers.items():
@@ -72,21 +98,42 @@ def _forward_to_user_proxy(port):
             continue
         headers[key] = value
 
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=30)
-    try:
-        conn.request(request.method, "/mcp", body=body, headers=headers)
-        upstream = conn.getresponse()
-        payload = upstream.read()
-        response = Response(payload, status=upstream.status)
+    start_time = time.monotonic()
+    with telemetry.span(
+        "mcp.server.call", {"server_name": server_name, "transport": "stdio"}
+    ) as current_span:
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=_PROXY_REQUEST_TIMEOUT)
+        try:
+            conn.request(request.method, "/mcp", body=body, headers=headers)
+            upstream = conn.getresponse()
+            payload = upstream.read()
+            response = Response(payload, status=upstream.status)
 
-        for key, value in upstream.getheaders():
-            key_lower = key.lower()
-            if key_lower in {"transfer-encoding", "connection", "keep-alive"}:
-                continue
-            response.headers[key] = value
-        return response
-    finally:
-        conn.close()
+            for key, value in upstream.getheaders():
+                key_lower = key.lower()
+                if key_lower in {"transfer-encoding", "connection", "keep-alive"}:
+                    continue
+                response.headers[key] = value
+
+            result = "success" if upstream.status < 400 else "error"
+            telemetry.record_mcp_server_call(
+                server_name, "stdio", result, time.monotonic() - start_time
+            )
+            if current_span is not None:
+                current_span.set_attribute("mcp.result", result)
+            return response
+        except (socket.timeout, OSError, http.client.HTTPException) as exc:
+            telemetry.record_mcp_server_call(
+                server_name, "stdio", "error", time.monotonic() - start_time
+            )
+            if current_span is not None:
+                current_span.set_attribute("mcp.result", "error")
+            return _jsonrpc_error_response(
+                _jsonrpc_request_id(body),
+                f"Upstream MCP server did not respond within {_PROXY_REQUEST_TIMEOUT}s: {exc}",
+            )
+        finally:
+            conn.close()
 
 
 def _allowed_enabled_server_ids(user_id):
@@ -153,10 +200,12 @@ def user_proxy_mcp(token, server_id):
     if not selected:
         abort(403)
 
+    request_id = _jsonrpc_request_id(request.get_data())
+
     try:
         env = secret_store.resolve_server_env(server, user=user)
-    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError):
-        abort(502)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        return _jsonrpc_error_response(request_id, f"Could not resolve credentials: {exc}")
 
     try:
         port = user_proxy.ensure_user_server_proxy(
@@ -167,10 +216,10 @@ def user_proxy_mcp(token, server_id):
             args=server.args,
             env=env,
         )
-    except user_proxy.UserProxyError:
-        abort(502)
+    except user_proxy.UserProxyError as exc:
+        return _jsonrpc_error_response(request_id, str(exc))
 
-    return _forward_to_user_proxy(port)
+    return _forward_to_user_proxy(port, server_name=server.name)
 
 
 @bp.route("/selection", methods=["POST"])
@@ -335,10 +384,19 @@ def _build_client_config_json(client):
 @bp.route("/download/<client>")
 @login_required
 def download(client):
-    config_json, filename = _build_client_config_json(client)
+    with telemetry.span("catalog.generate_config", {"client_type": client}):
+        config_json, filename = _build_client_config_json(client)
     if config_json is None:
+        audit.log_audit_event(
+            "config_download",
+            "error",
+            user=current_user,
+            error_message=f"no config produced for client '{client}'",
+        )
         return redirect(url_for("catalog.index"))
 
+    audit.log_audit_event("config_download", "success", user=current_user)
+    telemetry.record_config_download(client)
     return Response(
         config_json,
         mimetype="application/json",
@@ -349,7 +407,8 @@ def download(client):
 @bp.route("/view/<client>")
 @login_required
 def view(client):
-    config_json, filename = _build_client_config_json(client)
+    with telemetry.span("catalog.generate_config", {"client_type": client}):
+        config_json, filename = _build_client_config_json(client)
     if config_json is None:
         return redirect(url_for("catalog.index"))
 

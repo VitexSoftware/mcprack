@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
 from extensions import db
-from models import McpServer, User
+from models import McpServer, User, UserServerSelection
 
 
 def _login_admin(client):
@@ -42,10 +42,39 @@ def test_proxy_instances_page_renders_rows(app, client):
 
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert "Per-user proxy instances" in body
+    assert "Running per-user proxy instances" in body
     assert "alice" in body
     assert "mastodon" in body
     assert "35123" in body
+    assert f"/admin/users/{user.id}/edit" in body
+    assert f"/admin/servers/{server.id}/edit" in body
+
+
+def test_proxy_instances_page_shows_subscriptions_with_navigation_links(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        user = User(username="bob", auth_type="local", is_admin=False)
+        user.set_password("pw")
+        server = McpServer(name="jenkins", label="Jenkins", transport="stdio", command="/bin/true", enabled=True)
+        db.session.add_all([user, server])
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user.id, server_id=server.id))
+        db.session.commit()
+        user_id, server_id = user.id, server.id
+
+    with patch("admin.user_proxy.cleanup_idle_proxies"), \
+         patch("admin.user_proxy.list_proxy_instances", return_value=[]):
+        resp = client.get("/admin/proxy-instances")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Server subscriptions" in body
+    assert "bob" in body
+    assert "jenkins" in body
+    assert f"/admin/users/{user_id}/edit" in body
+    assert f"/admin/servers/{server_id}/edit" in body
+    assert "not started yet" in body
 
 
 def test_proxy_instance_stop_calls_manager(app, client):

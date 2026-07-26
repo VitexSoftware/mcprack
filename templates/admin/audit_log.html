@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Audit Log — Admin — mcprack{% endblock %}
+{% block content %}
+
+<section class="section">
+  <h1>📜 Audit Log</h1>
+  <p class="text-muted">
+    Append-only security audit trail — who did what, against which server, and whether it
+    succeeded. Entries cannot be edited or deleted here.
+    {% if retention_days %}Entries older than {{ retention_days }} days are archived and purged by the
+    <code>flask audit-archive</code> CLI command.{% endif %}
+  </p>
+
+  <form method="get" style="display: flex; gap: var(--space-md); flex-wrap: wrap; align-items: end; margin-bottom: var(--space-lg);">
+    <div>
+      <label for="server_id">Server</label><br>
+      <select name="server_id" id="server_id">
+        <option value="">All servers</option>
+        {% for server in servers %}
+        <option value="{{ server.id }}" {% if filters.server_id == server.id %}selected{% endif %}>{{ server.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="user_id">User</label><br>
+      <select name="user_id" id="user_id">
+        <option value="">All users</option>
+        {% for user in users %}
+        <option value="{{ user.id }}" {% if filters.user_id == user.id %}selected{% endif %}>{{ user.username }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label for="since">From</label><br>
+      <input type="datetime-local" name="since" id="since" value="{{ filters.since }}">
+    </div>
+    <div>
+      <label for="until">To</label><br>
+      <input type="datetime-local" name="until" id="until" value="{{ filters.until }}">
+    </div>
+    <div>
+      <label>
+        <input type="checkbox" name="errors_only" {% if filters.errors_only %}checked{% endif %}>
+        Errors only
+      </label>
+    </div>
+    <div>
+      <button type="submit" class="btn btn-primary">Filter</button>
+      <a href="{{ url_for('admin.audit_log') }}" class="btn btn-secondary">Reset</a>
+    </div>
+  </form>
+
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Timestamp (UTC)</th>
+          <th>User</th>
+          <th>Server</th>
+          <th>Action</th>
+          <th>Result</th>
+          <th>Detail</th>
+          <th>Source</th>
+          <th>Duration</th>
+          <th>Request</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for e in entries %}
+        <tr class="{% if e.result == 'error' %}row-warn{% endif %}">
+          <td style="white-space: nowrap;">{{ e.timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] }}</td>
+          <td>{{ e.user.username if e.user else ('#' ~ e.user_id if e.user_id else '—') }}</td>
+          <td>{{ e.server.name if e.server else (e.server_name or ('#' ~ e.server_id if e.server_id else '—')) }}</td>
+          <td><code>{{ e.action }}</code></td>
+          <td>
+            {% if e.result == 'success' %}
+              <span class="badge badge-success">✓ success</span>
+            {% else %}
+              <span class="badge badge-error" title="{{ e.error_code or '' }}">✗ error</span>
+            {% endif %}
+          </td>
+          <td>{{ e.error_message or '—' }}</td>
+          <td>{{ e.source_ip or '—' }}{% if e.hostname %} ({{ e.hostname }}){% endif %}</td>
+          <td>{{ (e.duration_ms ~ ' ms') if e.duration_ms is not none else '—' }}</td>
+          <td>
+            {% if e.request_id %}
+            <a href="{{ url_for('admin.audit_log_request', request_id=e.request_id) }}" title="{{ e.request_id }}">🔗</a>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" style="text-align: center; padding: var(--space-lg);">
+            <p class="text-muted">No audit entries match the current filters.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="text-muted" style="margin-top: var(--space-md);">Showing the most recent {{ entries | length }} matching entries (limit 500).</p>
+</section>
+
+{% endblock %}

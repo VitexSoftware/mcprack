@@ -6,6 +6,7 @@ from flask_login import current_user, login_required, login_user, logout_user
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
+import audit
 from extensions import db, login_manager
 from models import User
 
@@ -89,7 +90,14 @@ def login():
         if user is not None and user.auth_type == "local" and user.password_hash:
             if user.check_password(password) and user.is_active:
                 login_user(user)
+                audit.log_audit_event("login", "success", user=user)
                 return redirect(url_for("catalog.index"))
+            audit.log_audit_event(
+                "login_failed",
+                "error",
+                user_id=user.id,
+                error_message=f"local auth failed for '{username}'",
+            )
             flash("Invalid username or password.", "error")
             return render_template("login.html")
 
@@ -107,11 +115,21 @@ def login():
             user.email = attrs["email"] or user.email
             db.session.commit()
             if not user.is_active:
+                audit.log_audit_event(
+                    "login_failed", "error", user=user, error_message="account deactivated"
+                )
                 flash("This account has been deactivated.", "error")
                 return render_template("login.html")
             login_user(user)
+            audit.log_audit_event("login", "success", user=user)
             return redirect(url_for("catalog.index"))
 
+        audit.log_audit_event(
+            "login_failed",
+            "error",
+            user_id=user.id if user else None,
+            error_message=f"invalid credentials for '{username}'",
+        )
         flash("Invalid username or password.", "error")
 
     return render_template("login.html")
