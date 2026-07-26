@@ -5,12 +5,18 @@
   <title>{% block title %}mcprack{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='mcprack-app-icon.svg') }}">
-  <link rel="shortcut icon" type="image/svg+xml" href="{{ url_for('static', filename='mcprack-app-icon.svg') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
 </head>
 <body>
   <nav class="topnav">
     <a href="{{ url_for('catalog.index') }}" class="brand">
-      <img src="{{ url_for('static', filename='mcprack-app-icon.svg') }}" alt="mcprack" class="brand-logo">
+      <picture>
+        <source srcset="{{ url_for('static', filename='mcprack-app-icon.svg') }}" type="image/svg+xml">
+        <img src="{{ url_for('static', filename='favicon-32.png') }}" alt="mcprack" class="brand-logo" width="32" height="32">
+      </picture>
       mcprack
     </a>
     {% if current_user.is_authenticated %}

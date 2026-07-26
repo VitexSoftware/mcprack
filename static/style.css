@@ -3,6 +3,7 @@ body { font-family: system-ui, sans-serif; margin: 0; color: #1a1a1a; background
 .topnav a { color: #fff; text-decoration: none; }
 .topnav a:hover { text-decoration: underline; }
 .topnav .brand { font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+.topnav .brand picture { display: inline-flex; align-items: center; }
 .topnav .brand-logo { height: 32px; width: 32px; display: inline-block; }
 .topnav .spacer { flex: 1; }
 .topnav .whoami { opacity: 0.8; }

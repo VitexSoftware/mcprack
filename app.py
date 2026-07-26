@@ -22,8 +22,15 @@ def create_app(config_object=Config):
     app.register_blueprint(catalog_bp)
 
     register_cli(app)
+    register_static_routes(app)
 
     return app
+
+
+def register_static_routes(app):
+    @app.route("/favicon.ico")
+    def favicon():
+        return app.send_static_file("favicon.ico")
 
 
 def register_cli(app):

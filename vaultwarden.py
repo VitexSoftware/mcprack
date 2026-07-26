@@ -14,12 +14,16 @@ import base64
 import contextlib
 import fcntl
 import json
+import logging
 import os
 import subprocess
+import time
 
 from flask import current_app
 
 import health
+
+logger = logging.getLogger(__name__)
 
 
 class VaultwardenError(RuntimeError):
@@ -51,6 +55,10 @@ def _lock_file_path():
     return os.path.join(appdata_dir, ".mcprack-bw.lock")
 
 
+def _bw_lock_timeout_seconds():
+    return float(current_app.config.get("BW_LOCK_TIMEOUT", 8.0))
+
+
 @contextlib.contextmanager
 def _serialized():
     """Cross-process mutex around a chunk of `bw` CLI calls.
@@ -65,8 +73,19 @@ def _serialized():
     interactive prompt. Serializing access here trades a little latency
     under concurrency for correctness.
     """
+    deadline = time.monotonic() + _bw_lock_timeout_seconds()
     with open(_lock_file_path(), "w") as lock_file:
-        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        while True:
+            try:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    wait = _bw_lock_timeout_seconds()
+                    raise VaultwardenError(
+                        f"Vaultwarden is busy (lock wait exceeded {wait:.1f}s)"
+                    )
+                time.sleep(0.05)
         try:
             yield
         finally:
@@ -77,21 +96,43 @@ def _bw_bin():
     return current_app.config["BW_BIN"]
 
 
+def _bw_timeout_seconds():
+    # Reduced from 12s to 8s to prevent gunicorn worker timeouts (30s default)
+    # If bw commands consistently timeout, the Vaultwarden configuration or network
+    # connectivity needs to be investigated
+    return float(current_app.config.get("BW_COMMAND_TIMEOUT", 8.0))
+
+
 def _item_name(item_name):
     return item_name
 
 
 def _run(args, input_text=None, check=True):
-    result = subprocess.run(
-        [_bw_bin(), *args],
-        input=input_text,
-        capture_output=True,
-        text=True,
-        env=_env(),
-    )
-    if check and result.returncode != 0:
+    timeout = _bw_timeout_seconds()
+    cmd_str = " ".join(args)
+    logger.debug(f"Running: bw {cmd_str} (timeout={timeout}s)")
+    
+    try:
+        result = subprocess.run(
+            [_bw_bin(), *args],
+            input=input_text,
+            capture_output=True,
+            text=True,
+            env=_env(),
+            timeout=timeout,
+        )
+        logger.debug(f"bw {cmd_str}: returncode={result.returncode}")
+    except subprocess.TimeoutExpired as exc:
+        logger.error(f"bw {cmd_str} timed out after {timeout:.1f}s")
         raise VaultwardenError(
-            f"bw {' '.join(args)} failed: {result.stderr.strip() or result.stdout.strip()}"
+            f"bw {' '.join(args)} timed out after {timeout:.1f}s"
+        ) from exc
+
+    if check and result.returncode != 0:
+        error_msg = result.stderr.strip() or result.stdout.strip()
+        logger.error(f"bw {cmd_str} failed: {error_msg}")
+        raise VaultwardenError(
+            f"bw {' '.join(args)} failed: {error_msg}"
         )
     return result
 
@@ -100,21 +141,42 @@ def unlock():
     """Configure server, log in with API key (idempotent), unlock the vault.
     Returns a session token string."""
     cfg = current_app.config
-    _run(["config", "server", cfg["BW_SERVER"]], check=False)
+    
+    # Validate configuration
+    if not cfg.get("BW_SERVER"):
+        raise VaultwardenError("BW_SERVER is not configured")
+    if not cfg.get("BW_PASSWORD"):
+        raise VaultwardenError("BW_PASSWORD is not configured")
+    
+    try:
+        _run(["config", "server", cfg["BW_SERVER"]], check=False)
 
-    status = _run(["status", "--raw"], check=False)
-    if '"unauthenticated"' in (status.stdout or ""):
-        _run(["login", "--apikey", "--quiet"])
+        status = _run(["status", "--raw"], check=False)
+        if '"unauthenticated"' in (status.stdout or ""):
+            _run(["login", "--apikey", "--quiet"])
 
-    result = _run(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"])
-    session = result.stdout.strip()
-    if not session:
-        raise VaultwardenError("bw unlock returned an empty session token")
-    return session
+        result = _run(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"])
+        session = result.stdout.strip()
+        if not session:
+            raise VaultwardenError("bw unlock returned an empty session token")
+        return session
+    except subprocess.TimeoutExpired:
+        raise VaultwardenError("Bitwarden CLI operation timed out (is the server reachable?)")
+    except Exception as exc:
+        # Catch any other unexpected errors and wrap them
+        if isinstance(exc, VaultwardenError):
+            raise
+        raise VaultwardenError(f"Bitwarden CLI error: {str(exc)}")
 
 
 def lock(session):
-    _run(["lock"], check=False)
+    """Lock the vault. This always succeeds silently, even if the vault is already locked."""
+    try:
+        _run(["lock"], check=False)
+    except VaultwardenError as exc:
+        # Lock failures should not fail the whole operation - the vault might already be locked
+        logger.warning(f"Failed to lock vault: {exc}")
+        pass
 
 
 @contextlib.contextmanager
@@ -137,7 +199,11 @@ def session():
 
 
 def _find_item_id(session, item_name):
-    result = _run(["list", "items", "--session", session])
+    # `--search` avoids scanning and parsing the whole vault for each save.
+    result = _run(["list", "items", "--search", item_name, "--session", session], check=False)
+    if result.returncode != 0:
+        result = _run(["list", "items", "--session", session])
+
     items = json.loads(result.stdout or "[]")
     for item in items:
         if item.get("name") == item_name:
