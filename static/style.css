@@ -362,7 +362,7 @@ header {
 main {
   max-width: var(--max-width);
   margin: 0 auto;
-  padding: var(--space-2xl) var(--space-lg);
+  padding: var(--space-xl) var(--space-lg);
   min-height: calc(100vh - 64px);
 }
 
@@ -378,15 +378,15 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 h1 {
-  font-size: var(--font-size-4xl);
+  font-size: var(--font-size-3xl);
   margin-top: 0;
 }
 
 h2 {
-  font-size: var(--font-size-3xl);
+  font-size: var(--font-size-xl);
   color: var(--color-text);
-  border-bottom: 2px solid var(--color-border);
-  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: var(--space-sm);
 }
 
 h3 {
@@ -669,42 +669,81 @@ tr.row-warn {
 }
 
 /* ========================================
+   SECTIONS
+   ======================================== */
+
+.section {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-lg);
+}
+
+.section h1,
+.section h2,
+.section h3,
+.section h4 {
+  margin-top: 0;
+}
+
+/* ========================================
    SERVER ROW / CARD LAYOUT
    ======================================== */
 
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-sm);
+}
+
 .server-row {
   display: flex;
-  align-items: center;
-  gap: var(--space-md);
-  padding: var(--space-md);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
   background-color: var(--color-bg);
   border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-lg);
-  margin-bottom: var(--space-md);
+  border-radius: var(--border-radius-md);
   transition: all var(--transition-fast);
 }
 
 .server-row:hover {
   border-color: var(--color-admin);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.server-row-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
 }
 
 .server-icon {
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
   object-fit: contain;
 }
 
 .server-checkbox {
   flex-shrink: 0;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .server-info {
   flex: 1;
   cursor: pointer;
+  min-width: 0;
+}
+
+.server-row-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
 }
 
 .meta {
@@ -714,13 +753,15 @@ tr.row-warn {
 .label {
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
-  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .desc {
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-sm);
 }
 
 .server-transport {
@@ -748,6 +789,37 @@ tr.row-warn {
   align-items: center;
   gap: var(--space-sm);
   flex-shrink: 0;
+}
+
+/* ========================================
+   ACTION LINKS / CLIENT DOWNLOAD CARDS
+   ======================================== */
+
+.action-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-md);
+}
+
+.client-card {
+  padding: var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+}
+
+.client-card h4 {
+  margin-top: 0;
+  margin-bottom: var(--space-xs);
+}
+
+.client-card p {
+  margin-bottom: var(--space-sm);
+}
+
+.client-card-actions {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
 }
 
 /* ========================================
@@ -983,8 +1055,8 @@ ol.wizard {
     font-size: var(--font-size-3xl);
   }
 
-  .server-row {
-    flex-wrap: wrap;
+  .server-grid {
+    grid-template-columns: 1fr;
   }
 
   .server-actions {
