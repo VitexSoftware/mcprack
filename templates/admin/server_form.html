@@ -1,74 +1,171 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edit" if server else "New" }} server — mcprack{% endblock %}
+{% block title %}{{ "Edit" if server else "Register" }} MCP server — mcprack{% endblock %}
 {% block content %}
-<h1>{{ "Edit" if server else "Register" }} MCP server</h1>
-<form method="post">
-  <label for="name">Name (unique slug)</label>
-  <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
-         {{ 'readonly' if server else '' }} required>
 
-  <label for="label">Label</label>
-  <input type="text" id="label" name="label" value="{{ server.label if server else '' }}" required>
+<section class="section">
+  <h1>🔧 {{ "Edit" if server else "Register" }} MCP server</h1>
+  {% if icon_url %}
+  <p style="display: flex; align-items: center; gap: var(--space-sm);">
+    <img src="{{ icon_url }}" alt="" class="server-icon" width="32" height="32">
+    <small class="text-muted">Detected from AppStream metadata</small>
+  </p>
+  {% endif %}
 
-  <label for="description">Description</label>
-  <textarea id="description" name="description" rows="2">{{ server.description if server else '' }}</textarea>
+  <form method="post">
+    <div class="form-group">
+      <label for="name">Name (unique slug)</label>
+      <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
+             {{ 'readonly' if server else '' }} required>
+    </div>
 
-  <label for="category">Category</label>
-  <input type="text" id="category" name="category" value="{{ server.category if server else '' }}">
+    <div class="form-group">
+      <label for="label">Label</label>
+      <input type="text" id="label" name="label" value="{{ server.label if server else '' }}" required>
+    </div>
 
-  <label for="transport">Transport (how the server itself communicates)</label>
-  <select id="transport" name="transport">
-    {% for t in ["stdio", "http", "sse"] %}
-    <option value="{{ t }}" {{ "selected" if server and server.transport == t else "" }}>{{ t }}</option>
-    {% endfor %}
-  </select>
-  <p><small>This only records the server's own implementation. What remote
-  users actually get is decided by whether a network endpoint (below) is
-  set — fill it in even for a stdio server if it's proxied onto the network
-  (e.g. via mcp_rack's fastmcp proxy), so remote users always connect over
-  the network instead of needing the binary installed locally.</small></p>
+    <div class="form-group">
+      <label for="description">Description</label>
+      <textarea id="description" name="description" rows="2">{{ server.description if server else '' }}</textarea>
+    </div>
 
-  <fieldset>
-    <legend>Local stdio command (used only if no network endpoint below is set)</legend>
-    <label for="command">Command</label>
-    <input type="text" id="command" name="command" value="{{ server.command if server else '' }}">
-    <label for="args">Args (space-separated)</label>
-    <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server else '' }}">
-  </fieldset>
+    <div class="form-group">
+      <label for="category">Category</label>
+      <input type="text" id="category" name="category" value="{{ server.category if server else '' }}">
+    </div>
 
-  <fieldset>
-    <legend>Network endpoint (how remote users connect — takes priority over the stdio command above)</legend>
-    <label for="url">URL</label>
-    <input type="text" id="url" name="url" value="{{ server.url if server else '' }}"
-           placeholder="http://mcphost.spojenet.cz:3100/mcp/">
-    <label for="auth_header_name">Auth header name</label>
-    <input type="text" id="auth_header_name" name="auth_header_name"
-           value="{{ server.auth_header_name if server else '' }}" placeholder="Authorization">
-    <label for="auth_env_key">Auth token env key</label>
-    <input type="text" id="auth_env_key" name="auth_env_key"
-           value="{{ server.auth_env_key if server else '' }}" placeholder="AUTH_TOKEN">
-  </fieldset>
+    <div class="form-group">
+      <label for="transport">Transport (how the server itself communicates)</label>
+      <select id="transport" name="transport">
+        {% for t in ["stdio", "http", "sse"] %}
+        <option value="{{ t }}" {{ "selected" if server and server.transport == t else "" }}>{{ t }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">
+        This only records the server's own implementation. Users always connect remotely — a
+        stdio server is spawned on demand by mcprack itself, one instance per user, and never
+        needs a network endpoint configured below unless it's a genuinely external HTTP/SSE service.
+      </p>
+    </div>
 
-  <fieldset>
-    <legend>Environment Variables (passed to server binary)</legend>
-    <p><small>JSON format: {"VAR_NAME": "value", "ANOTHER": "value"}</small></p>
-    <label for="env_config">Environment Config (JSON)</label>
-    <textarea id="env_config" name="env_config" rows="6" placeholder='{"MASTODON_INSTANCE": "https://fosstodon.org", "MASTODON_ACCESS_TOKEN": "token"}'>{{ env_config_json if server else '' }}</textarea>
-  </fieldset>
+    <fieldset>
+      <legend>Local stdio command (spawned by mcprack itself, one instance per user)</legend>
+      <div class="form-group">
+        <label for="command">Command</label>
+        <input type="text" id="command" name="command" value="{{ server.command if server else '' }}">
+      </div>
+      <div class="form-group">
+        <label for="args">Args (space-separated)</label>
+        <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server else '' }}">
+      </div>
+    </fieldset>
 
-  <label for="env_text">Default credentials / env vars (KEY=value per line, stored in Vaultwarden — never in this app's database)</label>
-  <textarea id="env_text" name="env_text" rows="6">{{ env_text }}</textarea>
+    <fieldset>
+      <legend>Network endpoint (for servers that are already running elsewhere)</legend>
+      <div class="form-group">
+        <label for="url">URL</label>
+        <input type="text" id="url" name="url" value="{{ server.url if server else '' }}"
+               placeholder="http://mcphost.spojenet.cz:3100/mcp/">
+      </div>
+      <div class="form-group">
+        <label for="auth_header_name">Auth header name</label>
+        <input type="text" id="auth_header_name" name="auth_header_name"
+               value="{{ server.auth_header_name if server else '' }}" placeholder="Authorization">
+      </div>
+      <div class="form-group">
+        <label for="auth_env_key">Auth token env key</label>
+        <input type="text" id="auth_env_key" name="auth_env_key"
+               value="{{ server.auth_env_key if server else '' }}" placeholder="AUTH_TOKEN">
+        <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">
+          Whichever row below has this key is always treated as citlivé/sensitive, regardless of
+          its checkbox — it carries a credential by definition.
+        </p>
+      </div>
+    </fieldset>
 
-  <label>
-    <input type="checkbox" name="allow_user_override" {{ "checked" if not server or server.allow_user_override else "" }}>
-    Allow users to override credentials with their own
-  </label>
+    <fieldset>
+      <legend>Environment variables</legend>
+      <p class="text-muted" style="font-size: var(--font-size-sm);">
+        Mark a row <strong>citlivé</strong> (sensitive) if it's a secret — those go to Vaultwarden
+        (or an encrypted local fallback if Vaultwarden isn't configured). Everything else is
+        stored directly in mcprack's own database.
+      </p>
 
-  <label>
-    <input type="checkbox" name="enabled" {{ "checked" if not server or server.enabled else "" }}>
-    Enabled (visible in catalog)
-  </label>
+      <div id="env-rows"></div>
 
-  <button type="submit">Save</button>
-</form>
+      <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('', '', false)">
+        ➕ Add row
+      </button>
+    </fieldset>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="allow_user_override" {{ "checked" if not server or server.allow_user_override else "" }}>
+        Allow users to override credentials with their own
+      </label>
+    </div>
+
+    <div class="form-group">
+      <label>
+        <input type="checkbox" name="enabled" {{ "checked" if not server or server.enabled else "" }}>
+        Enabled (visible in catalog)
+      </label>
+    </div>
+
+    <button type="submit" class="btn btn-primary">💾 Save</button>
+  </form>
+</section>
+
+<script>
+  const ENV_ROWS_INITIAL = {{ env_rows | tojson }};
+  let envRowCounter = 0;
+
+  function addEnvRow(key, value, sensitive) {
+    envRowCounter += 1;
+    const id = envRowCounter;
+
+    const row = document.createElement("div");
+    row.className = "env-row";
+    row.dataset.rowId = id;
+    row.style.cssText = "display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);";
+
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.name = `env_key__${id}`;
+    keyInput.value = key || "";
+    keyInput.placeholder = "KEY";
+    keyInput.style.flex = "1";
+
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.name = `env_value__${id}`;
+    valueInput.value = value || "";
+    valueInput.placeholder = "value";
+    valueInput.style.flex = "2";
+
+    const label = document.createElement("label");
+    label.style.cssText = "display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;";
+    const sensitiveInput = document.createElement("input");
+    sensitiveInput.type = "checkbox";
+    sensitiveInput.name = `env_sensitive__${id}`;
+    sensitiveInput.checked = !!sensitive;
+    label.appendChild(sensitiveInput);
+    label.appendChild(document.createTextNode(" citlivé"));
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "btn btn-sm btn-danger";
+    removeButton.textContent = "✕";
+    removeButton.addEventListener("click", function () {
+      row.remove();
+    });
+
+    row.append(keyInput, valueInput, label, removeButton);
+    document.getElementById("env-rows").appendChild(row);
+  }
+
+  ENV_ROWS_INITIAL.forEach(function (row) {
+    addEnvRow(row.key, row.value, row.sensitive);
+  });
+</script>
+
 {% endblock %}

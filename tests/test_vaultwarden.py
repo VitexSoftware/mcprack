@@ -1,5 +1,6 @@
 import base64
 import json
+import subprocess
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -24,6 +25,7 @@ def test_get_notes_parses_key_value_lines(app):
     args = mock_run.call_args.kwargs
     called_argv = mock_run.call_args.args[0]
     assert "get" in called_argv and "notes" in called_argv and "MCP-jenkins" in called_argv
+    assert args["timeout"] == 12.0
 
 
 def test_get_notes_ignores_malformed_lines(app):
@@ -74,6 +76,16 @@ def test_set_notes_edits_existing_item(app):
         assert "edit" in argv and "item-123" in argv
         decoded = json.loads(base64.b64decode(edit_call.kwargs["input"]))
         assert decoded["notes"] == "NEW=2"
+
+
+def test_run_raises_vaultwarden_error_on_subprocess_timeout(app):
+    with app.app_context():
+        with patch("vaultwarden.subprocess.run") as mock_run:
+            mock_run.side_effect = subprocess.TimeoutExpired(cmd=["bw", "status"], timeout=12)
+            with pytest.raises(vaultwarden.VaultwardenError) as exc:
+                vaultwarden._run(["status", "--raw"])
+
+    assert "timed out" in str(exc.value)
 
 
 def test_delete_item_noop_when_not_found(app):
@@ -324,3 +336,34 @@ def test_session_serializes_across_concurrent_callers(app):
             with open(lock_path, "w") as probe:
                 fcntl.flock(probe, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 fcntl.flock(probe, fcntl.LOCK_UN)
+
+
+def test_session_lock_contention_fails_fast(app):
+    import fcntl
+    import threading
+    import time
+
+    with app.app_context():
+        lock_path = vaultwarden._lock_file_path()
+        current_app = app
+
+    def hold_lock():
+        with current_app.app_context():
+            with open(lock_path, "w") as lock_file:
+                fcntl.flock(lock_file, fcntl.LOCK_EX)
+                time.sleep(0.35)
+                fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+    holder = threading.Thread(target=hold_lock, daemon=True)
+    holder.start()
+    time.sleep(0.05)
+
+    with app.app_context():
+        app.config["BW_LOCK_TIMEOUT"] = 0.1
+        with patch("vaultwarden.unlock", return_value="sess-token"), patch("vaultwarden.lock"):
+            with pytest.raises(vaultwarden.VaultwardenError) as exc:
+                with vaultwarden.session():
+                    pass
+
+    holder.join(timeout=1.0)
+    assert "busy" in str(exc.value)

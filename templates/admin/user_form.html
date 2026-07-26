@@ -29,6 +29,38 @@
     Admin
   </label>
 
+  {% if user %}
+  <h2>Server access</h2>
+  <p>Explicitly allow or deny each currently available MCP server for this user.</p>
+  {% if available_servers %}
+  <table>
+    <thead>
+      <tr><th>Server</th><th>Access</th></tr>
+    </thead>
+    <tbody>
+      {% for server in available_servers %}
+      {% set allowed = permission_map.get(server.id, True) %}
+      <tr>
+        <td>{{ server.label }} <small>({{ server.name }})</small></td>
+        <td>
+          <label>
+            <input type="radio" name="server_access_{{ server.id }}" value="allow" {{ "checked" if allowed else "" }}>
+            Allow
+          </label>
+          <label>
+            <input type="radio" name="server_access_{{ server.id }}" value="deny" {{ "checked" if not allowed else "" }}>
+            Deny
+          </label>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No enabled servers available.</p>
+  {% endif %}
+  {% endif %}
+
   <button type="submit">Save</button>
 </form>
 {% endblock %}

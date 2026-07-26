@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}mcprack{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='mcprack-app-icon.svg') }}">
@@ -9,40 +10,109 @@
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <script>
+    (function () {
+      var saved = localStorage.getItem('mcprack-theme');
+      if (saved === 'light' || saved === 'dark') {
+        document.documentElement.setAttribute('data-theme', saved);
+      }
+    })();
+  </script>
 </head>
 <body>
-  <nav class="topnav">
-    <a href="{{ url_for('catalog.index') }}" class="brand">
-      <picture>
-        <source srcset="{{ url_for('static', filename='mcprack-app-icon.svg') }}" type="image/svg+xml">
-        <img src="{{ url_for('static', filename='favicon-32.png') }}" alt="mcprack" class="brand-logo" width="32" height="32">
-      </picture>
-      mcprack
-    </a>
-    {% if current_user.is_authenticated %}
-      <span class="spacer"></span>
-      {% if current_user.is_admin %}
-        <a href="{{ url_for('admin.servers_list') }}">Servers</a>
-        <a href="{{ url_for('admin.users_list') }}">Users</a>
-        <a href="{{ url_for('admin.vaultwarden_wizard') }}">Vaultwarden diagnostics</a>
-      {% endif %}
-      <span class="whoami">{{ current_user.display_name }}</span>
-      <a href="{{ url_for('auth.logout') }}">Log out</a>
-    {% endif %}
-  </nav>
+  <header>
+    <div class="header-content">
+      <a href="{{ url_for('catalog.index') }}" class="header-brand">
+        <picture class="header-brand-logo">
+          <source srcset="{{ url_for('static', filename='mcprack-app-icon.svg') }}" type="image/svg+xml">
+          <img src="{{ url_for('static', filename='favicon-32.png') }}" alt="mcprack logo" width="40" height="40">
+        </picture>
+        <span>mcprack</span>
+      </a>
 
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <ul class="flashes">
-        {% for category, message in messages %}
-          <li class="flash-{{ category }}">{{ message }}</li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-  {% endwith %}
+      {% if current_user.is_authenticated %}
+        <nav class="header-nav">
+          {% if current_user.is_admin %}
+            <a href="{{ url_for('admin.servers_list') }}" class="header-nav-link is-admin">Servers</a>
+            <a href="{{ url_for('admin.users_list') }}" class="header-nav-link is-admin">Users</a>
+            <a href="{{ url_for('admin.proxy_instances') }}" class="header-nav-link is-admin">Proxy</a>
+            <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-nav-link is-admin">Diagnostics</a>
+          {% endif %}
+        </nav>
+
+        <div class="header-user">
+          <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+            <span class="icon-light" aria-hidden="true">🌙</span>
+            <span class="icon-dark" aria-hidden="true">☀️</span>
+          </button>
+          <div class="header-user-menu">
+            <button class="header-user-menu-button" onclick="toggleUserMenu(event)" aria-haspopup="true" aria-expanded="false" aria-controls="userMenuDropdown">
+              <div class="header-user-avatar">{{ current_user.display_name[0].upper() }}</div>
+              <span>{{ current_user.display_name }}</span>
+            </button>
+            <div class="header-user-menu-dropdown" id="userMenuDropdown">
+              <a href="{{ url_for('catalog.index') }}" class="header-user-menu-item">Catalog</a>
+              {% if current_user.is_admin %}
+                <div class="header-user-menu-divider"></div>
+                <a href="{{ url_for('admin.servers_list') }}" class="header-user-menu-item">All Servers</a>
+                <a href="{{ url_for('admin.users_list') }}" class="header-user-menu-item">All Users</a>
+                <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">Proxy Instances</a>
+                <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">Vaultwarden Setup</a>
+              {% endif %}
+              <div class="header-user-menu-divider"></div>
+              <a href="{{ url_for('auth.logout') }}" class="header-user-menu-item danger">Log out</a>
+            </div>
+          </div>
+        </div>
+      {% else %}
+        <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+          <span class="icon-light" aria-hidden="true">🌙</span>
+          <span class="icon-dark" aria-hidden="true">☀️</span>
+        </button>
+      {% endif %}
+    </div>
+  </header>
 
   <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flashes">
+          {% for category, message in messages %}
+            <li class="flash-{{ category }}">{{ message }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
     {% block content %}{% endblock %}
   </main>
+
+  <script>
+    function toggleTheme() {
+      var root = document.documentElement;
+      var current = root.getAttribute('data-theme');
+      if (!current) {
+        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        current = prefersDark ? 'dark' : 'light';
+      }
+      var next = current === 'dark' ? 'light' : 'dark';
+      root.setAttribute('data-theme', next);
+      localStorage.setItem('mcprack-theme', next);
+    }
+
+    function toggleUserMenu(event) {
+      event.preventDefault();
+      const dropdown = document.getElementById('userMenuDropdown');
+      dropdown.classList.toggle('show');
+      
+      // Close menu if clicked outside
+      document.addEventListener('click', function closeMenu(e) {
+        if (!e.target.closest('.header-user-menu')) {
+          dropdown.classList.remove('show');
+          document.removeEventListener('click', closeMenu);
+        }
+      });
+    }
+  </script>
 </body>
 </html>

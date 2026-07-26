@@ -1,19 +1,38 @@
 {% extends "base.html" %}
 {% block title %}Log in — mcprack{% endblock %}
 {% block content %}
-<h1>Log in</h1>
-<form method="post">
-  <label for="username">Username</label>
-  <input type="text" id="username" name="username" required autofocus>
 
-  <label for="password">Password</label>
-  <input type="password" id="password" name="password" required>
+<div style="max-width: 400px; margin: var(--space-2xl) auto;">
+  <div style="text-align: center; margin-bottom: var(--space-2xl);">
+    <h1 style="margin-bottom: var(--space-md);">Welcome to mcprack</h1>
+    <p class="text-muted">MCP Self-Service Catalog & Config Generator</p>
+  </div>
 
-  <button type="submit">Log in</button>
-</form>
-{% if config['LDAP_ENABLED'] %}
-<p>Use your local mcprack account, or your regular Active Directory username/password.</p>
-{% else %}
-<p>Use your local mcprack account.</p>
-{% endif %}
+  <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border);">
+    <form method="post">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required autofocus>
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required>
+      </div>
+
+      <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-lg);">
+        🔓 Log In
+      </button>
+    </form>
+  </div>
+
+  <div style="margin-top: var(--space-lg); padding: var(--space-md); background-color: var(--color-bg-tertiary); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm);">
+    {% if config['LDAP_ENABLED'] %}
+      <p class="text-muted" style="margin: 0;">Use your local mcprack account, or your Active Directory credentials.</p>
+    {% else %}
+      <p class="text-muted" style="margin: 0;">Use your local mcprack account.</p>
+    {% endif %}
+  </div>
+</div>
+
 {% endblock %}

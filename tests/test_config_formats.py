@@ -120,66 +120,20 @@ def test_stdio_server_without_url_still_renders_as_local_spawn():
     assert entry["command"] == "/usr/bin/selenium-webdriver-mcp"
 
 
-def test_proxy_host_converts_stdio_to_http():
-    """When proxy_host is set, stdio servers without a url become network entries."""
-    mastodon = {
-        "name": "mastodon",
-        "transport": "stdio",
-        "command": "/usr/bin/mastodon-mcp",
-        "args": [],
-        "url": None,
-        "auth_header_name": None,
-        "auth_env_key": None,
-        "env": {"MASTODON_INSTANCE": "f.cz"},
-    }
-    
-    # Without proxy: stdio entry
-    local_result = render_copilot_config([mastodon], proxy_host=None)
-    local_entry = local_result["servers"]["mastodon"]
-    assert "type" not in local_entry
-    assert local_entry["command"] == "/usr/bin/mastodon-mcp"
-    
-    # With proxy: http entry
-    proxy_result = render_copilot_config([mastodon], proxy_host="10.11.182.99", proxy_port=3100)
-    proxy_entry = proxy_result["servers"]["mastodon"]
-    assert proxy_entry["type"] == "http"
-    assert proxy_entry["url"] == "http://10.11.182.99:3100/mcp"
-    assert "command" not in proxy_entry
-
-
-def test_proxy_host_does_not_override_explicit_urls():
-    """Servers that already have a url should keep it, not be replaced by proxy_url."""
-    jenkins = {
-        "name": "jenkins",
-        "transport": "http",
-        "command": None,
-        "args": [],
-        "url": "https://jenkins.proxy.spojenet.cz/mcp-server/mcp",
-        "auth_header_name": None,
-        "auth_env_key": None,
-        "env": {},
-    }
-    
-    result = render_copilot_config([jenkins], proxy_host="10.11.182.99", proxy_port=3100)
-    entry = result["servers"]["jenkins"]
-    # Should keep its original URL, not be replaced
-    assert entry["url"] == "https://jenkins.proxy.spojenet.cz/mcp-server/mcp"
-
-
-def test_proxy_port_customization():
-    """proxy_port parameter should be used in the generated URL."""
+def test_string_none_url_is_treated_as_missing_and_falls_back_to_stdio():
     server = {
-        "name": "test",
+        "name": "abraflexi-mcp",
         "transport": "stdio",
-        "command": "test-cmd",
+        "command": "/usr/bin/abraflexi-mcp",
         "args": [],
-        "url": None,
+        "url": "None",
         "auth_header_name": None,
         "auth_env_key": None,
         "env": {},
     }
-    
-    result = render_copilot_config([server], proxy_host="10.11.182.99", proxy_port=3200)
-    entry = result["servers"]["test"]
-    assert entry["type"] == "http"
-    assert entry["url"] == "http://10.11.182.99:3200/mcp"
+
+    result = render_copilot_config([server])
+    entry = result["servers"]["abraflexi-mcp"]
+    assert "type" not in entry
+    assert entry["command"] == "/usr/bin/abraflexi-mcp"
+    assert "url" not in entry

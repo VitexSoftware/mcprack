@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Per-user proxy instances — mcprack{% endblock %}
+{% block content %}
+<h1>Per-user proxy instances</h1>
+<p><small>Only stdio servers without a fixed URL are started here, on demand, per user+server pair.</small></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>User</th>
+      <th>Server</th>
+      <th>PID</th>
+      <th>Port</th>
+      <th>Status</th>
+      <th>Idle</th>
+      <th>Log</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row.username }}</td>
+      <td>{{ row.server_name }}</td>
+      <td>{{ row.pid or "-" }}</td>
+      <td>{{ row.port }}</td>
+      <td>
+        {% if row.running %}
+        <span class="badge badge-ok">running</span>
+        {% else %}
+        <span class="badge badge-warn">stale</span>
+        {% endif %}
+      </td>
+      <td>{{ (row.idle_seconds|string + " s") if row.idle_seconds is not none else "-" }}</td>
+      <td><small>{{ row.log_path }}</small></td>
+      <td>
+        <form class="inline" method="post" action="{{ url_for('admin.proxy_instance_stop', user_id=row.user_id, server_id=row.server_id) }}"
+              onsubmit="return confirm('Stop proxy for {{ row.username }} / {{ row.server_name }}?');">
+          <button type="submit">Stop</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="8">No per-user proxy instances found.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

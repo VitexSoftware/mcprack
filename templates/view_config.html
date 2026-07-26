@@ -1,15 +1,31 @@
 {% extends "base.html" %}
 {% block title %}{{ filename }} — mcprack{% endblock %}
 {% block content %}
-<h1>{{ filename }}</h1>
-<p>Copy this into place yourself, or use the
-<a href="{{ url_for('catalog.download', client=client) }}">file download</a> instead.</p>
 
-<textarea id="config-json" rows="20" readonly onclick="this.select()">{{ config_json }}</textarea>
-<p>
-  <button type="button" id="copy-button" onclick="copyConfig()">Copy to clipboard</button>
-  <span id="copy-status"></span>
-</p>
+<section>
+  <h1>{{ filename }}</h1>
+  <p class="text-muted">Copy the configuration below into your client's config file, or download it directly.</p>
+
+  <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); margin: var(--space-lg) 0;">
+    <textarea id="config-json" rows="20" readonly onclick="this.select()">{{ config_json }}</textarea>
+  </div>
+
+  <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin: var(--space-lg) 0;">
+    <button type="button" id="copy-button" class="btn btn-primary" onclick="copyConfig()">
+      📋 Copy to clipboard
+    </button>
+    <a href="{{ url_for('catalog.download', client=client) }}" class="btn btn-secondary" download>
+      ⬇️ Download File
+    </a>
+    <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">
+      ← Back to Catalog
+    </a>
+  </div>
+
+  <div id="copy-status" style="display: none; padding: var(--space-md); background-color: rgba(16, 185, 129, 0.1); color: var(--color-success); border-radius: var(--border-radius-lg); border-left: 4px solid var(--color-success); font-size: var(--font-size-sm);">
+    ✓ Copied to clipboard!
+  </div>
+</section>
 
 <script>
   function copyConfig() {
@@ -17,8 +33,10 @@
     const status = document.getElementById("copy-status");
 
     function showCopied() {
-      status.textContent = "Copied!";
-      setTimeout(function () { status.textContent = ""; }, 2000);
+      status.style.display = "block";
+      setTimeout(function () { 
+        status.style.display = "none"; 
+      }, 3000);
     }
 
     if (navigator.clipboard && window.isSecureContext) {
@@ -37,10 +55,10 @@
         showCopied();
       } catch (err) {
         status.textContent = "Copy failed — select the text manually.";
+        status.style.display = "block";
       }
     }
   }
 </script>
 
-<p><a href="{{ url_for('catalog.index') }}">Back to catalog</a></p>
 {% endblock %}

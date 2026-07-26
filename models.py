@@ -11,6 +11,16 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
+def _safe_json_loads(raw, default):
+    if not raw:
+        return default
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return default
+    return value
+
+
 class User(UserMixin, db.Model):
     __tablename__ = "users"
 
@@ -30,6 +40,9 @@ class User(UserMixin, db.Model):
     )
     overrides = db.relationship(
         "UserServerOverride", back_populates="user", cascade="all, delete-orphan"
+    )
+    permissions = db.relationship(
+        "UserServerPermission", back_populates="user", cascade="all, delete-orphan"
     )
 
     @property
@@ -74,9 +87,16 @@ class McpServer(db.Model):
     env_var_names_json = db.Column(db.Text, nullable=True)  # JSON-encoded list[str]
     vaultwarden_item_name = db.Column(db.String(255), nullable=True)
 
-    # Environment variables for this server (JSON dict)
-    # Example: {"MASTODON_INSTANCE": "https://fosstodon.org", "MASTODON_ACCESS_TOKEN": "***"}
+    # Non-secret environment variables for this server (JSON dict), stored
+    # directly in the app DB — no Vaultwarden round-trip needed for these.
+    # Example: {"MASTODON_INSTANCE": "https://fosstodon.org"}
     env_config_json = db.Column(db.Text, nullable=True, default='{}')
+
+    # Fallback store for secret values (admin defaults) when Vaultwarden is
+    # not configured at all. Fernet-encrypted JSON dict; see secret_store.py.
+    # Never populated while Vaultwarden is configured — see secret_store.py
+    # for the single source-of-truth switch.
+    env_secrets_encrypted = db.Column(db.Text, nullable=True)
 
     allow_user_override = db.Column(db.Boolean, nullable=False, default=True)
     category = db.Column(db.String(255), nullable=True)
@@ -91,10 +111,14 @@ class McpServer(db.Model):
     overrides = db.relationship(
         "UserServerOverride", back_populates="server", cascade="all, delete-orphan"
     )
+    permissions = db.relationship(
+        "UserServerPermission", back_populates="server", cascade="all, delete-orphan"
+    )
 
     @property
     def args(self):
-        return json.loads(self.args_json) if self.args_json else []
+        value = _safe_json_loads(self.args_json, [])
+        return value if isinstance(value, list) else []
 
     @args.setter
     def args(self, value):
@@ -102,7 +126,8 @@ class McpServer(db.Model):
 
     @property
     def env_var_names(self):
-        return json.loads(self.env_var_names_json) if self.env_var_names_json else []
+        value = _safe_json_loads(self.env_var_names_json, [])
+        return value if isinstance(value, list) else []
 
     @env_var_names.setter
     def env_var_names(self, value):
@@ -110,7 +135,8 @@ class McpServer(db.Model):
 
     @property
     def env_config(self):
-        return json.loads(self.env_config_json) if self.env_config_json else {}
+        value = _safe_json_loads(self.env_config_json, {})
+        return value if isinstance(value, dict) else {}
 
     @env_config.setter
     def env_config(self, value):
@@ -133,15 +159,39 @@ class UserServerSelection(db.Model):
 
 
 class UserServerOverride(db.Model):
-    """Bookkeeping only: records that a personal Vaultwarden override note
-    exists for this user+server. The actual override values live in
-    Vaultwarden under '<server.vault_item>-user-<username>', never here."""
+    """Records that a personal override exists for this user+server.
+
+    When Vaultwarden is configured, the actual override values live in
+    Vaultwarden under '<server.vault_item>-user-<username>' and
+    `env_secrets_encrypted` here stays empty — this row is just bookkeeping.
+    When Vaultwarden is not configured, `env_secrets_encrypted` holds the
+    Fernet-encrypted fallback copy instead. See secret_store.py."""
 
     __tablename__ = "user_server_overrides"
 
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
     server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+    env_secrets_encrypted = db.Column(db.Text, nullable=True)
 
     user = db.relationship("User", back_populates="overrides")
     server = db.relationship("McpServer", back_populates="overrides")
+
+
+class UserServerPermission(db.Model):
+    """Explicit per-user server access policy.
+
+    If a row exists, `is_allowed` decides whether the user may use that
+    server. If no rows exist for a user yet (legacy users), behavior falls
+    back to allow-all-enabled for backward compatibility.
+    """
+
+    __tablename__ = "user_server_permissions"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
+    is_allowed = db.Column(db.Boolean, nullable=False, default=True)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    user = db.relationship("User", back_populates="permissions")
+    server = db.relationship("McpServer", back_populates="permissions")

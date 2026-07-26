@@ -26,6 +26,8 @@ class Config:
     BW_CLIENTSECRET = os.environ.get("BW_CLIENTSECRET", "")
     BW_PASSWORD = os.environ.get("BW_PASSWORD", "")
     BW_ITEM_PREFIX = os.environ.get("BW_ITEM_PREFIX", "MCP-")
+    BW_COMMAND_TIMEOUT = float(os.environ.get("BW_COMMAND_TIMEOUT", "12"))
+    BW_LOCK_TIMEOUT = float(os.environ.get("BW_LOCK_TIMEOUT", "8"))
     BITWARDENCLI_APPDATA_DIR = os.environ.get(
         "BITWARDENCLI_APPDATA_DIR", "/opt/mcprack/.bw"
     )

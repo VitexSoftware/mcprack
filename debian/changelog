@@ -1,8 +1,21 @@
-mcprack (0.2.0) UNRELEASED; urgency=medium
+mcprack (0.2.2) unstable; urgency=medium
 
+  * Split secrets (Vaultwarden) from plain config (DB); per-user proxy
+    for all stdio servers; local encrypted secret fallback with admin
+    migration tools.
+
+ -- CyberVitexus <cybervitexus@gmail.com>  Sun, 26 Jul 2026 12:25:25 +0200
+
+mcprack (0.2.1) unstable; urgency=medium
+
+  [ vitex ]
   * Add database-driven MCP server environment configuration support
 
- -- vitex <info@vitexsoftware.cz>  Sat, 25 Jul 2026 10:24:10 +0200
+  [ CyberVitexus ]
+  * Modernize frontend/UI with SaaS-style design system, color-coded
+    palette, and light/dark theme toggle.
+
+ -- CyberVitexus <cybervitexus@gmail.com>  Sun, 26 Jul 2026 10:37:45 +0200
 
 mcprack (0.1.0) unstable; urgency=low
 

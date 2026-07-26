@@ -3,7 +3,7 @@ import json
 from unittest.mock import patch
 
 from extensions import db
-from models import McpServer, User, UserServerSelection
+from models import McpServer, User, UserServerPermission, UserServerSelection
 
 
 def _login(client, username="alice"):
@@ -27,6 +27,20 @@ def _add_selected_server(app, user_id):
         db.session.add(server)
         db.session.commit()
         db.session.add(UserServerSelection(user_id=user_id, server_id=server.id))
+        db.session.commit()
+        return server.id
+
+
+def _add_enabled_server(app, name="icon-test"):
+    with app.app_context():
+        server = McpServer(
+            name=name,
+            label=name,
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add(server)
         db.session.commit()
         return server.id
 
@@ -142,3 +156,220 @@ def test_view_escapes_html_sensitive_characters_in_resolved_values(app):
 
     assert "</textarea><script>" not in rendered
     assert "&lt;/textarea&gt;" in rendered
+
+
+def test_server_icon_falls_back_to_default_when_no_appstream_icon(app, client):
+    _login(client)
+    server_id = _add_enabled_server(app, name="no-icon")
+
+    with patch("catalog.appstream_icons.resolve_server_icon_path", return_value=None), \
+         patch("catalog.appstream_icons.is_safe_icon_path", return_value=False):
+        resp = client.get(f"/icon/server/{server_id}")
+
+    assert resp.status_code == 302
+    assert "/static/mcprack-app-icon.svg" in (resp.headers.get("Location") or "")
+
+
+def test_server_icon_serves_appstream_file_when_available(app, client):
+    _login(client)
+    server_id = _add_enabled_server(app, name="with-icon")
+
+    icon_path = "/home/vitex/Projects/VitexSoftware/mcprack/static/mcprack-app-icon.svg"
+    with patch("catalog.appstream_icons.resolve_server_icon_path", return_value=icon_path), \
+         patch("catalog.appstream_icons.is_safe_icon_path", return_value=True):
+        resp = client.get(f"/icon/server/{server_id}")
+
+    assert resp.status_code == 200
+    assert resp.mimetype in ("image/svg+xml", "image/png", "image/x-icon", "image/x-xpixmap")
+
+
+def test_user_proxy_route_requires_valid_token_and_selection(app, client):
+    user_id = _login(client)
+    with app.app_context():
+        stdio = McpServer(
+            name="proxy-stdio",
+            label="Proxy stdio",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add(stdio)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=stdio.id))
+        db.session.commit()
+        server_id = stdio.id
+
+    with app.app_context():
+        from catalog import _make_proxy_token
+
+        token = _make_proxy_token(user_id, server_id)
+
+    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("catalog.vaultwarden.lock"), \
+         patch("catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "x"}), \
+         patch("catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
+         patch("catalog._forward_to_user_proxy", return_value=app.response_class("ok", status=200)):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    assert resp.status_code == 200
+
+
+def test_user_proxy_route_rejects_invalid_token(app, client):
+    user_id = _login(client)
+    server_id = _add_selected_server(app, user_id)
+
+    resp = client.post(f"/proxy/mcp/not-a-token/{server_id}")
+    assert resp.status_code == 403
+
+
+def test_view_always_uses_user_proxy_urls_for_stdio_servers(app, client):
+    """Users always connect remotely — a stdio server never gets embedded
+    into the config as a raw local spawn command, regardless of the
+    requesting IP. It always gets a per-user proxy URL instead, and its
+    credentials are resolved lazily at proxy-connect time, not here."""
+    user_id = _login(client)
+    with app.app_context():
+        user = db.session.get(User, user_id)
+        stdio = McpServer(
+            name="local-stdio",
+            label="Local stdio",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add(stdio)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user.id, server_id=stdio.id))
+        db.session.commit()
+
+    # No Vaultwarden patches needed: a stdio server with no declared secrets
+    # never touches Vaultwarden at view/download time.
+    resp = client.get("/view/copilot", environ_base={"REMOTE_ADDR": "127.0.0.1"})
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "/proxy/mcp/" in body
+
+
+def test_override_page_handles_malformed_env_var_names_json(app, client):
+    user_id = _login(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="broken-override",
+            label="Broken Override",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+            allow_user_override=True,
+        )
+        # Regression coverage for legacy bad data seen in production.
+        server.env_var_names_json = "None"
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    resp = client.get(f"/override/{server_id}")
+    assert resp.status_code == 200
+    assert b"Your credentials for Broken Override" in resp.data
+
+
+def test_catalog_hides_servers_explicitly_denied_for_user(app, client):
+    user_id = _login(client)
+
+    with app.app_context():
+        allowed = McpServer(
+            name="allowed-srv",
+            label="Allowed",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        denied = McpServer(
+            name="denied-srv",
+            label="Denied",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add_all([allowed, denied])
+        db.session.commit()
+
+        db.session.add_all(
+            [
+                UserServerPermission(user_id=user_id, server_id=allowed.id, is_allowed=True),
+                UserServerPermission(user_id=user_id, server_id=denied.id, is_allowed=False),
+            ]
+        )
+        db.session.commit()
+
+    resp = client.get("/")
+    body = resp.data.decode()
+    assert resp.status_code == 200
+    assert "Allowed" in body
+    assert "Denied" not in body
+
+
+def test_download_excludes_explicitly_denied_selected_server(app, client):
+    user_id = _login(client)
+    with app.app_context():
+        allowed = McpServer(
+            name="allowed-dl",
+            label="Allowed DL",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        denied = McpServer(
+            name="denied-dl",
+            label="Denied DL",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add_all([allowed, denied])
+        db.session.commit()
+
+        db.session.add_all(
+            [
+                UserServerSelection(user_id=user_id, server_id=allowed.id),
+                UserServerSelection(user_id=user_id, server_id=denied.id),
+                UserServerPermission(user_id=user_id, server_id=allowed.id, is_allowed=True),
+                UserServerPermission(user_id=user_id, server_id=denied.id, is_allowed=False),
+            ]
+        )
+        db.session.commit()
+
+    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("catalog.vaultwarden.lock"), \
+         patch("catalog.vaultwarden.resolve_env", return_value={}):
+        resp = client.get("/download/copilot")
+
+    payload = resp.data.decode()
+    assert resp.status_code == 200
+    assert "allowed-dl" in payload
+    assert "denied-dl" not in payload
+
+
+def test_override_forbidden_when_server_denied_for_user(app, client):
+    user_id = _login(client)
+
+    with app.app_context():
+        denied = McpServer(
+            name="denied-override",
+            label="Denied Override",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+            allow_user_override=True,
+        )
+        db.session.add(denied)
+        db.session.commit()
+        db.session.add(
+            UserServerPermission(user_id=user_id, server_id=denied.id, is_allowed=False)
+        )
+        db.session.commit()
+        denied_id = denied.id
+
+    resp = client.get(f"/override/{denied_id}")
+    assert resp.status_code == 403

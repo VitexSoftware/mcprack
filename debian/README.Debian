@@ -11,11 +11,9 @@ The installer will ask for:
 - Vaultwarden (Bitwarden) server URL, client ID, client secret, master password
 - Whether to enable LDAP authentication (optional, disabled by default)
 - If LDAP enabled: server URL, base DN, bind DN, bind password
-- Whether to enable the FastMCP HTTP proxy (optional, for remote client access)
-- If proxy enabled: listen address (127.0.0.1, 0.0.0.0, or custom IP) and port
 
-All configuration is saved to `/etc/mcprack/env` and (if enabled) `/etc/mcprack/proxy.env`.
-Database migrations and initial setup run automatically.
+All configuration is saved to `/etc/mcprack/env`. Database migrations and
+initial setup run automatically.
 
 ## Manual Configuration (if not using interactive install)
 
@@ -53,7 +51,7 @@ master password. After setting these, log in to mcprack as an admin and open
 checks the `bw` binary, `BW_SERVER` reachability, the API key, and the master
 password one at a time and tells you exactly which one is still wrong,
 instead of a raw "bw login failed" error. Re-run it after every edit to
-`/etc/mcprack/env`; no service restart is needed.
+`/etc/mcprack/env`, then restart `mcprack.service` so new values are loaded.
 
 ### Manual Setup Steps (if needed)
 
@@ -78,45 +76,21 @@ Then start the service:
     systemctl enable --now mcprack.service
 
 
-## MCP HTTP Proxy (for remote access to stdio servers)
+## MCP HTTP Proxy (how remote clients reach stdio servers)
 
-If you want remote clients (e.g., Claude Desktop running on a different
-workstation) to connect to stdio-based MCP servers running on this host, you
-can optionally enable the HTTP proxy during installation.
+Users always connect remotely — mcprack never expects its own web UI and a
+user's MCP client to be on the same machine. So a stdio-implemented server
+is never handed to a client as a raw local spawn command; the downloaded
+config always points at a per-user proxy URL instead
+(`/proxy/mcp/<token>/<server_id>`, served by `mcprack.service` itself, no
+separate proxy service to install or enable).
 
-### During Installation
-
-When you run `sudo dpkg -i`, the installer will ask:
-- "Enable FastMCP HTTP proxy? (y/N)"
-- If yes: proxy listen address (127.0.0.1, 0.0.0.0, or custom IP)
-- If yes: proxy listen port (default 3100)
-
-If you choose `0.0.0.0`, make sure to configure your firewall (firewall004)
-to allow external access on the proxy port.
-
-### Manual Configuration (if needed)
-
-Edit `/etc/mcprack/proxy.env`:
-
-    FASTMCP_HOST=127.0.0.1    # or 0.0.0.0 for remote access
-    FASTMCP_PORT=3100
-
-Enable and start the proxy service:
-
-    systemctl enable --now mcprack-proxy.service
-
-The proxy will:
-- Read all enabled stdio servers from the database
-- Generate `/var/lib/mcprack/proxy-mcp.json`
-- Start fastmcp on the configured host/port to expose servers over HTTP
-
-When users download their config (e.g., Claude or Copilot), they'll
-automatically get network entries pointing to `http://YOUR-HOST:3100/mcp/`
-instead of local stdio commands.
-
-To restart the proxy after adding/removing servers:
-
-    systemctl restart mcprack-proxy.service
-
-Note: The proxy port must be accessible from client workstations. Make
-sure your firewall allows incoming connections on that port.
+The first time a user's client actually connects to that URL, mcprack spawns
+a dedicated `fastmcp` subprocess for that (user, server) pair on demand,
+resolving that user's credentials (their own override if they've set one,
+otherwise the admin's default) at that exact moment — not when the config
+was downloaded. Each user gets their own isolated instance of a server, even
+if several users have it selected at once. Idle instances (no traffic for 15
+minutes) are cleaned up automatically; see Admin → Proxy instances for a live
+list, and `python3-fastmcp` must be installed (see Recommends in
+`debian/control`) for this to work.

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![mcprack logo](https://raw.githubusercontent.com/VitexSoftware/mcprack/main/static/mcprack-icon-composite.svg)
+![mcprack logo](static/mcprack-icon-composite.svg?raw=true)
 
 **Model Context Protocol (MCP) Self-Service Catalog & Config Generator**
 
@@ -55,11 +55,12 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 
 ## Key Features
 
-- **Per-server environment configuration** — Store API keys, connection strings, and other secrets in Vaultwarden, not in config files
-- **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden)
+- **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed
+- **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden, or locally encrypted if Vaultwarden isn't configured)
 - **Multi-client support** — Generate configs for Claude Desktop, GitHub Copilot, and other MCP-compatible clients
-- **HTTP proxy for remote access** — Expose stdio servers over HTTP so users on different machines can access them (via FastMCP)
+- **Per-user proxy** — Every user connects remotely; stdio servers are spawned on demand, one isolated instance per (user, server) pair, with credentials resolved at spawn time — never embedded in a downloaded config
 - **Vaultwarden integration** — Leverages the same `bw-cli` / Secure Note pattern used by the `mcp_rack` Ansible role
+- **Works without Vaultwarden too** — If it's not configured, sensitive values fall back to a local Fernet-encrypted column instead; admins can migrate between the two deliberately from Admin → Vaultwarden diagnostics
 - **LDAP/AD support** — Optional directory authentication for enterprise deployments
 
 ## Architecture
@@ -69,31 +70,33 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 │                    mcprack Web App (Flask)                  │
 │  • Admin UI (register servers, manage credentials)          │
 │  • User Catalog (browse, select, download config)           │
-│  • Config Generator (build Claude/Copilot JSON/ENV)         │
-└────────────┬────────────────────────────┬───────────────────┘
-             │                            │
-      [SQLite/PG/MySQL]       [Vaultwarden (via bw-cli)]
-      • Server registry        • Secure credentials
-      • User accounts          • Environment variables
-      • Server selections      • User overrides
-             │                            │
-             └────────────┬───────────────┘
-                          │
-                    (user downloads)
-                          │
-        ┌─────────────────┴──────────────────┐
-        │                                    │
-   [Local Config]                  [Remote Config]
-   • claude_desktop_config.json    • HTTP reference
-   • Stdio servers listed          • FastMCP proxy
-   • Run on local machine          • HTTP://proxy:3100/mcp/
+│  • Config Generator (build Claude/Copilot JSON)              │
+│  • Per-user proxy (spawns stdio servers on demand)           │
+└────────────┬───────────────────┬─────────────────────────────┘
+             │                   │
+      [SQLite/PG/MySQL]   [Vaultwarden (via bw-cli)]  — only if
+      • Server registry    configured; otherwise a local
+      • Non-secret config  Fernet-encrypted DB column takes
+      • User accounts      over as the secret store instead
+      • Server selections  • Sensitive credentials only
+             │                   • User overrides
+             └─────────┬─────────┘
+                       │
+                (user downloads config)
+                       │
+              network entry pointing at
+          /proxy/mcp/<token>/<server_id>
+                       │
+        first connection spawns a dedicated
+        fastmcp instance for that user+server,
+        resolving credentials at that moment
 ```
 
 **Components:**
-- **Flask App**: Core web service, handles auth, server management, config generation
-- **Database**: Stores server registry, users, and selections (SQLite, PostgreSQL, or MySQL)
-- **Vaultwarden**: Stores all credentials and secrets (never in mcprack's DB)
-- **FastMCP Proxy** (optional): HTTP gateway for remote clients to access stdio servers
+- **Flask App**: Core web service, handles auth, server management, config generation, and the per-user proxy
+- **Database**: Server registry, users, selections, and non-secret server config (SQLite, PostgreSQL, or MySQL)
+- **Vaultwarden**: Stores sensitive credentials only, when configured — see `secret_store.py`
+- **Local encrypted fallback**: Used instead of Vaultwarden when it isn't configured; never both at once for the same value
 
 ## Use Cases
 
@@ -109,10 +112,10 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 - Credentials managed centrally in Vaultwarden
 - Solution: mcprack with LDAP enabled, per-team server configurations
 
-**Scenario 3: Remote teams across NAT**
-- MCP servers hosted on internal network (10.11.x.x)
+**Scenario 3: Remote teams**
+- MCP servers hosted on internal network
 - Users on different networks/VPNs need to access them
-- Solution: Deploy FastMCP proxy on public-facing machine, mcprack generates HTTP config for remote clients
+- Solution: this is the default and only mode — every user connects remotely through mcprack's built-in per-user proxy, no extra service to deploy
 
 **Scenario 4: Multi-client support**
 - Some users prefer Claude Desktop, others use GitHub Copilot
@@ -151,11 +154,24 @@ download a config.
 
 ## Credentials (Vaultwarden)
 
-Every credential (a server's default env vars/tokens, and any personal
-overrides a user sets) lives in Vaultwarden, never in mcprack's own
-database — mcprack talks to it the same way the `mcp_rack` Ansible role does
-(`bw-cli`, Secure Notes named `MCP-<server-name>` / `MCP-<server-name>-user-<username>`,
-plain `KEY=value` lines).
+In the server edit form, each environment variable row has a "citlivé"
+(sensitive) checkbox. Only rows marked sensitive — API keys, tokens,
+passwords, and the HTTP auth token key, which is always forced sensitive —
+ever leave mcprack's own database. Non-sensitive config (base URLs, regions,
+log levels, ...) stays directly in the DB and never touches Vaultwarden.
+
+Sensitive values (a server's defaults, and any personal override a user
+sets) live in Vaultwarden — mcprack talks to it the same way the `mcp_rack`
+Ansible role does (`bw-cli`, Secure Notes named `MCP-<server-name>` /
+`MCP-<server-name>-user-<username>`, plain `KEY=value` lines) — *when
+Vaultwarden is configured*. If `BW_SERVER` is unset, the same sensitive
+values are stored instead in a local Fernet-encrypted column, keyed off a
+subkey derived from `SECRET_KEY`. Which backend is authoritative is decided
+purely by configuration, never by live reachability — an unreachable but
+configured Vaultwarden is a hard error, not a silent fallback. Admins can
+move data between the two deliberately from Admin → Vaultwarden diagnostics
+(e.g. after configuring Vaultwarden for the first time, or before a planned
+Vaultwarden outage).
 
 ### 1. Get an API key from Vaultwarden
 
@@ -190,8 +206,8 @@ go straight to `/admin/vaultwarden/wizard`). It checks each prerequisite in
 order — `bw` installed, `BW_SERVER` set and reachable, API key valid,
 master password unlocks the vault — and stops at the first failing step
 with a specific fix, instead of just showing `bw`'s raw error text. Re-run it
-after editing `/etc/mcprack/env` (no service restart needed — the wizard
-always checks live).
+after editing `/etc/mcprack/env` and restarting `mcprack.service` so the
+updated environment is loaded.
 
 Once every step is green, admins can save server credentials (they're
 written straight to a `MCP-<server-name>` Secure Note) and users can
@@ -213,29 +229,21 @@ post-install configuration steps.
 
 ## Remote access to stdio MCP servers
 
-If users run Claude or Copilot on a different machine than the one hosting
-your MCP servers, you need to expose stdio-based servers over HTTP. mcprack
-includes support for this via `fastmcp`:
+Users always connect remotely — mcprack never assumes a user's Claude/Copilot
+client runs on the same machine as mcprack itself. So a stdio server is never
+handed to a client as a raw local spawn command: the downloaded config always
+points at a per-user proxy URL (`/proxy/mcp/<token>/<server_id>`), served by
+`mcprack.service` itself — no separate proxy service to install or enable.
 
-1. **Install python3-fastmcp** (Debian/Ubuntu):
-   ```bash
-   apt install python3-fastmcp
-   ```
+The first time a user's client connects to that URL, mcprack spawns a
+dedicated `fastmcp` subprocess for that (user, server) pair on demand,
+resolving that user's credentials at that exact moment. Each user gets their
+own isolated instance, even for a server several users have selected at once;
+idle instances are cleaned up automatically after 15 minutes. This needs
+`python3-fastmcp` installed (`apt install python3-fastmcp`) — see Admin →
+Proxy instances for a live list of what's running.
 
-2. **In mcprack admin UI**, for each stdio server you want to expose remotely:
-   - Keep "Command" field filled (e.g., `/usr/bin/mastodon-mcp`)
-   - Add "URL": `http://YOUR-HOST:3100/mcp/`
-   - Set auth header/env key if needed
-
-3. **Enable the HTTP proxy service**:
-   ```bash
-   systemctl enable --now mcprack-proxy.service
-   ```
-
-4. When users download configs, they'll get network entries pointing to your
-   HTTP proxy instead of local stdio commands.
-
-See `debian/README.Debian` for full details on the proxy setup.
+See `debian/README.Debian` for more detail.
 
 ## Branding & Icons
 

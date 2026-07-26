@@ -1,41 +1,82 @@
 {% extends "base.html" %}
-{% block title %}Catalog — mcprack{% endblock %}
+{% block title %}MCP Server Catalog — mcprack{% endblock %}
 {% block content %}
-<h1>MCP server catalog</h1>
-<p>Tick the servers you want, save your selection, then download the config
-for your client. You can re-download in either format at any time — your
-selection isn't tied to a specific client.</p>
 
-<form method="post" action="{{ url_for('catalog.selection') }}">
-  {% for server in servers %}
-  <div class="server-row">
-    <input type="checkbox" name="server_id" value="{{ server.id }}"
-           {{ "checked" if server.id in selected_ids else "" }}>
-    <div class="meta">
-      <div class="label">{{ server.label }} <small>({{ server.transport }})</small></div>
-      {% if server.description %}<div class="desc">{{ server.description }}</div>{% endif %}
-    </div>
-    {% if server.allow_user_override %}
-    <a href="{{ url_for('catalog.override', server_id=server.id) }}">
-      {{ "using your own credentials" if server.id in override_ids else "use my own credentials" }}
-    </a>
+<section class="section">
+  <h1>MCP Server Catalog</h1>
+  <p class="text-muted">Select the AI tools and services you want to use, save your selection, then download or copy the config for your client. You can change your selection anytime.</p>
+
+  <form method="post" action="{{ url_for('catalog.selection') }}" class="section">
+    <h2>Available Servers</h2>
+    
+    {% if servers %}
+      {% for server in servers %}
+      <div class="server-row">
+        <input type="checkbox" class="server-checkbox" name="server_id" value="{{ server.id }}"
+               {{ "checked" if server.id in selected_ids else "" }}
+               id="server-{{ server.id }}" aria-label="Select {{ server.label }}">
+        <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="32" height="32">
+        <label class="server-info" for="server-{{ server.id }}">
+          <div class="label">{{ server.label }}</div>
+          {% if server.description %}<div class="desc">{{ server.description }}</div>{% endif %}
+          <span class="server-transport {% if server.transport == 'stdio' %}stdio{% else %}http{% endif %}">
+            {{ server.transport | upper }}
+          </span>
+        </label>
+        {% if server.allow_user_override %}
+          <a href="{{ url_for('catalog.override', server_id=server.id) }}" class="btn btn-sm btn-secondary">
+            {% if server.id in override_ids %}
+              🔐 Using Custom Credentials
+            {% else %}
+              🔓 Use My Own Credentials
+            {% endif %}
+          </a>
+        {% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <p class="text-muted">No servers available yet. Ask an admin to register some.</p>
     {% endif %}
-  </div>
-  {% else %}
-  <p>No servers available yet — ask an admin to register some.</p>
-  {% endfor %}
-  <button type="submit">Save selection</button>
-</form>
 
-<h2>Get config</h2>
-<p>
-  <a href="{{ url_for('catalog.download', client='claude') }}">Download for Claude</a>
-  &middot;
-  <a href="{{ url_for('catalog.view', client='claude') }}">view / copy</a>
-</p>
-<p>
-  <a href="{{ url_for('catalog.download', client='copilot') }}">Download for GitHub Copilot</a>
-  &middot;
-  <a href="{{ url_for('catalog.view', client='copilot') }}">view / copy</a>
-</p>
+    <div style="margin-top: var(--space-2xl);">
+      <button type="submit" class="btn btn-primary">
+        💾 Save Selection
+      </button>
+    </div>
+  </form>
+</section>
+
+<section class="section">
+  <h2>Download Your Config</h2>
+  <p class="text-muted">Once you've selected the servers you need, download or copy the config for your AI client:</p>
+  
+  <div class="action-links">
+    <div>
+      <h4 style="margin-top: 0;">Claude Desktop</h4>
+      <p class="text-sm text-muted" style="margin-bottom: var(--space-md);">Works with Claude for Desktop application.</p>
+      <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+        <a href="{{ url_for('catalog.download', client='claude') }}" class="btn btn-secondary" download>
+          ⬇️ Download Config
+        </a>
+        <a href="{{ url_for('catalog.view', client='claude') }}" class="btn btn-secondary">
+          👁️ View & Copy
+        </a>
+      </div>
+    </div>
+    
+    <div style="border-top: 1px solid var(--color-border); padding-top: var(--space-lg);">
+      <h4 style="margin-top: 0;">GitHub Copilot</h4>
+      <p class="text-sm text-muted" style="margin-bottom: var(--space-md);">Works with VS Code Copilot and other GitHub Copilot clients.</p>
+      <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+        <a href="{{ url_for('catalog.download', client='copilot') }}" class="btn btn-secondary" download>
+          ⬇️ Download Config
+        </a>
+        <a href="{{ url_for('catalog.view', client='copilot') }}" class="btn btn-secondary">
+          👁️ View & Copy
+        </a>
+      </div>
+    </div>
+  </div>
+</section>
+
 {% endblock %}

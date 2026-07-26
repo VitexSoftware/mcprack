@@ -1,22 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Override credentials — mcprack{% endblock %}
+{% block title %}Your {{ server.label }} Credentials — mcprack{% endblock %}
 {% block content %}
-<h1>Your credentials for {{ server.label }}</h1>
-<p>These values are stored in Vaultwarden under your personal item and only
-affect configs downloaded by you. Leave blank / reset to fall back to the
-admin's default credentials.</p>
-{% if server.env_var_names %}
-<p>Expected keys: <code>{{ server.env_var_names | join(', ') }}</code></p>
-{% endif %}
-<form method="post">
-  <label for="env_text">KEY=value (one per line)</label>
-  <textarea id="env_text" name="env_text" rows="6">{{ env_text }}</textarea>
-  <button type="submit" name="action" value="save">Save my credentials</button>
-</form>
-{% if has_override %}
-<form method="post">
-  <button type="submit" name="action" value="reset">Reset to default</button>
-</form>
-{% endif %}
-<p><a href="{{ url_for('catalog.index') }}">Back to catalog</a></p>
+
+<section>
+  <h1>🔐 Your credentials for {{ server.label }}</h1>
+  <p class="text-muted">These credentials are stored securely in Vaultwarden and only apply to configs you download. They override the admin's default credentials.</p>
+
+  {% if server.env_var_names %}
+  <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); margin: var(--space-lg) 0; font-size: var(--font-size-sm);">
+    <p style="margin: 0; font-weight: var(--font-weight-medium); margin-bottom: var(--space-xs);">Expected keys:</p>
+    <code style="display: block; margin: 0;">{{ server.env_var_names | join(', ') }}</code>
+  </div>
+  {% endif %}
+
+  <form method="post">
+    <div class="form-group">
+      <label for="env_text">Credentials (KEY=value format, one per line)</label>
+      <textarea id="env_text" name="env_text" placeholder="EXAMPLE_API_KEY=your-key-here&#10;EXAMPLE_PASSWORD=your-password-here">{{ env_text }}</textarea>
+      <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">Store sensitive values like API keys, tokens, and passwords in KEY=value format.</p>
+    </div>
+
+    <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+      <button type="submit" name="action" value="save" class="btn btn-primary">
+        💾 Save My Credentials
+      </button>
+      
+      {% if has_override %}
+        <button type="submit" name="action" value="reset" class="btn btn-secondary">
+          🔄 Reset to Default
+        </button>
+      {% endif %}
+      
+      <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">
+        ← Back to Catalog
+      </a>
+    </div>
+  </form>
+</section>
+
 {% endblock %}

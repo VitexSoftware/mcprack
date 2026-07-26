@@ -20,6 +20,7 @@ Depends:
  python3-flask-login,
  python3-flask-migrate,
  python3-ldap3,
+ python3-cryptography,
  bw-cli,
  gunicorn,
 Recommends:
