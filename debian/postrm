@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+dbc_dbtypes="sqlite3, pgsql, mysql"
+dbc_basepath=/var/lib/mcprack
+
+if [ -f /usr/share/dbconfig-common/dpkg/postrm ]; then
+    . /usr/share/dbconfig-common/dpkg/postrm
+    dbc_go mcprack "$@"
+fi
+
+#DEBHELPER#

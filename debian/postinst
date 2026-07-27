@@ -25,6 +25,34 @@ case "$1" in
       INTERACTIVE=false
     fi
 
+    # Ask dbconfig-common for the database engine/connection details (or, on
+    # upgrades, let it reconcile its own bookkeeping) and translate the
+    # result into a SQLALCHEMY_DATABASE_URI. Keeps the sqlite default at the
+    # same path pre-dbconfig-common installs already used.
+    dbc_dbtypes="sqlite3, pgsql, mysql"
+    # Keep the sqlite3 database file under the same directory (and with the
+    # same ownership) mcprack's own postinst has always used.
+    dbc_basepath=/var/lib/mcprack
+    dbc_dbfile_owner=mcprack:mcprack
+    dbc_dbfile_perms=0640
+
+    if [ -f /usr/share/dbconfig-common/dpkg/postinst ]; then
+      . /usr/share/dbconfig-common/dpkg/postinst
+      dbc_go mcprack "$@"
+    fi
+
+    case "$dbc_dbtype" in
+      pgsql)
+        DB_URI="postgresql+psycopg2://${dbc_dbuser}:${dbc_dbpass}@${dbc_dbserver}:${dbc_dbport:-5432}/${dbc_dbname}"
+        ;;
+      mysql)
+        DB_URI="mysql+pymysql://${dbc_dbuser}:${dbc_dbpass}@${dbc_dbserver}:${dbc_dbport:-3306}/${dbc_dbname}"
+        ;;
+      sqlite3|*)
+        DB_URI="sqlite:///${dbc_basepath:-/var/lib/mcprack}/${dbc_dbname:-mcprack}"
+        ;;
+    esac
+
     # Configuration if /etc/mcprack/env doesn't exist
     if [ ! -f /etc/mcprack/env ]; then
       if [ "$INTERACTIVE" = "true" ]; then
@@ -88,7 +116,7 @@ case "$1" in
 # ⚠️  UPDATE with your actual credentials!
 
 SECRET_KEY=$SECRET_KEY
-SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
+SQLALCHEMY_DATABASE_URI=$DB_URI
 
 LDAP_SERVER=$LDAP_SERVER
 LDAP_BASE_DN=$LDAP_BASE_DN
@@ -115,10 +143,38 @@ ENV_FILE
       systemctl daemon-reload || true
     fi
 
+    # Run Alembic migrations against whatever SQLALCHEMY_DATABASE_URI ends
+    # up in /etc/mcprack/env (freshly written above, or left untouched on an
+    # upgrade). db.create_all() at app startup remains a harmless additional
+    # safety net, but this is what actually applies migrations/versions/.
+    if ! su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db upgrade"; then
+      echo "⚠️  Database migration failed — check /etc/mcprack/env and run 'flask db upgrade' manually" >&2
+    fi
+
+    # Create the initial admin account if no admin exists yet (covers fresh
+    # installs; leaves LDAP-provisioned or differently-named admins alone).
+    ADMIN_EXISTS=$(su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -c '
+from app import create_app
+from models import User
+app = create_app()
+with app.app_context():
+    print(1 if User.query.filter_by(is_admin=True).first() else 0)
+'" 2>/dev/null || echo 0)
+
+    if [ "$ADMIN_EXISTS" != "1" ]; then
+      ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
+      if su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask create-admin --username admin --password '$ADMIN_PASS' --email ''"; then
+        install -m 0600 -o root -g root /dev/null /etc/mcprack/admin-credentials
+        printf 'username=admin\npassword=%s\n' "$ADMIN_PASS" > /etc/mcprack/admin-credentials
+        echo "✅ Initial admin account created (username: admin). Credentials saved to /etc/mcprack/admin-credentials"
+      else
+        echo "⚠️  Failed to create initial admin account — create one manually with 'flask create-admin'" >&2
+      fi
+    fi
+
     if [ "$INTERACTIVE" = "false" ]; then
       echo "ℹ️  mcprack installed with default configuration"
       echo "⚠️  Update /etc/mcprack/env with your Vaultwarden credentials"
-      exit 0
     fi
     ;;
 esac

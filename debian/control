@@ -23,6 +23,7 @@ Depends:
  python3-cryptography,
  bw-cli,
  gunicorn,
+ dbconfig-common,
 Recommends:
  python3-fastmcp (>= 4.0.0~a2),
 Suggests:
@@ -31,6 +32,9 @@ Suggests:
  python3-opentelemetry-api,
  python3-opentelemetry-sdk,
  python3-opentelemetry-instrumentation,
+ dbconfig-pgsql,
+ dbconfig-mysql,
+ dbconfig-sqlite3,
 Description: Self-service MCP server catalog and client config generator
  mcprack lets an admin register MCP (Model Context Protocol) servers once;
  users log in (local account or Active Directory), pick which servers they

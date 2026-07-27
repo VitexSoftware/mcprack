@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+
+if [ -f /usr/share/debconf/confmodule ]; then
+    . /usr/share/debconf/confmodule
+fi
+
+dbc_dbtypes="sqlite3, pgsql, mysql"
+# Keep the sqlite3 database file under the same directory (and with the
+# same ownership) mcprack's own postinst has always used.
+dbc_basepath=/var/lib/mcprack
+dbc_dbfile_owner=mcprack:mcprack
+dbc_dbfile_perms=0640
+
+if [ -f /usr/share/dbconfig-common/dpkg/config ]; then
+    . /usr/share/dbconfig-common/dpkg/config
+    dbc_go mcprack "$@"
+fi
+
+#DEBHELPER#

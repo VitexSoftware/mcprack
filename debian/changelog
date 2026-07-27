@@ -1,3 +1,15 @@
+mcprack (0.2.5) unstable; urgency=medium
+
+  * Integrate dbconfig-common: the installer now prompts for the database
+    engine (sqlite3, PostgreSQL, or MySQL) and connection details the
+    standard Debian way, instead of hardcoding sqlite in postinst.
+  * Run `flask db upgrade` (Alembic) automatically in postinst on every
+    install and upgrade, rather than relying solely on `db.create_all()`.
+  * Automatically create an initial `admin` account with a random password
+    (saved to /etc/mcprack/admin-credentials) when no admin user exists yet.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 00:00:00 +0200
+
 mcprack (0.2.4) unstable; urgency=medium
 
   * Automatically create missing database tables (such as `audit_log_entries`)

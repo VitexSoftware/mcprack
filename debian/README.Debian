@@ -8,12 +8,21 @@ Run the package installer, which will prompt for configuration interactively:
     sudo dpkg -i mcprack_*.deb
 
 The installer will ask for:
+- Database engine (sqlite3, PostgreSQL, or MySQL) and connection details,
+  via the standard `dbconfig-common` prompts. sqlite3 is the default and
+  needs no server; choosing pgsql/mysql has dbconfig-common create the
+  database and role for you. Re-run `dpkg-reconfigure mcprack` later to
+  change engine/connection details.
 - Vaultwarden (Bitwarden) server URL, client ID, client secret, master password
 - Whether to enable LDAP authentication (optional, disabled by default)
 - If LDAP enabled: server URL, base DN, bind DN, bind password
 
-All configuration is saved to `/etc/mcprack/env`. Database migrations and
-initial setup run automatically.
+All configuration is saved to `/etc/mcprack/env`. Database migrations
+(`flask db upgrade`, via Alembic) run automatically on every install and
+upgrade. If no admin account exists yet, an `admin` account with a randomly
+generated password is created automatically — the password is written to
+`/etc/mcprack/admin-credentials` (root-only, mode 0600) and printed once
+during an interactive install.
 
 ## Manual Configuration (if not using interactive install)
 
@@ -23,6 +32,9 @@ Configuration lives in `/etc/mcprack/env`. Required variables:
     SQLALCHEMY_DATABASE_URI=sqlite:////var/lib/mcprack/mcprack.db
     # or postgresql+psycopg2://... / mysql+pymysql://... (install python3-psycopg2
     # or python3-pymysql respectively — see Suggests in debian/control)
+    #
+    # Normally you don't set this by hand — `dpkg-reconfigure mcprack` drives
+    # dbconfig-common to pick the engine and (re)write this value.
 
 ### Authentication (optional, LDAP disabled by default)
 
@@ -55,21 +67,15 @@ instead of a raw "bw login failed" error. Re-run it after every edit to
 
 ### Manual Setup Steps (if needed)
 
-After creating `/etc/mcprack/env`, run database migrations and create admin account:
+Migrations and the initial admin account are created automatically by
+`postinst` — see above. If you need to redo either by hand (e.g. after
+restoring a database dump):
 
-    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && FLASK_APP=app:create_app python3 -c "
-from app import create_app
-from models import User
-from extensions import db
-app = create_app()
-with app.app_context():
-    admin = User(username=\"admin\", auth_type=\"local\", is_admin=True)
-    admin.is_active_flag = True
-    admin.set_password(\"mcprack-test-2026\")
-    db.session.add(admin)
-    db.session.commit()
-    print(\"Admin account created: admin/mcprack-test-2026\")
-"'
+    # Apply migrations
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db upgrade'
+
+    # Create another admin account
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask create-admin'
 
 Then start the service:
 
