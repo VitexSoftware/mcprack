@@ -76,32 +76,7 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    mcprack Web App (Flask)                  │
-│  • Admin UI (register servers, manage credentials)          │
-│  • User Catalog (browse, select, download config)           │
-│  • Config Generator (build Claude/Copilot JSON)              │
-│  • Per-user proxy (spawns stdio servers on demand)           │
-└────────────┬───────────────────┬─────────────────────────────┘
-             │                   │
-      [SQLite/PG/MySQL]   [Vaultwarden (via bw-cli)]  — only if
-      • Server registry    configured; otherwise a local
-      • Non-secret config  Fernet-encrypted DB column takes
-      • User accounts      over as the secret store instead
-      • Server selections  • Sensitive credentials only
-             │                   • User overrides
-             └─────────┬─────────┘
-                       │
-                (user downloads config)
-                       │
-              network entry pointing at
-          /proxy/mcp/<token>/<server_id>
-                       │
-        first connection spawns a dedicated
-        fastmcp instance for that user+server,
-        resolving credentials at that moment
-```
+![mcprack architecture](static/mcprack-architecture.svg?raw=true)
 
 **Components:**
 - **Flask App**: Core web service, handles auth, server management, config generation, and the per-user proxy

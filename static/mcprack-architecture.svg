@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 860 620" font-family="sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .box { stroke-width: 1.5; rx: 10; }
+      .app-box { fill: #eef2ff; stroke: #1f2937; }
+      .db-box { fill: #eff6ff; stroke: #2563eb; }
+      .vault-box { fill: #faf5ff; stroke: #9333ea; }
+      .proxy-box { fill: #ecfeff; stroke: #0891b2; }
+      .note-box { fill: #fff7ed; stroke: #ea580c; }
+      .title { font-weight: bold; font-size: 15px; fill: #111827; }
+      .bullet { font-size: 12px; fill: #374151; }
+      .edge-label { font-size: 11px; fill: #6b7280; }
+      .edge { stroke: #6b7280; stroke-width: 1.5; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="860" height="620" fill="#f9fafb" rx="12"/>
+
+  <!-- mcprack Web App -->
+  <rect x="180" y="20" width="500" height="150" class="box app-box"/>
+  <text x="430" y="45" text-anchor="middle" class="title">mcprack Web App (Flask)</text>
+  <text x="210" y="70" class="bullet">• Admin UI (register servers, manage credentials)</text>
+  <text x="210" y="92" class="bullet">• User Catalog (browse, select, download config)</text>
+  <text x="210" y="114" class="bullet">• Config Generator (build Claude / Copilot JSON)</text>
+  <text x="210" y="136" class="bullet">• Per-user proxy (spawns stdio servers on demand)</text>
+
+  <!-- Database box -->
+  <rect x="90" y="230" width="290" height="150" class="box db-box"/>
+  <text x="235" y="255" text-anchor="middle" class="title" fill="#2563eb">SQLite / PostgreSQL / MySQL</text>
+  <text x="115" y="280" class="bullet">• Server registry</text>
+  <text x="115" y="300" class="bullet">• Non-secret config</text>
+  <text x="115" y="320" class="bullet">• User accounts</text>
+  <text x="115" y="340" class="bullet">• Server selections</text>
+
+  <!-- Vaultwarden box -->
+  <rect x="480" y="230" width="290" height="150" class="box vault-box"/>
+  <text x="625" y="255" text-anchor="middle" class="title" fill="#9333ea">Vaultwarden (via bw-cli)</text>
+  <text x="505" y="280" class="bullet">• Sensitive credentials only</text>
+  <text x="505" y="300" class="bullet">• User overrides</text>
+  <text x="505" y="326" class="bullet" fill="#6b7280">Only if configured — otherwise a local</text>
+  <text x="505" y="344" class="bullet" fill="#6b7280">Fernet-encrypted DB column takes over</text>
+  <text x="505" y="362" class="bullet" fill="#6b7280">as the secret store instead</text>
+
+  <!-- User downloads config -->
+  <rect x="280" y="425" width="300" height="40" rx="20" class="box note-box"/>
+  <text x="430" y="450" text-anchor="middle" class="bullet" fill="#ea580c">user downloads config</text>
+
+  <!-- Network entry -->
+  <rect x="230" y="495" width="400" height="45" class="box proxy-box"/>
+  <text x="430" y="522" text-anchor="middle" class="bullet" fill="#0891b2">network entry: /proxy/mcp/&lt;token&gt;/&lt;server_id&gt;</text>
+
+  <!-- Spawn instance -->
+  <rect x="180" y="565" width="500" height="45" class="box app-box"/>
+  <text x="430" y="588" text-anchor="middle" class="bullet">first connection spawns a dedicated fastmcp instance for that user+server,</text>
+  <text x="430" y="602" text-anchor="middle" class="bullet" font-size="11">resolving credentials at that moment</text>
+
+  <!-- Edges: app -> db, app -> vault -->
+  <path d="M 330 170 L 260 230" class="edge"/>
+  <path d="M 530 170 L 600 230" class="edge"/>
+
+  <!-- db + vault -> user downloads config -->
+  <path d="M 260 380 L 380 425" class="edge"/>
+  <path d="M 600 380 L 480 425" class="edge"/>
+
+  <!-- download -> network entry -->
+  <path d="M 430 465 L 430 495" class="edge"/>
+
+  <!-- network entry -> spawn -->
+  <path d="M 430 540 L 430 565" class="edge"/>
+</svg>
