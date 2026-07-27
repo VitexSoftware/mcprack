@@ -1,3 +1,11 @@
+mcprack (0.2.9) unstable; urgency=medium
+
+  * Depend explicitly on debconf (| debconf-2.0), since postinst now
+    sources its confmodule directly rather than relying on it being
+    pulled in transitively.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 13:21:54 +0200
+
 mcprack (0.2.8) unstable; urgency=medium
 
   * Fix postinst: source /usr/share/debconf/confmodule before calling

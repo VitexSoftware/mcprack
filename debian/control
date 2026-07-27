@@ -23,6 +23,7 @@ Depends:
  python3-cryptography,
  bw-cli,
  gunicorn,
+ debconf | debconf-2.0,
  dbconfig-common,
 Recommends:
  python3-fastmcp (>= 4.0.0~a2),
