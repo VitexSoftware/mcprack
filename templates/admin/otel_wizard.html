@@ -54,8 +54,8 @@ for how to configure this.</p>
     </div>
   </li>
 
-  <li class="wizard-step wizard-skipped">
-    <span class="wizard-icon">&#8213;</span>
+  <li class="wizard-step wizard-{{ 'ok' if state.service_name else 'skipped' }}">
+    <span class="wizard-icon">{% if state.service_name %}&#10003;{% else %}&#8213;{% endif %}</span>
     <div class="wizard-body">
       <div class="wizard-label">Service name</div>
       <div class="wizard-detail"><code>{{ state.service_name }}</code></div>
