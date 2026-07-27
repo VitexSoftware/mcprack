@@ -16,6 +16,7 @@ health.py /usr/lib/mcprack/
 audit.py /usr/lib/mcprack/
 audit_retention.py /usr/lib/mcprack/
 telemetry.py /usr/lib/mcprack/
+version.py /usr/lib/mcprack/
 templates/* /usr/lib/mcprack/templates/
 static/* /usr/lib/mcprack/static/
 migrations/* /usr/lib/mcprack/migrations/

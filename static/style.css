@@ -1091,3 +1091,33 @@ ol.wizard {
     font-size: 16px; /* Prevents zoom on iOS */
   }
 }
+
+/* ========================================
+   FOOTER
+   ======================================== */
+
+.site-footer {
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-2xl);
+}
+
+.site-footer-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: var(--max-width);
+  margin: 0 auto;
+  padding: var(--space-md) var(--space-lg);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.site-footer-content a {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+}
+
+.site-footer-content a:hover {
+  color: var(--color-text);
+  text-decoration: underline;
+}

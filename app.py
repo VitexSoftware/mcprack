@@ -29,6 +29,10 @@ def create_app(config_object=Config):
     with app.app_context():
         db.create_all()
 
+    from version import get_version
+
+    app.jinja_env.globals["app_version"] = get_version()
+
     register_cli(app)
     register_static_routes(app)
 
