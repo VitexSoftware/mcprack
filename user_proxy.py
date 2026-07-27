@@ -1,3 +1,5 @@
+import contextlib
+import fcntl
 import http.client
 import json
 import os
@@ -26,6 +28,13 @@ HEALTH_RECHECK_INTERVAL = 30  # seconds
 # indefinitely or take an unpredictable number of seconds depending on
 # fastmcp's own internal retry timing.
 HANDSHAKE_TIMEOUT = 5  # seconds
+# How long a caller waits for another worker's lock on the same (user,
+# server) pair before giving up — must comfortably exceed a full
+# spawn+handshake cycle (HANDSHAKE_TIMEOUT plus spawn overhead) while
+# staying under gunicorn's own request timeout (30s, see
+# debian/mcprack.service) so a stuck lock surfaces as our own error
+# instead of a bare worker-killed 502.
+LOCK_WAIT_TIMEOUT = 15  # seconds
 
 
 class UserProxyError(RuntimeError):
@@ -51,6 +60,47 @@ def _paths(user_id, server_id):
         "healthy_at": base.with_suffix(".healthy_at"),
         "log": base.with_suffix(".log"),
     }
+
+
+def _lock_path(user_id, server_id):
+    return STATE_DIR / f"{_server_key(user_id, server_id)}.lock"
+
+
+@contextlib.contextmanager
+def _serialized(user_id, server_id):
+    """Cross-process mutex around the read-decide-spawn sequence for one
+    (user, server) pair.
+
+    mcprack runs under multiple gunicorn worker *processes* (see
+    `--workers 4` in debian/mcprack.service), not just threads, so an
+    in-process lock isn't enough. Without this, two near-simultaneous cold
+    requests for the same pair could both decide a restart was needed and
+    both call `_spawn()`: the loser's failure-cleanup then deletes the
+    still-alive winner's pid/meta/healthy_at files, which made every
+    following request see "not running" and retry the same collision
+    forever — 502s on every fresh request while an already-warm client
+    session against the same server kept working undisturbed the whole
+    time (GitHub issue #1). Locking is per-key, so unrelated (user,
+    server) pairs never block each other.
+    """
+    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    deadline = time.monotonic() + LOCK_WAIT_TIMEOUT
+    with open(_lock_path(user_id, server_id), "w") as lock_file:
+        while True:
+            try:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise UserProxyError(
+                        f"Timed out waiting for another request to finish starting this "
+                        f"server (lock wait exceeded {LOCK_WAIT_TIMEOUT}s)"
+                    )
+                time.sleep(0.05)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
 def _parse_key(stem):
@@ -240,67 +290,67 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
     if not command:
         raise UserProxyError("Cannot start user proxy for server without command")
 
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    paths = _paths(user_id, server_id)
-    port = _port_for(user_id, server_id)
+    with _serialized(user_id, server_id):
+        paths = _paths(user_id, server_id)
+        port = _port_for(user_id, server_id)
 
-    desired_config = _desired_config(server_name, command, args, env)
-    desired_json = json.dumps(desired_config, sort_keys=True)
+        desired_config = _desired_config(server_name, command, args, env)
+        desired_json = json.dumps(desired_config, sort_keys=True)
 
-    meta_current = _read_text(paths["meta"])
-    pid = _read_pid(paths["pid"])
-    running = _pid_running(pid)
+        meta_current = _read_text(paths["meta"])
+        pid = _read_pid(paths["pid"])
+        running = _pid_running(pid)
 
-    needs_restart = (not running) or (meta_current != desired_json)
+        needs_restart = (not running) or (meta_current != desired_json)
 
-    if not needs_restart:
-        healthy_at = _read_float(paths["healthy_at"])
-        if healthy_at is not None and (time.time() - healthy_at) < HEALTH_RECHECK_INTERVAL:
-            paths["last_used"].write_text(str(int(time.time())))
-            return port
+        if not needs_restart:
+            healthy_at = _read_float(paths["healthy_at"])
+            if healthy_at is not None and (time.time() - healthy_at) < HEALTH_RECHECK_INTERVAL:
+                paths["last_used"].write_text(str(int(time.time())))
+                return port
 
-        # Health verification is stale (or this instance predates the
-        # health-tracking columns) — re-probe an already-running instance
-        # before handing it out again, so an upstream that started failing
-        # sometime after it was last proven to work gets caught and
-        # restarted here instead of failing unpredictably per-request.
-        if _probe_upstream_health(port):
-            paths["healthy_at"].write_text(str(time.time()))
-            paths["last_used"].write_text(str(int(time.time())))
-            return port
+            # Health verification is stale (or this instance predates the
+            # health-tracking columns) — re-probe an already-running instance
+            # before handing it out again, so an upstream that started failing
+            # sometime after it was last proven to work gets caught and
+            # restarted here instead of failing unpredictably per-request.
+            if _probe_upstream_health(port):
+                paths["healthy_at"].write_text(str(time.time()))
+                paths["last_used"].write_text(str(int(time.time())))
+                return port
 
-        _stop_pid(pid)
-    elif running:
-        _stop_pid(pid)
+            _stop_pid(pid)
+        elif running:
+            _stop_pid(pid)
 
-    start_time = time.monotonic()
-    with telemetry.span("mcp.proxy.start", {"server_name": server_name}) as current_span:
-        try:
-            _spawn(paths, port, server_name, desired_config, desired_json)
-        except UserProxyError as exc:
+        start_time = time.monotonic()
+        with telemetry.span("mcp.proxy.start", {"server_name": server_name}) as current_span:
+            try:
+                _spawn(paths, port, server_name, desired_config, desired_json)
+            except UserProxyError as exc:
+                audit.log_audit_event(
+                    "proxy_start",
+                    "error",
+                    user_id=user_id,
+                    server_id=server_id,
+                    server_name=server_name,
+                    error_message=str(exc)[:500],
+                    duration_ms=int((time.monotonic() - start_time) * 1000),
+                )
+                if current_span is not None:
+                    current_span.set_attribute("mcp.result", "error")
+                raise
             audit.log_audit_event(
                 "proxy_start",
-                "error",
+                "success",
                 user_id=user_id,
                 server_id=server_id,
                 server_name=server_name,
-                error_message=str(exc)[:500],
                 duration_ms=int((time.monotonic() - start_time) * 1000),
             )
             if current_span is not None:
-                current_span.set_attribute("mcp.result", "error")
-            raise
-        audit.log_audit_event(
-            "proxy_start",
-            "success",
-            user_id=user_id,
-            server_id=server_id,
-            server_name=server_name,
-            duration_ms=int((time.monotonic() - start_time) * 1000),
-        )
-        if current_span is not None:
-            current_span.set_attribute("mcp.result", "success")
-    return port
+                current_span.set_attribute("mcp.result", "success")
+        return port
 
 
 def cleanup_idle_proxies(max_idle_seconds=900):
@@ -324,29 +374,44 @@ def cleanup_idle_proxies(max_idle_seconds=900):
             last_used = 0.0
 
         if (now - last_used) > max_idle_seconds:
-            _stop_pid(pid)
             user_id, server_id = _parse_key(pid_path.stem)
-            if user_id is not None:
-                audit.log_audit_event(
-                    "proxy_stop",
-                    "success",
-                    user_id=user_id,
-                    server_id=server_id,
-                    error_message="idle timeout",
-                )
+            if user_id is None:
+                continue
+            with _serialized(user_id, server_id):
+                # Re-check under the lock — a concurrent request may have
+                # refreshed (or already stopped) this instance since the
+                # unlocked scan above.
+                pid = _read_pid(pid_path)
+                if not pid:
+                    continue
+                try:
+                    last_used = float((last_used_path.read_text() or "0").strip())
+                except (OSError, ValueError):
+                    last_used = 0.0
+                if (now - last_used) <= max_idle_seconds:
+                    continue
+                _stop_pid(pid)
+            audit.log_audit_event(
+                "proxy_stop",
+                "success",
+                user_id=user_id,
+                server_id=server_id,
+                error_message="idle timeout",
+            )
 
 
 def stop_user_server_proxy(user_id, server_id):
     with telemetry.span("mcp.proxy.stop", {"server_id": server_id}):
-        paths = _paths(user_id, server_id)
-        pid = _read_pid(paths["pid"])
-        if pid:
-            _stop_pid(pid)
-        for key in ("pid", "last_used", "meta", "config", "healthy_at"):
-            try:
-                paths[key].unlink()
-            except OSError:
-                pass
+        with _serialized(user_id, server_id):
+            paths = _paths(user_id, server_id)
+            pid = _read_pid(paths["pid"])
+            if pid:
+                _stop_pid(pid)
+            for key in ("pid", "last_used", "meta", "config", "healthy_at"):
+                try:
+                    paths[key].unlink()
+                except OSError:
+                    pass
         audit.log_audit_event("proxy_stop", "success", user_id=user_id, server_id=server_id)
 
 

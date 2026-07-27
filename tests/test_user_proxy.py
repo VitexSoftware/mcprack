@@ -1,3 +1,4 @@
+import threading
 import time
 from unittest.mock import MagicMock, patch
 
@@ -98,6 +99,61 @@ def test_reuse_reprobes_after_recheck_interval_and_restarts_on_failure(state_dir
                 command="/bin/flaky-mcp", args=[], env={},
             )
     mock_stop.assert_called()
+
+
+def test_concurrent_requests_for_same_key_only_spawn_once(state_dir):
+    """Regression test for GitHub issue #1: two near-simultaneous cold
+    requests for the same (user, server) pair used to race past each
+    other with no locking, and the loser's failure-cleanup would delete
+    the still-alive winner's pid/meta/healthy_at files — producing 502s
+    on every following request even while an already-warm session kept
+    working fine. Under the per-key lock, only one caller should actually
+    spawn; the rest must block, then see the freshly-healthy instance and
+    reuse it."""
+    paths = user_proxy._paths(1, 11)
+    spawn_calls = []
+    spawn_lock = threading.Lock()
+
+    def fake_popen(*args, **kwargs):
+        with spawn_lock:
+            spawn_calls.append(len(spawn_calls) + 1)
+        # Hold the "startup" window open to widen the race if the lock
+        # doesn't actually serialize callers.
+        time.sleep(0.2)
+        return _fake_proc(pid=1000 + len(spawn_calls))
+
+    def fake_pid_running(pid):
+        return paths["pid"].exists()
+
+    results = []
+    errors = []
+
+    def worker():
+        try:
+            results.append(
+                user_proxy.ensure_user_server_proxy(
+                    user_id=1, server_id=11, server_name="racey",
+                    command="/bin/racey-mcp", args=[], env={},
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - captured for assertion below
+            errors.append(exc)
+
+    with patch("user_proxy.subprocess.Popen", side_effect=fake_popen), \
+         patch("user_proxy._probe_upstream_health", return_value=True), \
+         patch("user_proxy._pid_running", side_effect=fake_pid_running):
+        threads = [threading.Thread(target=worker) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+    assert not errors, errors
+    assert len(results) == 5
+    assert len(set(results)) == 1
+    assert len(spawn_calls) == 1
+    assert paths["pid"].exists()
+    assert paths["healthy_at"].exists()
 
 
 def test_probe_treats_jsonrpc_error_as_unhealthy():

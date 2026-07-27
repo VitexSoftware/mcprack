@@ -1,5 +1,6 @@
 import pytest
 
+import user_proxy
 from app import create_app
 from config import Config
 from extensions import db as _db
@@ -15,6 +16,14 @@ class TestConfig(Config):
     BW_CLIENTSECRET = "test-client-secret"
     BW_PASSWORD = "test-master-password"
     BITWARDENCLI_APPDATA_DIR = "/tmp/mcprack-test-bw"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_user_proxy_state(tmp_path, monkeypatch):
+    """Every test gets its own scratch user-proxy state dir, never the real
+    /var/lib/mcprack/user-proxies — which may hold live state from an
+    actually-installed instance on the machine running the tests."""
+    monkeypatch.setattr(user_proxy, "STATE_DIR", tmp_path / "user-proxies")
 
 
 @pytest.fixture

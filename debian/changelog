@@ -1,3 +1,17 @@
+mcprack (0.2.6) unstable; urgency=medium
+
+  * Fix a race in the per-user MCP proxy spawn-on-demand path: concurrent
+    cold requests for the same (user, server) pair could race past each
+    other with no locking, and the loser's failure-cleanup would delete
+    the still-alive winner's pid/meta/healthy_at state files — causing
+    502 "failed its startup handshake" errors on every subsequent request
+    even while an already-warm client session kept working fine, and
+    Admin -> Proxy Instances showing the instance as "not started yet"
+    the whole time. Serialize spawn/stop/idle-cleanup per (user, server)
+    pair with a cross-process file lock. (GitHub issue #1)
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 00:00:00 +0200
+
 mcprack (0.2.5) unstable; urgency=medium
 
   * Integrate dbconfig-common: the installer now prompts for the database
