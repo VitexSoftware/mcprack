@@ -193,6 +193,17 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT):
     an unexpected-but-non-error shape — is treated as probably fine. The
     goal is to catch a definitely-broken upstream, not to fully validate
     protocol compliance and risk false positives against a healthy one.
+
+    Connection-refused is retried (with a short backoff) until `timeout`
+    elapses rather than failing on the first attempt: the caller only
+    reaches here once the subprocess itself is confirmed still alive
+    (`_spawn`'s poll() check already caught the exited-immediately case),
+    so a refused connection here just means the HTTP server hasn't
+    finished binding its port yet, not that the backend is broken. A
+    fresh interpreter loading heavy dependencies for the first time can
+    easily take longer than the old single-shot ~0.2s grace period,
+    which made cold spawns fail the handshake even though the backend
+    would have come up fine a second later.
     """
     payload = json.dumps(
         {
@@ -207,23 +218,32 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT):
         }
     ).encode()
 
-    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
-    try:
-        conn.request(
-            "POST",
-            "/mcp",
-            body=payload,
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json, text/event-stream",
-            },
-        )
-        resp = conn.getresponse()
-        body = resp.read()
-    except (OSError, http.client.HTTPException):
-        return False
-    finally:
-        conn.close()
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return False
+        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=remaining)
+        try:
+            conn.request(
+                "POST",
+                "/mcp",
+                body=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "Accept": "application/json, text/event-stream",
+                },
+            )
+            resp = conn.getresponse()
+            body = resp.read()
+        except ConnectionRefusedError:
+            time.sleep(min(0.1, max(remaining, 0)))
+            continue
+        except (OSError, http.client.HTTPException):
+            return False
+        finally:
+            conn.close()
+        break
 
     try:
         data = json.loads(body)

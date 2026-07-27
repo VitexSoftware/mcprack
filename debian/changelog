@@ -1,3 +1,15 @@
+mcprack (0.2.11) unstable; urgency=medium
+
+  * Fix cold-start proxy spawns failing the startup handshake: the
+    health probe made a single connection attempt with no retry, so a
+    backend that takes longer than the ~0.2s post-spawn grace period to
+    bind its HTTP port (e.g. first-ever import of freshly installed
+    dependencies) got connection-refused and was declared broken, even
+    though it would have come up fine moments later. Now retries on
+    connection-refused until the handshake timeout budget is exhausted.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 18:12:08 +0200
+
 mcprack (0.2.10) unstable; urgency=medium
 
   * Only run db.create_all() as a fallback for databases Alembic has
