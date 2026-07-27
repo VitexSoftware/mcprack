@@ -302,10 +302,11 @@ def override(server_id):
     )
 
 
-def _build_client_config_json(client):
-    """Resolve the current user's selected+enabled servers into a rendered
-    client config, as a pretty-printed JSON string. Returns None (with a
-    flash already set) if there's nothing selected, or `client` is unknown.
+def _build_client_config_json(client, user=None):
+    """Resolve `user`'s (default: the current user) selected+enabled servers
+    into a rendered client config, as a pretty-printed JSON string. Returns
+    None (with a flash already set) if there's nothing selected, or `client`
+    is unknown.
 
     Users always connect remotely: a stdio-implemented server (no network
     url of its own) is never spawned by the client directly — it always
@@ -315,15 +316,17 @@ def _build_client_config_json(client):
     network url (already-running, externally reachable services) need their
     auth header resolved eagerly, right here, to embed in the config.
     """
+    if user is None:
+        user = current_user
     if client not in RENDERERS:
         abort(404)
     render_fn, filename = RENDERERS[client]
 
-    allowed_ids = _allowed_enabled_server_ids(current_user.id)
+    allowed_ids = _allowed_enabled_server_ids(user.id)
     selected = (
         McpServer.query.join(UserServerSelection)
         .filter(
-            UserServerSelection.user_id == current_user.id,
+            UserServerSelection.user_id == user.id,
             McpServer.enabled.is_(True),
             McpServer.id.in_(allowed_ids),
         )
@@ -341,7 +344,7 @@ def _build_client_config_json(client):
             clean_url = None if raw_url.lower() in {"", "none", "null"} else raw_url
 
             if clean_url:
-                env = secret_store.resolve_server_env(server, user=current_user)
+                env = secret_store.resolve_server_env(server, user=user)
             else:
                 env = {}
 
@@ -367,7 +370,7 @@ def _build_client_config_json(client):
 
     for i, server in enumerate(selected):
         if not entries[i].get("url") and server.command:
-            token = _make_proxy_token(current_user.id, server.id)
+            token = _make_proxy_token(user.id, server.id)
             relay_url = url_for(
                 "catalog.user_proxy_mcp",
                 token=token,

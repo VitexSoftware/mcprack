@@ -1,7 +1,8 @@
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for, Response
 from datetime import datetime
 
 import audit
+import catalog
 import detection
 import health
 import appstream_icons
@@ -545,6 +546,54 @@ def user_edit(user_id):
         user=user,
         available_servers=available_servers,
         permission_map=permission_map,
+        clients=list(catalog.RENDERERS.keys()),
+    )
+
+
+@bp.route("/users/<int:user_id>/config/<client>")
+@admin_required
+def user_config_view(user_id, client):
+    target_user = db.get_or_404(User, user_id)
+    config_json, filename = catalog._build_client_config_json(client, user=target_user)
+    if config_json is None:
+        return redirect(url_for("admin.user_edit", user_id=user_id))
+
+    return render_template(
+        "admin/user_config_view.html",
+        target_user=target_user,
+        client=client,
+        filename=filename,
+        config_json=config_json,
+    )
+
+
+@bp.route("/users/<int:user_id>/config/<client>/download")
+@admin_required
+def user_config_download(user_id, client):
+    target_user = db.get_or_404(User, user_id)
+    config_json, filename = catalog._build_client_config_json(client, user=target_user)
+    if config_json is None:
+        audit.log_audit_event(
+            "config_download",
+            "error",
+            user=target_user,
+            error_message=(
+                f"no config produced for client '{client}' "
+                f"(requested by admin '{current_user.username}')"
+            ),
+        )
+        return redirect(url_for("admin.user_edit", user_id=user_id))
+
+    audit.log_audit_event(
+        "config_download",
+        "success",
+        user=target_user,
+        error_message=f"downloaded by admin '{current_user.username}'",
+    )
+    return Response(
+        config_json,
+        mimetype="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
 
 

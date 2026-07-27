@@ -59,6 +59,14 @@
   {% else %}
   <p>No enabled servers available.</p>
   {% endif %}
+
+  <h2>Client configs</h2>
+  <p>View or download this user's MCP client config directly — useful for users who never log in themselves.</p>
+  <ul>
+    {% for client in clients %}
+    <li><a href="{{ url_for('admin.user_config_view', user_id=user.id, client=client) }}">{{ client }}</a></li>
+    {% endfor %}
+  </ul>
   {% endif %}
 
   <button type="submit">Save</button>

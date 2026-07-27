@@ -1,3 +1,11 @@
+mcprack (0.2.7) unstable; urgency=medium
+
+  * Add admin config hand-off: view/download other users' MCP client
+    configs from Admin -> Users, for users who never log into the web
+    UI.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 11:57:49 +0200
+
 mcprack (0.2.6) unstable; urgency=medium
 
   * Fix a race in the per-user MCP proxy spawn-on-demand path: concurrent

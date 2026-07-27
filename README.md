@@ -66,6 +66,7 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 - **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed
 - **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden, or locally encrypted if Vaultwarden isn't configured)
 - **Multi-client support** — Generate configs for Claude Desktop, GitHub Copilot, and other MCP-compatible clients
+- **Admin config hand-off** — Admins can view and download any user's client config from Admin → Users, for users who never log into the web UI themselves
 - **Per-user proxy** — Every user connects remotely; stdio servers are spawned on demand, one isolated instance per (user, server) pair, with credentials resolved at spawn time — never embedded in a downloaded config
 - **Vaultwarden integration** — Leverages the same `bw-cli` / Secure Note pattern used by the `mcp_rack` Ansible role
 - **Works without Vaultwarden too** — If it's not configured, sensitive values fall back to a local Fernet-encrypted column instead; admins can migrate between the two deliberately from Admin → Vaultwarden diagnostics
