@@ -37,6 +37,9 @@ case "$1" in
     dbc_dbfile_perms=0640
 
     if [ -f /usr/share/dbconfig-common/dpkg/postinst ]; then
+      if [ -f /usr/share/debconf/confmodule ]; then
+        . /usr/share/debconf/confmodule
+      fi
       . /usr/share/dbconfig-common/dpkg/postinst
       dbc_go mcprack "$@"
     fi

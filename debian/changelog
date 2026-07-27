@@ -1,3 +1,11 @@
+mcprack (0.2.8) unstable; urgency=medium
+
+  * Fix postinst: source /usr/share/debconf/confmodule before calling
+    dbc_go, fixing 'db_get: not found' failures during package
+    configuration.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 13:19:05 +0200
+
 mcprack (0.2.7) unstable; urgency=medium
 
   * Add admin config hand-off: view/download other users' MCP client
