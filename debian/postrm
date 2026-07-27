@@ -5,6 +5,9 @@ dbc_dbtypes="sqlite3, pgsql, mysql"
 dbc_basepath=/var/lib/mcprack
 
 if [ -f /usr/share/dbconfig-common/dpkg/postrm ]; then
+    if [ -f /usr/share/debconf/confmodule ]; then
+        . /usr/share/debconf/confmodule
+    fi
     . /usr/share/dbconfig-common/dpkg/postrm
     dbc_go mcprack "$@"
 fi

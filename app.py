@@ -1,5 +1,6 @@
 import click
 from flask import current_app, Flask
+from sqlalchemy import inspect
 
 from config import Config
 from extensions import db, login_manager, migrate
@@ -27,7 +28,14 @@ def create_app(config_object=Config):
 
     import models  # noqa: F401 - Register models for table creation
     with app.app_context():
-        db.create_all()
+        # Once Alembic has taken ownership of this database (alembic_version
+        # exists), let `flask db upgrade` own all schema evolution. Calling
+        # create_all() here too would create tables for any model whose
+        # migration hasn't run yet, so that migration then fails with
+        # "table already exists" the moment it does run. Only bootstrap via
+        # create_all() for a database Alembic has never touched.
+        if not inspect(db.engine).has_table("alembic_version"):
+            db.create_all()
 
     from version import get_version
 

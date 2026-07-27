@@ -1,3 +1,16 @@
+mcprack (0.2.10) unstable; urgency=medium
+
+  * Only run db.create_all() as a fallback for databases Alembic has
+    never touched. Previously it ran unconditionally on every app boot,
+    including inside 'flask db upgrade', so it would create a model's
+    table before Alembic's own migration for that table got a chance to
+    run -- causing the migration to fail with 'table already exists'
+    (seen with audit_log_entries).
+  * Fix the same missing debconf confmodule sourcing in postrm (same
+    root cause as the postinst fix in 0.2.8).
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Mon, 27 Jul 2026 13:27:11 +0200
+
 mcprack (0.2.9) unstable; urgency=medium
 
   * Depend explicitly on debconf (| debconf-2.0), since postinst now
