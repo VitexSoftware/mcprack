@@ -82,6 +82,44 @@ Then start the service:
     systemctl enable --now mcprack.service
 
 
+## Troubleshooting
+
+### "Permission denied" reading /etc/mcprack/env during postinst
+
+Packages built before 0.2.13 created `/etc/mcprack/env` mode `0600`
+(owner-only), so despite the `root:mcprack` group ownership the `mcprack`
+system user couldn't actually read it. Postinst's own `flask db upgrade`
+and `create-admin` steps run as that user, so they failed silently with:
+
+    sh: 1: .: cannot open /etc/mcprack/env: Permission denied
+    ⚠  Database migration failed — check /etc/mcprack/env and run 'flask db upgrade' manually
+    ⚠  Failed to create initial admin account — create one manually with 'flask create-admin'
+
+0.2.14 fixes this going forward (permissions are corrected unconditionally
+on every postinst run, not just on first install), but an install that hit
+this under an older package needs a one-time manual fix:
+
+    sudo chmod 0640 /etc/mcprack/env
+    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db upgrade"
+    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask create-admin"
+
+### "table already exists" from `flask db upgrade`
+
+If the service ever started successfully *before* migrations ever ran
+(e.g. while hitting the permission bug above, on a package older than
+0.2.15), `db.create_all()`'s startup fallback already created every table
+without recording an Alembic version. A later `flask db upgrade` then
+tries to run the very first migration from scratch and fails:
+
+    sqlalchemy.exc.OperationalError: (pymysql.err.OperationalError) (1050, "Table 'mcp_servers' already exists")
+
+0.2.15 stamps Alembic to head right after that fallback runs, so this
+shouldn't happen on fresh bootstraps going forward. If you're recovering
+an install that already hit it, tell Alembic the schema is current instead
+of trying to upgrade it:
+
+    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db stamp head"
+
 ## MCP HTTP Proxy (how remote clients reach stdio servers)
 
 Users always connect remotely — mcprack never expects its own web UI and a
