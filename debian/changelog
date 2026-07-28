@@ -1,3 +1,16 @@
+mcprack (0.2.19) unstable; urgency=medium
+
+  * Raise HANDSHAKE_TIMEOUT default 12s -> 15s (and LOCK_WAIT_TIMEOUT
+    20s -> 22s to match): live-verified on mcprack.vitexsoftware.com
+    that 12s was not a safe margin for every backend -- a cold spawn of
+    a server that does its own outbound auth handshake as part of
+    startup (multiflexi-mcp-server, against a remote API) succeeded at
+    11.2s in one run and hit the 12s ceiling and failed in another. 15s
+    leaves real headroom while staying comfortably under gunicorn's 30s
+    worker timeout.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 19:30:29 +0200
+
 mcprack (0.2.18) unstable; urgency=medium
 
   * Raise the per-user proxy handshake timeout from a hardcoded 5s to a
