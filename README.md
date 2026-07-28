@@ -18,7 +18,7 @@
 
 mcprack is a centralized platform for managing and distributing MCP (Model Context Protocol) server configurations across your organization. It solves the problem of how to securely provision AI clients (Claude Desktop, GitHub Copilot, and other MCP-compatible tools) with access to multiple backend services — without hardcoding secrets or requiring manual configuration on each machine.
 
-🔗 **[Try the live demo](https://mcprack.vitexsoftware.com/?username=demo&password=demo)** (username/password prefilled: `demo` / `demo`)
+🔗 **[Try the live demo](https://mcprack.vitexsoftware.com/login?username=demo&password=demo)** (username/password prefilled: `demo` / `demo`)
 
 ![MCP Server Catalog](MCP_Server_Catalog_mcprack.png)
 
@@ -68,7 +68,7 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 ## Demo mode
 
 Set `DEMO_MODE=true` in `/etc/mcprack/env` for a public-facing instance (like the
-[live demo](https://mcprack.vitexsoftware.com/?username=demo&password=demo)).
+[live demo](https://mcprack.vitexsoftware.com/login?username=demo&password=demo)).
 Everything works normally — browsing the catalog, selecting servers, downloading
 configs, and viewing a registered server's configuration (Admin → Servers →
 edit) — except actually registering, editing, or deleting one, which is
