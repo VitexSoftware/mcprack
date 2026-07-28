@@ -137,9 +137,15 @@ BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
 BW_BIN=/usr/bin/bw
 ENV_FILE
       
-      chmod 0640 /etc/mcprack/env
-      chown root:mcprack /etc/mcprack/env
     fi
+
+    # Fix up permissions unconditionally, not just on first creation above --
+    # upgrades from packages built before 0.2.13 left /etc/mcprack/env
+    # chmod 0600 (owner-only), which the mcprack system user can't read
+    # despite the root:mcprack chown, breaking the migration/create-admin
+    # steps below on every subsequent upgrade too.
+    chmod 0640 /etc/mcprack/env
+    chown root:mcprack /etc/mcprack/env
 
     # Reload systemd
     if [ -d /run/systemd/system ]; then

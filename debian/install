@@ -22,4 +22,5 @@ static/* /usr/lib/mcprack/static/
 migrations/* /usr/lib/mcprack/migrations/
 debian/mcprack.service /usr/lib/mcprack/
 bin/mcprack /usr/bin/
-debian/mcprack.metainfo.xml /usr/share/metainfo/
+debian/cz.vitexsoftware.mcprack.metainfo.xml /usr/share/metainfo/
+static/mcprack-app-icon.svg /usr/share/icons/hicolor/scalable/apps/

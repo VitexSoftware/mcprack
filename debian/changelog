@@ -1,3 +1,21 @@
+mcprack (0.2.14) unstable; urgency=medium
+
+  * Fix 0.2.13's env-permission fix not applying on upgrade: chmod/chown
+    of /etc/mcprack/env only ran inside the 'file doesn't exist yet'
+    branch, so upgrades from pre-0.2.13 packages kept the broken 0600
+    perms and still failed db upgrade / create-admin. Now applied
+    unconditionally on every postinst configure.
+  * Fix AppStream metadata: rename mcprack.metainfo.xml to
+    cz.vitexsoftware.mcprack.metainfo.xml to match the component's
+    <id>, per spec. Fix the <icon type="stock"> reference ("mcp-logo")
+    which named an icon nothing installed anywhere; now ships and
+    installs static/mcprack-app-icon.svg to
+    /usr/share/icons/hicolor/scalable/apps/ under a matching stock
+    name. Also repoint the broken screenshot URL at the file that
+    actually exists in the repo.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 03:26:43 +0200
+
 mcprack (0.2.13) unstable; urgency=medium
 
   * Fix /etc/mcprack/env being created 0600 (owner-only), which left the
