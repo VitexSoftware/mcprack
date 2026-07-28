@@ -36,7 +36,7 @@ mcprack provides:
 2. **User Catalog** — Browse available servers, select which ones you need, choose your target client (Claude, Copilot, etc.)
 3. **Config Generator** — Automatically builds a `.json` or `.env` config file tailored to each user with their chosen servers
 4. **Credential Management** — Credentials never stored in mcprack's DB; every secret lives in Vaultwarden (optional override per user)
-5. **HTTP Proxy** (optional) — Expose stdio-based MCP servers over HTTP so remote clients can access them
+5. **HTTP Proxy** — Every stdio-based MCP server is exposed over HTTP by default, so remote clients can reach it; there's no local-spawn mode and no separate proxy service to deploy
 
 ### Typical Workflow
 
