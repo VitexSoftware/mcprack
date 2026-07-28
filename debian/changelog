@@ -1,3 +1,12 @@
+mcprack (0.2.13) unstable; urgency=medium
+
+  * Fix /etc/mcprack/env being created 0600 (owner-only), which left the
+    mcprack system user unable to read its own env file despite the
+    root:mcprack chown — broke db upgrade and create-admin during
+    postinst. Now 0640.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 03:15:48 +0200
+
 mcprack (0.2.12) unstable; urgency=medium
 
   * Fix dpkg configure failure ('Multiple database support detected...

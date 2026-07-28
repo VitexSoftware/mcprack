@@ -137,7 +137,7 @@ BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
 BW_BIN=/usr/bin/bw
 ENV_FILE
       
-      chmod 0600 /etc/mcprack/env
+      chmod 0640 /etc/mcprack/env
       chown root:mcprack /etc/mcprack/env
     fi
 
