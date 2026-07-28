@@ -70,8 +70,9 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 Set `DEMO_MODE=true` in `/etc/mcprack/env` for a public-facing instance (like the
 [live demo](https://mcprack.vitexsoftware.com/?username=demo&password=demo)).
 Everything works normally — browsing the catalog, selecting servers, downloading
-configs — except registering, editing, or deleting MCP servers under Admin →
-Servers, which is disabled outright. That's a deliberate restriction, not a
+configs, and viewing a registered server's configuration (Admin → Servers →
+edit) — except actually registering, editing, or deleting one, which is
+disabled outright (the edit page renders read-only instead). That's a deliberate restriction, not a
 missing feature: a server's `command` is executed as-is whenever any user
 connects to it, so letting an untrusted public admin account change it would
 be full code execution as the mcprack service account. Restart the service

@@ -4,6 +4,11 @@
 
 <section class="section">
   <h1>🔧 {{ "Edit" if server else "Register" }} MCP server</h1>
+  {% if demo_mode %}
+  <div class="flash-error" style="margin-bottom: var(--space-lg);">
+    Read-only on this public demo instance — you can see how this server is configured, but changes can't be saved.
+  </div>
+  {% endif %}
   {% if icon_url %}
   <p style="display: flex; align-items: center; gap: var(--space-sm);">
     <img src="{{ icon_url }}" alt="" class="server-icon" width="32" height="32">
@@ -12,6 +17,7 @@
   {% endif %}
 
   <form method="post">
+  <fieldset {{ "disabled" if demo_mode else "" }} style="border: none; padding: 0; margin: 0;">
     <div class="form-group">
       <label for="name">Name (unique slug)</label>
       <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
@@ -111,7 +117,8 @@
       </label>
     </div>
 
-    <button type="submit" class="btn btn-primary">💾 Save</button>
+    <button type="submit" class="btn btn-primary">{{ "🔒 Read-only" if demo_mode else "💾 Save" }}</button>
+  </fieldset>
   </form>
 </section>
 

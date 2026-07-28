@@ -153,12 +153,12 @@ def server_new():
 @bp.route("/servers/<int:server_id>/edit", methods=["GET", "POST"])
 @admin_required
 def server_edit(server_id):
-    blocked = _demo_mode_blocked()
-    if blocked:
-        return blocked
     server = db.get_or_404(McpServer, server_id)
 
     if request.method == "POST":
+        blocked = _demo_mode_blocked()
+        if blocked:
+            return blocked
         _apply_server_form(server, request.form)
         db.session.commit()
         _invalidate_health_cache()
@@ -185,6 +185,7 @@ def server_edit(server_id):
         server=server,
         env_rows=env_rows,
         icon_url=icon_url,
+        demo_mode=current_app.config.get("DEMO_MODE", False),
     )
 
 

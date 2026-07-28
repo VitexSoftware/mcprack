@@ -48,6 +48,25 @@ def test_demo_mode_blocks_server_edit(app, client):
         assert db.session.get(McpServer, server_id).command == "/bin/true"
 
 
+def test_demo_mode_allows_viewing_server_edit_page(app, client):
+    app.config["DEMO_MODE"] = True
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(name="svc", label="Svc", transport="stdio", command="/bin/true", enabled=True)
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    resp = client.get(f"/admin/servers/{server_id}/edit")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "/bin/true" in body
+    assert "disabled" in body
+    assert "Read-only" in body
+
+
 def test_demo_mode_blocks_server_delete(app, client):
     app.config["DEMO_MODE"] = True
     _login_admin(client)

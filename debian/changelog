@@ -1,3 +1,14 @@
+mcprack (0.2.17) unstable; urgency=medium
+
+  * DEMO_MODE: allow viewing a server's edit page (to see how it's
+    configured) while still blocking the actual save -- previously the
+    edit page redirected away entirely. The form now renders read-only
+    (disabled fields, Save button relabeled) instead of being
+    inaccessible. Registering a new server remains fully blocked (view
+    and save).
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 14:07:24 +0200
+
 mcprack (0.2.16) unstable; urgency=medium
 
   * Add DEMO_MODE config flag: when set, registering/editing/deleting
