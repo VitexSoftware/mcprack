@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![mcprack logo](static/mcprack-icon-composite.svg?raw=true)
+![mcprack logo](social-preview.png?raw=true)
 
 **Model Context Protocol (MCP) Self-Service Catalog & Config Generator**
 
