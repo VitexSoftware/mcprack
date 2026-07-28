@@ -1,3 +1,13 @@
+mcprack (0.2.18) unstable; urgency=medium
+
+  * wsgi.py: wrap the app in werkzeug's ProxyFix (x_proto=1, x_host=1) so
+    it trusts X-Forwarded-Proto/-Host from the Apache reverse proxy.
+    Without it, url_for(..., _external=True) - used for the proxy/mcp
+    URLs handed to MCP clients - generated http:// URLs even when served
+    over https, since the Apache<->gunicorn hop itself is plain HTTP.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 14:30:00 +0200
+
 mcprack (0.2.17) unstable; urgency=medium
 
   * DEMO_MODE: allow viewing a server's edit page (to see how it's
