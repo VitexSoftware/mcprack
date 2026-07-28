@@ -416,6 +416,26 @@ linking anywhere.
 pytest
 ```
 
+## Installation (Debian/Ubuntu package)
+
+mcprack is published as a `.deb` on the VitexSoftware APT repository.
+
+```bash
+sudo apt install lsb-release wget
+sudo wget -O /usr/share/keyrings/vitexsoftware.gpg https://repo.vitexsoftware.com/KEY.gpg
+sudo wget -O /etc/apt/sources.list.d/vitexsoftware.sources https://repo.vitexsoftware.com/vitexsoftware.sources
+sudo apt update
+
+sudo apt install mcprack
+```
+
+The postinst wizard sets up the database via `dbconfig-common` (SQLite,
+PostgreSQL, or MySQL), writes `/etc/mcprack/env`, runs migrations, and
+creates an initial `admin` account (random password saved to
+`/etc/mcprack/admin-credentials`). See `debian/README.Debian` for the
+full post-install configuration steps, and [repo.vitexsoftware.com](https://repo.vitexsoftware.com/)
+for other available packages.
+
 ## Packaging
 
 See `debian/` — builds a `.deb` following the same conventions as other
