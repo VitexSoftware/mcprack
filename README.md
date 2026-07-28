@@ -474,5 +474,21 @@ idle instances are cleaned up automatically after 15 minutes. This needs
 `python3-fastmcp` installed (`apt install python3-fastmcp`) — see Admin →
 Proxy instances for a live list of what's running.
 
+Two env vars in `/etc/mcprack/env` tune the cold-spawn path, if the defaults
+don't fit your hardware:
+
+- `MCP_PROXY_HANDSHAKE_TIMEOUT` (default `12` seconds) — how long to wait for
+  a freshly spawned `fastmcp` process to bind its port and answer a real MCP
+  `initialize` request before giving up and reporting it as broken. Cold
+  starts (fresh Python interpreter, heavy imports) commonly take several
+  seconds; if your proxy instances routinely fail with "failed its startup
+  handshake" even though the registered command is fine, raise this.
+- `MCP_PROXY_LOCK_WAIT_TIMEOUT` (default `20` seconds) — how long a second
+  concurrent request for the same (user, server) pair waits for the first
+  one's spawn to finish before giving up, instead of racing it. Should stay
+  comfortably above `MCP_PROXY_HANDSHAKE_TIMEOUT` plus spawn overhead, and
+  under gunicorn's own 30s worker timeout (`--timeout 30` in
+  `debian/mcprack.service`).
+
 See `debian/README.Debian` for more detail.
 

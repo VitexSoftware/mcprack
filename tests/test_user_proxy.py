@@ -169,7 +169,10 @@ def test_probe_treats_jsonrpc_error_as_unhealthy():
 def test_probe_treats_connection_failure_as_unhealthy():
     with patch("user_proxy.http.client.HTTPConnection") as mock_conn_cls:
         mock_conn_cls.return_value.request.side_effect = ConnectionRefusedError()
-        assert user_proxy._probe_upstream_health(12345) is False
+        # Explicit short timeout -- the retry-on-refused loop runs for the
+        # full timeout budget, and this only needs to prove it eventually
+        # gives up, not exercise the real (now larger) HANDSHAKE_TIMEOUT.
+        assert user_proxy._probe_upstream_health(12345, timeout=0.3) is False
 
 
 def test_probe_treats_clean_result_as_healthy():

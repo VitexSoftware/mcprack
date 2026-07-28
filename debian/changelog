@@ -1,5 +1,20 @@
 mcprack (0.2.18) unstable; urgency=medium
 
+  * Raise the per-user proxy handshake timeout from a hardcoded 5s to a
+    (now env-overridable) 12s default: a cold 'fastmcp run ... --
+    transport http' reliably takes ~6s to bind its port and answer a
+    health probe, which the old 5s budget never allowed for, so every
+    cold spawn on a host this slow failed with a false 'failed its
+    startup handshake' error even though the backend was fine. Also
+    raise LOCK_WAIT_TIMEOUT from 15s to 20s to keep it comfortably above
+    the new handshake budget. Both are now overridable via
+    MCP_PROXY_HANDSHAKE_TIMEOUT / MCP_PROXY_LOCK_WAIT_TIMEOUT in
+    /etc/mcprack/env.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 18:39:47 +0200
+
+mcprack (0.2.18) unstable; urgency=medium
+
   * wsgi.py: wrap the app in werkzeug's ProxyFix (x_proto=1, x_host=1) so
     it trusts X-Forwarded-Proto/-Host from the Apache reverse proxy.
     Without it, url_for(..., _external=True) - used for the proxy/mcp

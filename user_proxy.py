@@ -27,14 +27,23 @@ HEALTH_RECHECK_INTERVAL = 30  # seconds
 # or crash-looping upstream must fail within this window, not hang
 # indefinitely or take an unpredictable number of seconds depending on
 # fastmcp's own internal retry timing.
-HANDSHAKE_TIMEOUT = 5  # seconds
+#
+# A cold `fastmcp run ... --transport http` reliably takes ~6s to finish
+# starting Uvicorn and bind its port before it can answer this probe at
+# all (measured directly: time between the port appearing in `ss -tln`
+# and the "Uvicorn running on ..." log line) -- comfortably above what a
+# single-shot 5s timeout allows for, which made every cold spawn look
+# indistinguishable from a genuinely broken command. Overridable via env
+# var since "how slow is cold start here" is a deployment-specific fact,
+# not a code constant.
+HANDSHAKE_TIMEOUT = int(os.environ.get("MCP_PROXY_HANDSHAKE_TIMEOUT", "12"))  # seconds
 # How long a caller waits for another worker's lock on the same (user,
 # server) pair before giving up — must comfortably exceed a full
 # spawn+handshake cycle (HANDSHAKE_TIMEOUT plus spawn overhead) while
 # staying under gunicorn's own request timeout (30s, see
 # debian/mcprack.service) so a stuck lock surfaces as our own error
 # instead of a bare worker-killed 502.
-LOCK_WAIT_TIMEOUT = 15  # seconds
+LOCK_WAIT_TIMEOUT = int(os.environ.get("MCP_PROXY_LOCK_WAIT_TIMEOUT", "20"))  # seconds
 
 
 class UserProxyError(RuntimeError):

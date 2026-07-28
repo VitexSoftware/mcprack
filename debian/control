@@ -21,6 +21,7 @@ Depends:
  python3-flask-migrate,
  python3-ldap3,
  python3-cryptography,
+ python3-uvicorn (>= 0.34),
  bw-cli,
  gunicorn,
  debconf | debconf-2.0,

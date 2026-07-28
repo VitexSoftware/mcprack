@@ -149,6 +149,17 @@ minutes) are cleaned up automatically; see Admin → Proxy instances for a live
 list, and `python3-fastmcp` must be installed (see Recommends in
 `debian/control`) for this to work.
 
+Cold-spawn timing is tunable via two env vars (see `user_proxy.py`):
+
+    MCP_PROXY_HANDSHAKE_TIMEOUT=12   # seconds to wait for a fresh spawn to answer
+    MCP_PROXY_LOCK_WAIT_TIMEOUT=20   # seconds a concurrent request waits on the spawn lock
+
+If proxy instances fail with "failed its startup handshake" on a slow host
+even though the registered command is fine, the fresh interpreter + import
+cost is likely just exceeding `MCP_PROXY_HANDSHAKE_TIMEOUT` — raise it (and
+`MCP_PROXY_LOCK_WAIT_TIMEOUT` along with it, keeping both comfortably under
+gunicorn's own 30s worker timeout in `debian/mcprack.service`).
+
 
 ## OpenTelemetry (optional — packaging gap on Debian, read before enabling)
 
