@@ -18,6 +18,8 @@
 
 mcprack is a centralized platform for managing and distributing MCP (Model Context Protocol) server configurations across your organization. It solves the problem of how to securely provision AI clients (Claude Desktop, GitHub Copilot, and other MCP-compatible tools) with access to multiple backend services — without hardcoding secrets or requiring manual configuration on each machine.
 
+🔗 **[Try the live demo](https://mcprack.vitexsoftware.com/?username=demo&password=demo)** (username/password prefilled: `demo` / `demo`)
+
 ![MCP Server Catalog](MCP_Server_Catalog_mcprack.png)
 
 ## What mcprack Does

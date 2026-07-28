@@ -131,8 +131,13 @@ def login():
             error_message=f"invalid credentials for '{username}'",
         )
         flash("Invalid username or password.", "error")
+        return render_template("login.html")
 
-    return render_template("login.html")
+    return render_template(
+        "login.html",
+        prefill_username=request.args.get("username", ""),
+        prefill_password=request.args.get("password", ""),
+    )
 
 
 @bp.route("/logout")
