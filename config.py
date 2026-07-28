@@ -33,6 +33,13 @@ class Config:
     )
     BW_BIN = os.environ.get("BW_BIN", "/usr/bin/bw")
 
+    # Public demo mode: catalog browsing/selection and everything else still
+    # works normally, but registering/editing/deleting MCP servers is
+    # blocked, since the "command" an admin sets there is executed as-is
+    # (never sandboxed) whenever any user connects to that server -- not
+    # something a public demo admin account should be able to change.
+    DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() in ("true", "1", "yes")
+
     # How many days of audit_log_entries to keep before `flask audit-archive`
     # exports and purges them. The audit log itself is always on — this only
     # controls the retention window, not whether logging happens.

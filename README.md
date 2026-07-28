@@ -65,6 +65,18 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 
 **Local accounts** are always available. **LDAP/Active Directory** is optional and disabled by default — enable it during installation if you want users to authenticate with AD credentials instead.
 
+## Demo mode
+
+Set `DEMO_MODE=true` in `/etc/mcprack/env` for a public-facing instance (like the
+[live demo](https://mcprack.vitexsoftware.com/?username=demo&password=demo)).
+Everything works normally — browsing the catalog, selecting servers, downloading
+configs — except registering, editing, or deleting MCP servers under Admin →
+Servers, which is disabled outright. That's a deliberate restriction, not a
+missing feature: a server's `command` is executed as-is whenever any user
+connects to it, so letting an untrusted public admin account change it would
+be full code execution as the mcprack service account. Restart the service
+after changing this.
+
 ## Key Features
 
 - **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed

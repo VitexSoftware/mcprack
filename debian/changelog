@@ -1,3 +1,14 @@
+mcprack (0.2.16) unstable; urgency=medium
+
+  * Add DEMO_MODE config flag: when set, registering/editing/deleting
+    MCP servers under Admin -> Servers is blocked, since a server's
+    command is executed as-is whenever a user connects to it -- not
+    something a public demo admin account should be able to change.
+    Everything else (catalog browsing/selection, config download) works
+    normally.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 13:40:22 +0200
+
 mcprack (0.2.15) unstable; urgency=medium
 
   * Stamp alembic to head immediately after the db.create_all()

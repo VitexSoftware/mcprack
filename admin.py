@@ -33,6 +33,16 @@ def _invalidate_health_cache():
     _health_cache_key = None
 
 
+def _demo_mode_blocked():
+    """Call at the top of any route that adds/edits/deletes an MCP server
+    registration. Returns a redirect response if DEMO_MODE is on (nothing
+    else is restricted), or None to let the route proceed."""
+    if not current_app.config.get("DEMO_MODE"):
+        return None
+    flash("This is a public demo instance — registering, editing, and deleting MCP servers is disabled.", "error")
+    return redirect(url_for("admin.servers_list"))
+
+
 def _vaultwarden_ready_for_listing():
     """Cheap pre-check before running expensive `bw` subprocesses.
 
@@ -123,6 +133,9 @@ def servers_list():
 @bp.route("/servers/new", methods=["GET", "POST"])
 @admin_required
 def server_new():
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
     if request.method == "POST":
         server = McpServer(name=request.form["name"])
         _apply_server_form(server, request.form)
@@ -140,6 +153,9 @@ def server_new():
 @bp.route("/servers/<int:server_id>/edit", methods=["GET", "POST"])
 @admin_required
 def server_edit(server_id):
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
     server = db.get_or_404(McpServer, server_id)
 
     if request.method == "POST":
@@ -250,6 +266,9 @@ def _apply_server_form(server, form):
 @bp.route("/servers/autodetect", methods=["POST"])
 @admin_required
 def servers_autodetect():
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
     detected = detection.detect_local_mcp_servers()
     existing_names = {s.name for s in McpServer.query.all()}
 
@@ -300,6 +319,9 @@ def servers_autodetect():
 @bp.route("/servers/<int:server_id>/delete", methods=["POST"])
 @admin_required
 def server_delete(server_id):
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
     server = db.get_or_404(McpServer, server_id)
     server_name = server.name
     db.session.delete(server)

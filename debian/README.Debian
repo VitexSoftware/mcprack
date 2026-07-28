@@ -36,6 +36,16 @@ Configuration lives in `/etc/mcprack/env`. Required variables:
     # Normally you don't set this by hand — `dpkg-reconfigure mcprack` drives
     # dbconfig-common to pick the engine and (re)write this value.
 
+### Demo mode (optional, off by default)
+
+    DEMO_MODE=true
+
+For a public-facing instance: blocks registering/editing/deleting MCP servers
+under Admin -> Servers (a server's `command` runs as-is whenever any user
+connects to it, so this isn't something a public admin account should be able
+to change), while catalog browsing/selection/config download keep working
+normally. Restart the service after changing this.
+
 ### Authentication (optional, LDAP disabled by default)
 
     LDAP_ENABLED=false
