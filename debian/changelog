@@ -1,3 +1,16 @@
+mcprack (0.2.15) unstable; urgency=medium
+
+  * Stamp alembic to head immediately after the db.create_all()
+    bootstrap fallback, not just skip it once alembic_version exists.
+    Previously a bootstrapped database (create_all() ran because
+    alembic_version was missing, e.g. because an earlier postinst bug
+    prevented 'flask db upgrade' from ever running) was left with no
+    alembic_version row at all, so the next 'flask db upgrade' tried to
+    run the very first migration from scratch and failed with 'table
+    already exists'.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 03:29:27 +0200
+
 mcprack (0.2.14) unstable; urgency=medium
 
   * Fix 0.2.13's env-permission fix not applying on upgrade: chmod/chown

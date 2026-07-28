@@ -1,5 +1,6 @@
 import click
 from flask import current_app, Flask
+from flask_migrate import stamp
 from sqlalchemy import inspect
 
 from config import Config
@@ -33,9 +34,13 @@ def create_app(config_object=Config):
         # create_all() here too would create tables for any model whose
         # migration hasn't run yet, so that migration then fails with
         # "table already exists" the moment it does run. Only bootstrap via
-        # create_all() for a database Alembic has never touched.
+        # create_all() for a database Alembic has never touched -- and stamp
+        # it to head immediately after, so a later `flask db upgrade` sees
+        # the schema as already current instead of trying to recreate it
+        # from the first migration and colliding on "table already exists".
         if not inspect(db.engine).has_table("alembic_version"):
             db.create_all()
+            stamp()
 
     from version import get_version
 
