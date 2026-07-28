@@ -1,3 +1,12 @@
+mcprack (0.2.12) unstable; urgency=medium
+
+  * Fix dpkg configure failure ('Multiple database support detected...
+    missing Depends') by depending on dbconfig-sqlite3 | dbconfig-pgsql
+    | dbconfig-mysql instead of only Suggesting them, so dbconfig-common
+    always has a backend actually installed to detect.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 28 Jul 2026 02:07:15 +0200
+
 mcprack (0.2.11) unstable; urgency=medium
 
   * Fix cold-start proxy spawns failing the startup handshake: the
