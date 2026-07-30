@@ -1,0 +1,9 @@
+services:
+  mcprack-demo:
+    build: .
+    image: mcprack-demo:latest
+    container_name: mcprack-demo
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - ./env
