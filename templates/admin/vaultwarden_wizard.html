@@ -44,6 +44,7 @@ restart the mcprack service, then re-run this diagnostics page.</small></p>
 
   <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-top: var(--space-md);">
     <form method="post" action="{{ url_for('admin.vaultwarden_migrate_to_vaultwarden') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary" {{ "disabled" if not vaultwarden_configured else "" }}>
         ⬆️ Move local secrets into Vaultwarden
       </button>
@@ -54,6 +55,7 @@ restart the mcprack service, then re-run this diagnostics page.</small></p>
     </form>
 
     <form method="post" action="{{ url_for('admin.vaultwarden_snapshot_to_local') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-secondary" {{ "disabled" if not vaultwarden_configured else "" }}>
         ⬇️ Snapshot Vaultwarden secrets locally
       </button>

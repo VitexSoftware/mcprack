@@ -78,6 +78,35 @@ connects to it, so letting an untrusted public admin account change it would
 be full code execution as the mcprack service account. Restart the service
 after changing this.
 
+## Security considerations for public-internet deployments
+
+mcprack ships hardened by default (CSRF protection, rate-limited login,
+secure session cookies, security headers, a `SECRET_KEY` startup guard) and
+`debian/mcprack.service`/`debian/apache-mcprack.conf` add systemd sandboxing
+and a sample TLS-terminating reverse proxy — see `debian/README.Debian`'s
+"Exposing mcprack to the public internet" section for the concrete
+configuration. Two risks remain that configuration alone doesn't close:
+
+- **Proxy token revocation**: the per-user MCP proxy URLs handed to clients
+  (`catalog.py`'s `_make_proxy_token`) are signed, time-limited bearer
+  tokens (24h) with no revocation list — a leaked token (e.g. a shared
+  config file) stays valid until it expires or an admin manually stops that
+  proxy instance from Admin → Proxy instances. Treat a downloaded client
+  config file as a credential.
+- **Admin account compromise = code execution**: a registered MCP server's
+  `command` runs as-is (see Demo mode above) as the `mcprack` OS account, so
+  a compromised admin account is equivalent to arbitrary code execution as
+  that account. Use strong admin passwords, rotate/delete the
+  installer-generated `/etc/mcprack/admin-credentials` password after first
+  login, and rely on the systemd hardening in `debian/mcprack.service` as
+  the containment boundary — it isn't a full per-command sandbox.
+
+**Future improvement worth considering**: optional OAuth/OIDC login for
+users (e.g. via `authlib`) alongside the existing local/LDAP auth would
+further reduce brute-force exposure and enable SSO. It's a larger, separate
+feature (client registration, redirect flow, mapping external identities
+onto the `User` model) and isn't implemented yet.
+
 ## Key Features
 
 - **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed

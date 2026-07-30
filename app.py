@@ -1,19 +1,60 @@
 import click
-from flask import current_app, Flask
+from flask import current_app, Flask, request
 from flask_migrate import stamp
 from sqlalchemy import inspect
 
 from config import Config
-from extensions import db, login_manager, migrate
+from extensions import csrf, db, limiter, login_manager, migrate
+from secret_store import INSECURE_DEFAULT_SECRET_KEY
+
+
+def _enforce_secret_key(app):
+    """Refuse to boot in production with the well-known insecure default
+    SECRET_KEY - it signs Flask sessions and per-user proxy tokens
+    (catalog.py's _proxy_serializer), so running with it is equivalent to
+    having no session/token security at all. Mirrors secret_store.py's own
+    guard for the local encrypted-secrets Fernet key."""
+    if app.config.get("DEBUG") or app.config.get("TESTING"):
+        return
+    key = app.config.get("SECRET_KEY", "")
+    if not key or key == INSECURE_DEFAULT_SECRET_KEY:
+        raise RuntimeError(
+            "Refusing to start: SECRET_KEY is unset or still the insecure default "
+            "('dev-insecure-secret-change-me'). Set a real SECRET_KEY in "
+            "/etc/mcprack/env before starting mcprack - it signs sessions and "
+            "per-user proxy tokens, so treat it like a password."
+        )
 
 
 def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
+    _enforce_secret_key(app)
 
     db.init_app(app)
     migrate.init_app(app, db)
     login_manager.init_app(app)
+    csrf.init_app(app)
+    limiter.init_app(app)
+
+    @app.after_request
+    def _set_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; script-src 'self'",
+        )
+        # Only makes sense once we know we're actually behind HTTPS (i.e.
+        # ProxyFix's x_proto=1 saw X-Forwarded-Proto: https) - setting it
+        # unconditionally would be wrong for a plain-HTTP intranet install.
+        if request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
+        return response
 
     from auth import bp as auth_bp
     from admin import bp as admin_bp

@@ -11,6 +11,7 @@
       ➕ Register New Server
     </a>
     <form method="post" action="{{ url_for('admin.servers_autodetect') }}" class="inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-secondary">
         🔍 Autodetect Local Servers
       </button>
@@ -69,6 +70,7 @@
             <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">Edit</a>
             {% if not server.url %}
             <form class="inline" method="post" action="{{ url_for('admin.server_test_stdio', server_id=server.id) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-secondary" title="Actually start the command briefly to catch runtime-broken registrations (e.g. a missing dependency) that 'file exists and is executable' alone can't.">
                 🩺 Test
               </button>
@@ -76,6 +78,7 @@
             {% endif %}
             <form class="inline" method="post" action="{{ url_for('admin.server_delete', server_id=server.id) }}"
                   onsubmit="return confirm('Delete &quot;{{ server.name }}&quot;?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-danger">Delete</button>
             </form>
           </td>

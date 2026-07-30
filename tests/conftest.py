@@ -11,6 +11,7 @@ class TestConfig(Config):
     SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
     SECRET_KEY = "test-secret"
     WTF_CSRF_ENABLED = False
+    RATELIMIT_ENABLED = False
     BW_SERVER = "https://vault.example.test"
     BW_CLIENTID = "test-client-id"
     BW_CLIENTSECRET = "test-client-secret"

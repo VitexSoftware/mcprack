@@ -7,7 +7,7 @@ from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
 import audit
-from extensions import db, login_manager
+from extensions import db, limiter, login_manager
 from models import User
 
 bp = Blueprint("auth", __name__)
@@ -77,6 +77,7 @@ def _ldap_authenticate(username, password):
 
 
 @bp.route("/login", methods=["GET", "POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
 def login():
     if current_user.is_authenticated:
         return redirect(url_for("catalog.index"))
@@ -133,10 +134,15 @@ def login():
         flash("Invalid username or password.", "error")
         return render_template("login.html")
 
+    # The GET query-param prefill only exists for the public demo link
+    # (README's "Demo mode" section) - honoring it outside DEMO_MODE would
+    # mean a real password could end up in the URL, browser history, and
+    # server access logs.
+    demo_mode = current_app.config["DEMO_MODE"]
     return render_template(
         "login.html",
-        prefill_username=request.args.get("username", ""),
-        prefill_password=request.args.get("password", ""),
+        prefill_username=request.args.get("username", "") if demo_mode else "",
+        prefill_password=request.args.get("password", "") if demo_mode else "",
     )
 
 

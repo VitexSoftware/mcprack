@@ -1,3 +1,31 @@
+mcprack (0.3.0) unstable; urgency=medium
+
+  * Harden mcprack for public-internet deployment: CSRF protection
+    (Flask-WTF) on every state-changing form, rate-limited /login
+    (Flask-Limiter), secure/httponly/samesite session cookies, security
+    headers (CSP, X-Frame-Options, HSTS) via a new after_request hook,
+    and a startup guard refusing to boot with the insecure default
+    SECRET_KEY.
+  * Add STRICT_SERVER_PERMISSIONS flag for fail-closed per-user MCP
+    server access (default off, preserves existing installs).
+  * Gate the /login query-param username/password prefill behind
+    DEMO_MODE, so it can't leak a real password into browser history or
+    access logs outside the public demo.
+  * Fix ProxyFix to also trust X-Forwarded-For (x_for=1), so audit log
+    entries record the real client IP instead of the reverse proxy's.
+  * Add systemd sandboxing directives to mcprack.service
+    (ProtectSystem=strict, resource limits, etc.), transitively
+    containing spawned per-user MCP proxy subprocesses.
+  * Add a sample Apache reverse-proxy vhost (debian/apache-mcprack.conf)
+    covering TLS, HSTS, and forwarded headers, shipped as package
+    documentation.
+  * Document known internet-deployment limitations (proxy token
+    revocation, admin-compromise blast radius) and note optional
+    OAuth/OIDC login as a future improvement, in README and
+    debian/README.Debian.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Thu, 30 Jul 2026 18:16:23 +0200
+
 mcprack (0.2.19) unstable; urgency=medium
 
   * Raise HANDSHAKE_TIMEOUT default 12s -> 15s (and LOCK_WAIT_TIMEOUT

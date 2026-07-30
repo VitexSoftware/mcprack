@@ -29,7 +29,10 @@ from flask import current_app
 import vaultwarden
 
 _KEY_SALT = b"mcprack-secret-storage-v1"
-_INSECURE_DEFAULT_SECRET_KEY = "dev-insecure-secret-change-me"
+
+# Shared with app.py's startup guard - the one literal string that means
+# "nobody has set a real SECRET_KEY yet" everywhere it's checked.
+INSECURE_DEFAULT_SECRET_KEY = "dev-insecure-secret-change-me"
 
 
 class SecretStoreError(RuntimeError):
@@ -48,7 +51,7 @@ def _fernet_for_key(secret_key):
 
 def _fernet():
     secret_key = current_app.config.get("SECRET_KEY", "")
-    if not secret_key or secret_key == _INSECURE_DEFAULT_SECRET_KEY:
+    if not secret_key or secret_key == INSECURE_DEFAULT_SECRET_KEY:
         raise SecretStoreError(
             "Cannot use local encrypted secret storage: SECRET_KEY is unset or still the "
             "insecure default ('dev-insecure-secret-change-me'). Set a real SECRET_KEY in "

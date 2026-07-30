@@ -94,7 +94,7 @@ def test_local_encryption_roundtrip(app):
 def test_local_storage_refuses_insecure_default_secret_key(app):
     with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
         server = _server()
-        app.config["SECRET_KEY"] = secret_store._INSECURE_DEFAULT_SECRET_KEY
+        app.config["SECRET_KEY"] = secret_store.INSECURE_DEFAULT_SECRET_KEY
         try:
             with pytest.raises(secret_store.SecretStoreError):
                 secret_store.save_server_secrets(server, {"AUTH_TOKEN": "x"})

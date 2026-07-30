@@ -14,6 +14,7 @@
   {% endif %}
 
   <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
       <label for="env_text">Credentials (KEY=value format, one per line)</label>
       <textarea id="env_text" name="env_text" placeholder="EXAMPLE_API_KEY=your-key-here&#10;EXAMPLE_PASSWORD=your-password-here">{{ env_text }}</textarea>

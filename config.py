@@ -8,6 +8,41 @@ class Config:
     
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-secret-change-me")
 
+    # --- Session / cookie hardening ---
+    # SECURE defaults to true: an internet-facing mcprack must sit behind a
+    # TLS-terminating reverse proxy (see wsgi.py's ProxyFix and
+    # debian/apache-mcprack.conf) so the browser actually sees an https://
+    # origin - otherwise it silently refuses to send the cookie back. A
+    # plain-HTTP intranet deployment with no reverse proxy in front must set
+    # SESSION_COOKIE_SECURE=false in /etc/mcprack/env.
+    SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "true").lower() in ("true", "1", "yes")
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    PERMANENT_SESSION_LIFETIME = int(os.environ.get("SESSION_LIFETIME_SECONDS", str(8 * 3600)))
+
+    # --- CSRF (Flask-WTF) ---
+    WTF_CSRF_TIME_LIMIT = None
+
+    # --- Rate limiting (Flask-Limiter) ---
+    # memory:// is per gunicorn worker, so the effective ceiling across the
+    # 4 workers configured in debian/mcprack.service is LOGIN_RATE_LIMIT x 4.
+    # Point RATELIMIT_STORAGE_URI at a shared redis:// backend for a single
+    # global limit across all workers.
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+    LOGIN_RATE_LIMIT = os.environ.get("LOGIN_RATE_LIMIT", "10 per minute;50 per hour")
+
+    # --- Request body size cap ---
+    MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(2 * 1024 * 1024)))
+
+    # --- Per-user MCP server access control ---
+    # False (default) preserves existing installs' behavior: a user with no
+    # UserServerPermission rows at all sees every enabled server. Set true
+    # for a fail-closed internet-facing deployment - but only after
+    # confirming every user (including admins) has been explicitly granted
+    # access to the servers they need via Admin -> Users, since flipping
+    # this with no permission rows granted locks everyone out of everything.
+    STRICT_SERVER_PERMISSIONS = os.environ.get("STRICT_SERVER_PERMISSIONS", "false").lower() in ("true", "1", "yes")
+
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "SQLALCHEMY_DATABASE_URI", "sqlite:////var/lib/mcprack/mcprack.db"
     )

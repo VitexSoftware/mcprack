@@ -70,6 +70,7 @@ for how to configure this.</p>
   without raising, but a "success" here does not guarantee the Collector actually stored the
   data (that background export path doesn't surface errors synchronously).</p>
   <form method="post" action="{{ url_for('admin.otel_wizard_test') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button type="submit" class="btn btn-primary" {{ "disabled" if not state.enabled else "" }}>
       🔭 Send test span + metric
     </button>

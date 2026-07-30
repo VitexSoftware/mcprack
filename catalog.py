@@ -24,7 +24,7 @@ import telemetry
 import user_proxy
 import vaultwarden
 from config_formats import render_claude_config, render_copilot_config
-from extensions import db
+from extensions import csrf, db
 from models import (
     McpServer,
     User,
@@ -137,9 +137,13 @@ def _forward_to_user_proxy(port, server_name=None):
 
 
 def _allowed_enabled_server_ids(user_id):
+    from flask import current_app
+
     enabled_ids = {s.id for s in McpServer.query.filter_by(enabled=True).all()}
     permission_rows = UserServerPermission.query.filter_by(user_id=user_id).all()
     if not permission_rows:
+        if current_app.config["STRICT_SERVER_PERMISSIONS"]:
+            return set()
         return enabled_ids
 
     allowed = {row.server_id for row in permission_rows if row.is_allowed}
@@ -220,6 +224,13 @@ def user_proxy_mcp(token, server_id):
         return _jsonrpc_error_response(request_id, str(exc))
 
     return _forward_to_user_proxy(port, server_name=server.name)
+
+
+# Bearer-token authenticated (the signed token in the URL path), not
+# session-cookie authenticated - CSRF protection has nothing to add here
+# since there's no ambient credential for a forged cross-site request to
+# ride on, and remote MCP clients reconnecting to this URL never send one.
+csrf.exempt(user_proxy_mcp)
 
 
 @bp.route("/selection", methods=["POST"])

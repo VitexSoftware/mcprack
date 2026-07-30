@@ -3,6 +3,7 @@
 {% block content %}
 <h1>{{ "Edit" if user else "Create local" }} user</h1>
 <form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if not user %}
   <label for="username">Username</label>
   <input type="text" id="username" name="username" required autofocus>

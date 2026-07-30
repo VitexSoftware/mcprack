@@ -42,6 +42,7 @@
 
 <section class="section">
   <form method="post" action="{{ url_for('catalog.selection') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <h2>Available Servers</h2>
 
     {% if servers %}

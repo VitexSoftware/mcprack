@@ -21,5 +21,58 @@ ExecStart=/usr/bin/gunicorn \
 Restart=always
 RestartSec=5
 
+# --- Process/privilege hardening -------------------------------------------
+# Spawned fastmcp child processes (user_proxy.py's Popen, one per
+# user/server pair) are forked from the gunicorn worker running inside this
+# unit's cgroup, so every directive below applies transitively to them too -
+# start_new_session=True in user_proxy.py only detaches signal delivery, it
+# does not escape the mount namespace, seccomp filter, or cgroup resource
+# limits systemd establishes here. This is the main containment boundary
+# against a compromised admin account registering a malicious
+# McpServer.command (see README's security considerations section).
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+RemoveIPC=true
+UMask=0077
+
+# ProtectSystem=strict makes most of the filesystem read-only except
+# StateDirectory (/var/lib/mcprack, already declared above) and anything
+# listed here - the access/error log paths passed to gunicorn need this.
+ReadWritePaths=/var/log/mcprack
+
+# Deliberately NOT setting SystemCallFilter narrower than @system-service,
+# IPAddressDeny/IPAddressAllow, or MemoryDenyWriteExecute here: registered
+# MCP server commands are arbitrary and admin-controlled (some legitimately
+# need outbound internet access to third-party APIs, some may be
+# Node.js/JIT-based), so a stricter profile risks silently breaking them.
+# See debian/README.Debian for an optional stricter network-egress profile
+# for installs where every registered server's needs are known.
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Resource limits: contain a runaway or malicious registered command from
+# exhausting the host (denial-of-service via forkbomb/memory leak). Sized
+# generously for normal multi-user proxy operation - tune per deployment.
+MemoryMax=2G
+TasksMax=512
+CPUQuota=400%
+LimitNOFILE=4096
+
 [Install]
 WantedBy=multi-user.target

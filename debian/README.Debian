@@ -46,6 +46,47 @@ connects to it, so this isn't something a public admin account should be able
 to change), while catalog browsing/selection/config download keep working
 normally. Restart the service after changing this.
 
+### Exposing mcprack to the public internet
+
+By default mcprack is intranet-oriented. To run it as an internet-facing
+service, in addition to putting a TLS-terminating reverse proxy in front of
+it (see below), review and set as needed:
+
+    SECRET_KEY=<random-string>            # required — see warning below
+    SESSION_COOKIE_SECURE=true            # default; needs the reverse proxy below
+    LOGIN_RATE_LIMIT=10 per minute;50 per hour   # default; per gunicorn worker (x4)
+    MAX_CONTENT_LENGTH=2097152            # default 2 MiB request body cap
+    STRICT_SERVER_PERMISSIONS=false       # see warning below before setting true
+
+mcprack refuses to start if `SECRET_KEY` is unset or left at its insecure
+built-in default — it signs both Flask sessions and the per-user MCP proxy
+URLs handed to clients (see catalog.py), so treat it like a password.
+
+`STRICT_SERVER_PERMISSIONS=true` makes a user with no explicit
+`UserServerPermission` grant see *no* servers instead of all enabled ones.
+Before enabling it, use Admin → Users to explicitly grant every user
+(including admins) access to the servers they need — otherwise turning this
+on with no grants locks everyone out of everything.
+
+`SESSION_COOKIE_SECURE=true` (the default) means the browser will not send
+the session cookie back except over HTTPS, so mcprack must sit behind a
+TLS-terminating reverse proxy that sets `X-Forwarded-Proto: https` — a
+sample Apache vhost covering TLS, HSTS, and the required forwarded headers
+is at `/usr/share/doc/mcprack/apache-mcprack.conf` (source:
+`debian/apache-mcprack.conf`). It also documents the firewall rule needed so
+gunicorn's `0.0.0.0:8912` bind can't be reached directly, bypassing TLS. If
+you're intentionally running plain HTTP with no reverse proxy (e.g. a
+private intranet install), set `SESSION_COOKIE_SECURE=false` instead.
+
+The `?username=&password=` query-string prefill on `/login` (used by the
+public demo link) only takes effect when `DEMO_MODE=true` — it's ignored
+otherwise, so it can't leak a real password into browser history or access
+logs.
+
+See also the "Security considerations for public-internet deployments"
+section in the main README for known limitations (proxy-token revocation,
+admin-account compromise) that aren't fully closed by configuration alone.
+
 ### Authentication (optional, LDAP disabled by default)
 
     LDAP_ENABLED=false

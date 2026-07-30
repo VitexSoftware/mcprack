@@ -83,6 +83,7 @@
           <td>
             <form class="inline" method="post" action="{{ url_for('admin.proxy_instance_stop', user_id=row.user_id, server_id=row.server_id) }}"
                   onsubmit="return confirm('Stop proxy for {{ row.username }} / {{ row.server_name }}?');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-danger">Stop</button>
             </form>
           </td>
