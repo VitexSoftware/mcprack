@@ -8,6 +8,11 @@ class Config:
     
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-secret-change-me")
 
+    # --- Babel (I18n) ---
+    BABEL_DEFAULT_LOCALE = "en"
+    BABEL_DEFAULT_TIMEZONE = "UTC"
+    BABEL_TRANSLATION_DIRECTORIES = "translations;/usr/share/locale"
+
     # --- Session / cookie hardening ---
     # SECURE defaults to true: an internet-facing mcprack must sit behind a
     # TLS-terminating reverse proxy (see wsgi.py's ProxyFix and

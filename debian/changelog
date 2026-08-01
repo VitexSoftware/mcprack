@@ -1,3 +1,13 @@
+mcprack (0.4.0) unstable; urgency=medium
+
+  * Add support for Flask-Babel translations.
+  * Implement Czech (cs) and Slovak (sk) translations.
+  * Integrate manual language switcher flag links next to the theme toggle in layout header.
+  * Support browser language autodetection via Accept-Language with English fallback.
+  * Dynamically compile translation catalogs during Debian package creation and install them to /usr/share/locale.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Sat, 01 Aug 2026 12:00:00 +0200
+
 mcprack (0.3.0) unstable; urgency=medium
 
   * Harden mcprack for public-internet deployment: CSRF protection

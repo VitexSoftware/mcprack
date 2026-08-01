@@ -3,8 +3,9 @@ from flask import current_app, Flask, request
 from flask_migrate import stamp
 from sqlalchemy import inspect
 
+from flask import session
 from config import Config
-from extensions import csrf, db, limiter, login_manager, migrate
+from extensions import babel, csrf, db, limiter, login_manager, migrate
 from secret_store import INSECURE_DEFAULT_SECRET_KEY
 
 
@@ -26,6 +27,15 @@ def _enforce_secret_key(app):
         )
 
 
+def get_locale():
+    # If a locale is manually stored in the session, use it
+    loc = session.get("locale")
+    if loc in ["cs", "sk", "en"]:
+        return loc
+    # Otherwise, detect from browser/accept headers
+    return request.accept_languages.best_match(["cs", "sk", "en"]) or "en"
+
+
 def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
@@ -36,6 +46,7 @@ def create_app(config_object=Config):
     login_manager.init_app(app)
     csrf.init_app(app)
     limiter.init_app(app)
+    babel.init_app(app, locale_selector=get_locale)
 
     @app.after_request
     def _set_security_headers(response):

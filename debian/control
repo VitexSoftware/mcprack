@@ -5,6 +5,8 @@ Maintainer: Vítězslav Dvořák <info@vitexsoftware.cz>
 Build-Depends:
  debhelper-compat (= 13),
  dh-python,
+ python3-babel,
+ python3-flask-babel,
 Standards-Version: 4.7.0
 Homepage: https://github.com/VitexSoftware/mcprack
 Rules-Requires-Root: no
@@ -21,6 +23,7 @@ Depends:
  python3-flask-migrate,
  python3-flask-wtf,
  python3-flask-limiter,
+ python3-flask-babel,
  python3-ldap3,
  python3-cryptography,
  python3-uvicorn (>= 0.34),

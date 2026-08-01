@@ -1,0 +1,122 @@
+# Translations template for PROJECT.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-08-01 11:32+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: templates/base.html:36
+msgid "Servers"
+msgstr ""
+
+#: templates/base.html:37
+msgid "Users"
+msgstr ""
+
+#: templates/base.html:38
+msgid "Proxy"
+msgstr ""
+
+#: templates/base.html:39 templates/base.html:67
+msgid "Audit Log"
+msgstr ""
+
+#: templates/base.html:40
+msgid "Diagnostics"
+msgstr ""
+
+#: templates/base.html:41
+msgid "OTEL"
+msgstr ""
+
+#: templates/base.html:61
+msgid "Catalog"
+msgstr ""
+
+#: templates/base.html:64
+msgid "All Servers"
+msgstr ""
+
+#: templates/base.html:65
+msgid "All Users"
+msgstr ""
+
+#: templates/base.html:66
+msgid "Proxy Instances"
+msgstr ""
+
+#: templates/base.html:68
+msgid "Vaultwarden Setup"
+msgstr ""
+
+#: templates/base.html:69
+msgid "OTEL Diagnostics"
+msgstr ""
+
+#: templates/base.html:72
+msgid "Log out"
+msgstr ""
+
+#: templates/login.html:2
+msgid "Log in"
+msgstr ""
+
+#: templates/login.html:7
+msgid "Welcome to mcprack"
+msgstr ""
+
+#: templates/login.html:8
+msgid "MCP Self-Service Catalog & Config Generator"
+msgstr ""
+
+#: templates/login.html:15
+msgid "Username"
+msgstr ""
+
+#: templates/login.html:20
+msgid "Password"
+msgstr ""
+
+#: templates/login.html:25
+msgid "Log In"
+msgstr ""
+
+#: templates/login.html:32
+msgid "Use your local mcprack account, or your Active Directory credentials."
+msgstr ""
+
+#: templates/login.html:34
+msgid "Use your local mcprack account."
+msgstr ""
+
+#: templates/admin/server_form.html:93
+msgid "Environment variables"
+msgstr ""
+
+#: templates/admin/server_form.html:95
+msgid ""
+"Mark a row <strong>sensitive</strong> if it's a secret — those go to "
+"Vaultwarden (or an encrypted local fallback if Vaultwarden isn't "
+"configured). Everything else is stored directly in mcprack's own "
+"database."
+msgstr ""
+
+#: templates/admin/server_form.html:101
+msgid "Add row"
+msgstr ""
+
+#: templates/admin/server_form.html:158
+msgid "sensitive"
+msgstr ""

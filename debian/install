@@ -24,3 +24,5 @@ debian/mcprack.service /usr/lib/mcprack/
 bin/mcprack /usr/bin/
 debian/cz.vitexsoftware.mcprack.metainfo.xml /usr/share/metainfo/
 static/mcprack-app-icon.svg /usr/share/icons/hicolor/scalable/apps/
+translations/cs/LC_MESSAGES/messages.mo /usr/share/locale/cs/LC_MESSAGES/
+translations/sk/LC_MESSAGES/messages.mo /usr/share/locale/sk/LC_MESSAGES/

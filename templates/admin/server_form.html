@@ -90,17 +90,15 @@
     </fieldset>
 
     <fieldset>
-      <legend>Environment variables</legend>
+      <legend>{{ _('Environment variables') }}</legend>
       <p class="text-muted" style="font-size: var(--font-size-sm);">
-        Mark a row <strong>citlivé</strong> (sensitive) if it's a secret — those go to Vaultwarden
-        (or an encrypted local fallback if Vaultwarden isn't configured). Everything else is
-        stored directly in mcprack's own database.
+        {{ _("Mark a row <strong>sensitive</strong> if it's a secret — those go to Vaultwarden (or an encrypted local fallback if Vaultwarden isn't configured). Everything else is stored directly in mcprack's own database.") }}
       </p>
 
       <div id="env-rows"></div>
 
       <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('', '', false)">
-        ➕ Add row
+        ➕ {{ _('Add row') }}
       </button>
     </fieldset>
 
@@ -157,7 +155,7 @@
     sensitiveInput.name = `env_sensitive__${id}`;
     sensitiveInput.checked = !!sensitive;
     label.appendChild(sensitiveInput);
-    label.appendChild(document.createTextNode(" citlivé"));
+    label.appendChild(document.createTextNode(" " + {{ _('sensitive') | tojson }}));
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
