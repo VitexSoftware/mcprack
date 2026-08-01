@@ -19,6 +19,12 @@ class TestConfig(Config):
     BITWARDENCLI_APPDATA_DIR = "/tmp/mcprack-test-bw"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _compile_translations():
+    import subprocess
+    subprocess.run(["pybabel", "compile", "-d", "translations"])
+
+
 @pytest.fixture(autouse=True)
 def _isolate_user_proxy_state(tmp_path, monkeypatch):
     """Every test gets its own scratch user-proxy state dir, never the real

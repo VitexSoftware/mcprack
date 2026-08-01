@@ -1,37 +1,37 @@
 {% extends "base.html" %}
-{% block title %}Log in — mcprack{% endblock %}
+{% block title %}{{ _('Log in') }} — mcprack{% endblock %}
 {% block content %}
 
 <div style="max-width: 400px; margin: var(--space-2xl) auto;">
   <div style="text-align: center; margin-bottom: var(--space-2xl);">
-    <h1 style="margin-bottom: var(--space-md);">Welcome to mcprack</h1>
-    <p class="text-muted">MCP Self-Service Catalog & Config Generator</p>
+    <h1 style="margin-bottom: var(--space-md);">{{ _('Welcome to mcprack') }}</h1>
+    <p class="text-muted">{{ _('MCP Self-Service Catalog & Config Generator') }}</p>
   </div>
 
   <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border);">
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
-        <label for="username">Username</label>
+        <label for="username">{{ _('Username') }}</label>
         <input type="text" id="username" name="username" value="{{ prefill_username|default('') }}" required autofocus>
       </div>
 
       <div class="form-group">
-        <label for="password">Password</label>
+        <label for="password">{{ _('Password') }}</label>
         <input type="password" id="password" name="password" value="{{ prefill_password|default('') }}" required>
       </div>
 
       <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-lg);">
-        🔓 Log In
+        🔓 {{ _('Log In') }}
       </button>
     </form>
   </div>
 
   <div style="margin-top: var(--space-lg); padding: var(--space-md); background-color: var(--color-bg-tertiary); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm);">
     {% if config['LDAP_ENABLED'] %}
-      <p class="text-muted" style="margin: 0;">Use your local mcprack account, or your Active Directory credentials.</p>
+      <p class="text-muted" style="margin: 0;">{{ _('Use your local mcprack account, or your Active Directory credentials.') }}</p>
     {% else %}
-      <p class="text-muted" style="margin: 0;">Use your local mcprack account.</p>
+      <p class="text-muted" style="margin: 0;">{{ _('Use your local mcprack account.') }}</p>
     {% endif %}
   </div>
 </div>

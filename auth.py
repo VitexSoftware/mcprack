@@ -3,6 +3,7 @@ from functools import wraps
 import ldap3
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
+from flask_babel import _
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
@@ -99,7 +100,7 @@ def login():
                 user_id=user.id,
                 error_message=f"local auth failed for '{username}'",
             )
-            flash("Invalid username or password.", "error")
+            flash(_("Invalid username or password."), "error")
             return render_template("login.html")
 
         if current_app.config["LDAP_ENABLED"]:
@@ -119,7 +120,7 @@ def login():
                 audit.log_audit_event(
                     "login_failed", "error", user=user, error_message="account deactivated"
                 )
-                flash("This account has been deactivated.", "error")
+                flash(_("This account has been deactivated."), "error")
                 return render_template("login.html")
             login_user(user)
             audit.log_audit_event("login", "success", user=user)
@@ -131,7 +132,7 @@ def login():
             user_id=user.id if user else None,
             error_message=f"invalid credentials for '{username}'",
         )
-        flash("Invalid username or password.", "error")
+        flash(_("Invalid username or password."), "error")
         return render_template("login.html")
 
     # The GET query-param prefill only exists for the public demo link
@@ -151,3 +152,15 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("auth.login"))
+
+
+@bp.route("/set-locale/<locale>")
+def set_locale(locale):
+    from flask import session
+    if locale in ["cs", "sk", "en"]:
+        session["locale"] = locale
+    # Redirect back to original page, or index as default
+    ref = request.referrer
+    if ref and request.host in ref:
+        return redirect(ref)
+    return redirect(url_for("catalog.index"))

@@ -33,16 +33,21 @@
       {% if current_user.is_authenticated %}
         <nav class="header-nav">
           {% if current_user.is_admin %}
-            <a href="{{ url_for('admin.servers_list') }}" class="header-nav-link is-admin">Servers</a>
-            <a href="{{ url_for('admin.users_list') }}" class="header-nav-link is-admin">Users</a>
-            <a href="{{ url_for('admin.proxy_instances') }}" class="header-nav-link is-admin">Proxy</a>
-            <a href="{{ url_for('admin.audit_log') }}" class="header-nav-link is-admin">Audit Log</a>
-            <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-nav-link is-admin">Diagnostics</a>
-            <a href="{{ url_for('admin.otel_wizard') }}" class="header-nav-link is-admin">OTEL</a>
+            <a href="{{ url_for('admin.servers_list') }}" class="header-nav-link is-admin">{{ _('Servers') }}</a>
+            <a href="{{ url_for('admin.users_list') }}" class="header-nav-link is-admin">{{ _('Users') }}</a>
+            <a href="{{ url_for('admin.proxy_instances') }}" class="header-nav-link is-admin">{{ _('Proxy') }}</a>
+            <a href="{{ url_for('admin.audit_log') }}" class="header-nav-link is-admin">{{ _('Audit Log') }}</a>
+            <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-nav-link is-admin">{{ _('Diagnostics') }}</a>
+            <a href="{{ url_for('admin.otel_wizard') }}" class="header-nav-link is-admin">{{ _('OTEL') }}</a>
           {% endif %}
         </nav>
 
         <div class="header-user">
+          <div class="language-switcher" style="display: inline-flex; gap: 5px; margin-right: 15px;">
+            <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale', 'en') == 'en' else '0.5' }}">🇬🇧</a>
+            <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'cs' else '0.5' }}">🇨🇿</a>
+            <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'sk' else '0.5' }}">🇸🇰</a>
+          </div>
           <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
             <span class="icon-light" aria-hidden="true">🌙</span>
             <span class="icon-dark" aria-hidden="true">☀️</span>
@@ -53,26 +58,33 @@
               <span>{{ current_user.display_name }}</span>
             </button>
             <div class="header-user-menu-dropdown" id="userMenuDropdown">
-              <a href="{{ url_for('catalog.index') }}" class="header-user-menu-item">Catalog</a>
+              <a href="{{ url_for('catalog.index') }}" class="header-user-menu-item">{{ _('Catalog') }}</a>
               {% if current_user.is_admin %}
                 <div class="header-user-menu-divider"></div>
-                <a href="{{ url_for('admin.servers_list') }}" class="header-user-menu-item">All Servers</a>
-                <a href="{{ url_for('admin.users_list') }}" class="header-user-menu-item">All Users</a>
-                <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">Proxy Instances</a>
-                <a href="{{ url_for('admin.audit_log') }}" class="header-user-menu-item">Audit Log</a>
-                <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">Vaultwarden Setup</a>
-                <a href="{{ url_for('admin.otel_wizard') }}" class="header-user-menu-item">OTEL Diagnostics</a>
+                <a href="{{ url_for('admin.servers_list') }}" class="header-user-menu-item">{{ _('All Servers') }}</a>
+                <a href="{{ url_for('admin.users_list') }}" class="header-user-menu-item">{{ _('All Users') }}</a>
+                <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">{{ _('Proxy Instances') }}</a>
+                <a href="{{ url_for('admin.audit_log') }}" class="header-user-menu-item">{{ _('Audit Log') }}</a>
+                <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">{{ _('Vaultwarden Setup') }}</a>
+                <a href="{{ url_for('admin.otel_wizard') }}" class="header-user-menu-item">{{ _('OTEL Diagnostics') }}</a>
               {% endif %}
               <div class="header-user-menu-divider"></div>
-              <a href="{{ url_for('auth.logout') }}" class="header-user-menu-item danger">Log out</a>
+              <a href="{{ url_for('auth.logout') }}" class="header-user-menu-item danger">{{ _('Log out') }}</a>
             </div>
           </div>
         </div>
       {% else %}
-        <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
-          <span class="icon-light" aria-hidden="true">🌙</span>
-          <span class="icon-dark" aria-hidden="true">☀️</span>
-        </button>
+        <div style="display: flex; align-items: center; gap: var(--space-md);">
+          <div class="language-switcher" style="display: inline-flex; gap: 5px; margin-right: 5px;">
+            <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale', 'en') == 'en' else '0.5' }}">🇬🇧</a>
+            <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'cs' else '0.5' }}">🇨🇿</a>
+            <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'sk' else '0.5' }}">🇸🇰</a>
+          </div>
+          <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+            <span class="icon-light" aria-hidden="true">🌙</span>
+            <span class="icon-dark" aria-hidden="true">☀️</span>
+          </button>
+        </div>
       {% endif %}
     </div>
   </header>
