@@ -30,13 +30,24 @@ Depends:
  dbconfig-common,
  dbconfig-sqlite3 | dbconfig-pgsql | dbconfig-mysql,
 Recommends:
- python3-fastmcp (>= 4.0.0~a2),
+ python3-fastmcp (>= 4.0.0),
 Suggests:
  python3-psycopg2,
  python3-pymysql,
  python3-opentelemetry-api,
  python3-opentelemetry-sdk,
  python3-opentelemetry-instrumentation,
+ abraflexi-mcp-server,
+ linkedin-mcp-server,
+ mastodon-mcp-server,
+ mcp-server-datovka,
+ mcp-server-webdriver,
+ multiflexi-mcp-server,
+ netbox-mcp-server,
+ phone-mcp-server,
+ redmine-mcp-server,
+ semaphore-mcp-server,
+ zabbix-mcp-server
 Description: Self-service MCP server catalog and client config generator
  mcprack lets an admin register MCP (Model Context Protocol) servers once;
  users log in (local account or Active Directory), pick which servers they
