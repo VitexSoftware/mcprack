@@ -7,3 +7,15 @@ services:
     restart: unless-stopped
     env_file:
       - ./env
+
+  mcprack-full:
+    build:
+      context: .
+      dockerfile: Dockerfile.full
+    image: vitexsoftware/mcprack:full
+    container_name: mcprack-full
+    network_mode: host
+    restart: unless-stopped
+    shm_size: 2g
+    env_file:
+      - ./env

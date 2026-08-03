@@ -14,15 +14,12 @@ same host.
 
 ## Setup
 
-1. Copy the `repo.vitexsoftware.com` signing key into this directory as
-   `vitexsoftware.gpg` (e.g. `cp /usr/share/keyrings/vitexsoftware.gpg .`).
-2. Provide an `env` file here with mcprack's usual `/etc/mcprack/env`
+1. Provide an `env` file here with mcprack's usual `/etc/mcprack/env`
    variables (see main `README.md` / `debian/README.Debian`) — for a demo
    instance this normally means `DEMO_MODE=true` and no real Vaultwarden
    credentials.
-3. `docker compose build && docker compose up -d`
-4. Point the host's existing reverse proxy (Apache/nginx) at
+2. `docker compose build && docker compose up -d`
+3. Point the host's existing reverse proxy (Apache/nginx) at
    `http://localhost:8913/` instead of the native `mcprack.service` port.
 
-`vitexsoftware.gpg` and `env` are intentionally not committed (host/secret
-specific) — see `.gitignore` in this directory.
+`env` is intentionally not committed (host/secret specific) — see `.gitignore` in this directory.

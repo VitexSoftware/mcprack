@@ -1,5 +1,8 @@
 FROM vitexsoftware/debian:trixie
 
+ENV MOZ_HEADLESS=1 \
+    DEBIAN_FRONTEND=noninteractive
+
 # The base image's dpkg config excludes /usr/share/locale/* to save space,
 # which silently strips mcprack's own cs/sk .mo translation catalogs on
 # install (session-based locale switching then has nothing to load - the
@@ -8,12 +11,30 @@ FROM vitexsoftware/debian:trixie
 RUN sed -i '\#path-exclude /usr/share/locale/\*#d' /etc/dpkg/dpkg.cfg.d/docker
 
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
         ca-certificates \
         adduser \
         mcprack \
         python3-pymysql \
-    && apt-get clean 
+        abraflexi-mcp-server \
+        mastodon-mcp-server \
+        mcp-email-server \
+        mcp-server-datovka \
+        multiflexi-mcp-server \
+        netbox-mcp-server \
+        redmine-mcp-server \
+        semaphore-mcp-server \
+        zabbix-mcp-server \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        mcp-server-webdriver \
+        firefox-esr \
+        linkedin-mcp-server \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 EXPOSE 8913
 
