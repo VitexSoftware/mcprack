@@ -219,6 +219,7 @@ def user_proxy_mcp(token, server_id):
             command=server.command,
             args=server.args,
             env=env,
+            server=server,
         )
     except user_proxy.UserProxyError as exc:
         return _jsonrpc_error_response(request_id, str(exc))

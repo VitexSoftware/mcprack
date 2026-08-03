@@ -1,5 +1,6 @@
 import pytest
 
+import installer
 import user_proxy
 from app import create_app
 from config import Config
@@ -31,6 +32,7 @@ def _isolate_user_proxy_state(tmp_path, monkeypatch):
     /var/lib/mcprack/user-proxies — which may hold live state from an
     actually-installed instance on the machine running the tests."""
     monkeypatch.setattr(user_proxy, "STATE_DIR", tmp_path / "user-proxies")
+    monkeypatch.setattr(installer, "STATE_DIR", tmp_path / "installs")
 
 
 @pytest.fixture

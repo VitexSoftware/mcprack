@@ -521,3 +521,68 @@ don't fit your hardware:
 
 See `debian/README.Debian` for more detail.
 
+## Installing new MCP servers (pip / npm / docker)
+
+Admin → Install (`/admin/install`) lets an admin install a new MCP server
+straight from PyPI, npm, or a Docker image — no shell access to the host
+needed. This is on top of, not instead of, autodetection and manual
+registration: once installed, a server behaves exactly like any other
+registered `McpServer` row (same catalog, health checks, per-user proxy).
+
+- **Python (pip)**: each server gets its own isolated venv (pipx-style)
+  under `/var/lib/mcprack/installs/<name>/venv` — never a shared venv, so
+  one server's dependencies can never conflict with another's.
+- **npm**: each server gets its own local (non-`-g`) install directory
+  under `/var/lib/mcprack/installs/<name>/npm` — same isolation rationale.
+- **Docker**: a server is run ephemerally as `docker run --rm -i <image>`
+  once per user session — there is no persistent container to manage. The
+  only "install" step is `docker pull` plus a sanity check.
+
+For pip and npm you must supply the **exact expected binary/entry-point
+name** the package installs (e.g. a package named `foo-mcp-server` might
+install a console script called `foo-mcp`) — mcprack verifies this exact
+name exists after install and fails loudly, with the full install log
+shown, rather than guessing at an alternate name. Guessing wrong here has
+been a real, documented problem for this app's autodetection in the past
+(see `detection.py`), so the installer deliberately never does it.
+
+Because `pip install`/`npm install`/`docker pull` can each take well over
+the 30s gunicorn worker timeout, installs always run as a detached
+background process; the Install page polls install status every few
+seconds until it reaches `success` or `failed`.
+
+Env vars configured at install time work exactly like a manually
+registered server's — non-secret values in mcprack's own database, secret
+ones in Vaultwarden (or the encrypted local fallback). For Docker servers
+specifically, `docker run` does **not** forward the host process's
+environment into the container on its own — mcprack computes `-e <NAME>`
+flags for each configured env var automatically, every time the container
+starts, so adding/removing an env var later via the credentials form takes
+effect on the next session with nothing else to keep in sync.
+
+Uninstalling a pip/npm-installed server stops any running per-user proxy
+first, then deletes its venv/npm directory from disk. Docker images
+pulled during install are left in place on uninstall (they may be shared
+or reused, and Docker has its own garbage collection via
+`docker image prune`).
+
+**Docker security note:** running the `docker` CLI from the unprivileged
+`mcprack` service account requires that account to be a member of the
+host's `docker` group (or otherwise have access to the Docker socket) —
+this is well-known to be equivalent to root access, since a `docker` group
+member can trivially bind-mount the host filesystem. mcprack never grants
+this itself; it only detects whether it's already usable (`docker ps`
+succeeds) and shows a clear diagnostic with the exact manual command
+otherwise:
+
+```
+sudo usermod -aG docker mcprack && systemctl restart mcprack
+```
+
+Treat this as a deliberate, opt-in tradeoff for hosts that specifically
+want Docker-based MCP servers — not something to enable by default.
+
+`python3-venv`, `npm`, `nodejs`, and `docker.io` are `Suggests`-level
+dependencies in `debian/control` (not hard `Depends`), since not every
+mcprack deployment needs every installer backend.
+

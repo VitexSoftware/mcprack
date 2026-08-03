@@ -1,10 +1,11 @@
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for, Response
-from datetime import datetime
+from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for, Response
+from datetime import datetime, timezone
 
 import audit
 import catalog
 import detection
 import health
+import installer
 import appstream_icons
 import secret_store
 import user_proxy
@@ -363,6 +364,278 @@ def server_test_stdio(server_id):
     else:
         flash(f"✗ '{server.name}' failed to start: {detail}", "error")
     return redirect(url_for("admin.servers_list"))
+
+
+def _installable_name_taken(name):
+    return McpServer.query.filter_by(name=name).first() is not None
+
+
+@bp.route("/install")
+@admin_required
+def install_wizard():
+    """Status/diagnose page for the pip/npm/docker installer subsystem —
+    same shape as the Vaultwarden/OTel wizards: a GET status page, with
+    separate POST action routes below that each perform one step and
+    redirect back here with a flash message."""
+    import shutil as _shutil
+
+    servers = (
+        McpServer.query.filter(McpServer.install_method.isnot(None))
+        .order_by(McpServer.name)
+        .all()
+    )
+    capabilities = {
+        "pip": _shutil.which("python3") is not None,
+        "npm": _shutil.which("npm") is not None,
+        "docker": installer.docker_available(),
+    }
+    return render_template(
+        "admin/install_wizard.html",
+        servers=servers,
+        capabilities=capabilities,
+        demo_mode=current_app.config.get("DEMO_MODE", False),
+    )
+
+
+def _create_install_server(form, install_method):
+    name = (form.get("name") or "").strip()
+    if not name:
+        raise ValueError("Server name is required.")
+    if _installable_name_taken(name):
+        raise ValueError(f"A server named '{name}' is already registered.")
+
+    server = McpServer(name=name)
+    server.label = form.get("label") or name
+    server.description = form.get("description", "")
+    server.category = form.get("category") or f"{install_method}-installed"
+    server.transport = "stdio"
+    server.enabled = True
+    server.allow_user_override = True
+    server.vaultwarden_item_name = f"MCP-{server.name}"
+    server.install_method = install_method
+    server.install_status = "queued"
+
+    non_secret, secret_values = _parse_env_rows(form)
+    server.env_config = non_secret
+    server.env_var_names = list(secret_values.keys())
+
+    db.session.add(server)
+    db.session.commit()
+
+    if secret_values:
+        try:
+            secret_store.save_server_secrets(server, secret_values)
+        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+            flash(f"Server registered, but credentials could not be saved: {exc}", "error")
+
+    return server
+
+
+@bp.route("/install/pip", methods=["POST"])
+@admin_required
+def install_pip():
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
+
+    package_spec = (request.form.get("package_spec") or "").strip()
+    expected_binary = (request.form.get("expected_binary") or "").strip()
+    if not package_spec or not expected_binary:
+        flash("Package spec and expected binary name are both required.", "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    try:
+        server = _create_install_server(request.form, "pip")
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    server.package_spec = package_spec
+    server.expected_binary = expected_binary
+    db.session.commit()
+
+    try:
+        install_path = installer.start_pip_install(server.name, package_spec, expected_binary)
+        server.install_path = install_path
+        db.session.commit()
+    except installer.InstallError as exc:
+        server.install_status = "failed"
+        server.install_error = str(exc)[:500]
+        db.session.commit()
+        flash(f"Could not start pip install: {exc}", "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, server=server,
+        error_message=f"pip install started for '{server.name}' ({package_spec})",
+    )
+    flash(f"Installing '{server.name}' via pip — refresh this page to check progress.", "success")
+    return redirect(url_for("admin.install_wizard"))
+
+
+@bp.route("/install/npm", methods=["POST"])
+@admin_required
+def install_npm():
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
+
+    package_spec = (request.form.get("package_spec") or "").strip()
+    expected_binary = (request.form.get("expected_binary") or "").strip()
+    if not package_spec or not expected_binary:
+        flash("Package spec and expected binary name are both required.", "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    try:
+        server = _create_install_server(request.form, "npm")
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    server.package_spec = package_spec
+    server.expected_binary = expected_binary
+    db.session.commit()
+
+    try:
+        install_path = installer.start_npm_install(server.name, package_spec, expected_binary)
+        server.install_path = install_path
+        db.session.commit()
+    except installer.InstallError as exc:
+        server.install_status = "failed"
+        server.install_error = str(exc)[:500]
+        db.session.commit()
+        flash(f"Could not start npm install: {exc}", "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, server=server,
+        error_message=f"npm install started for '{server.name}' ({package_spec})",
+    )
+    flash(f"Installing '{server.name}' via npm — refresh this page to check progress.", "success")
+    return redirect(url_for("admin.install_wizard"))
+
+
+@bp.route("/install/docker", methods=["POST"])
+@admin_required
+def install_docker():
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
+
+    image_ref = (request.form.get("image_ref") or "").strip()
+    if not image_ref:
+        flash("Docker image reference is required.", "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    if not installer.docker_available():
+        flash(
+            "Docker CLI is not usable by the mcprack service account — this requires adding "
+            "it to the 'docker' group (equivalent to root access), a deliberate manual step: "
+            "sudo usermod -aG docker mcprack && systemctl restart mcprack. "
+            "See README § Installing new MCP servers for the security tradeoff.",
+            "error",
+        )
+        return redirect(url_for("admin.install_wizard"))
+
+    try:
+        server = _create_install_server(request.form, "docker")
+    except ValueError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
+
+    server.package_spec = image_ref
+    server.command = "docker"
+    server.args = ["run", "--rm", "-i", image_ref]
+    db.session.commit()
+
+    installer.start_docker_pull(server.name, image_ref)
+
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, server=server,
+        error_message=f"docker pull started for '{server.name}' ({image_ref})",
+    )
+    flash(f"Pulling image for '{server.name}' — refresh this page to check progress.", "success")
+    return redirect(url_for("admin.install_wizard"))
+
+
+@bp.route("/install/<int:server_id>/status")
+@admin_required
+def install_status(server_id):
+    """JSON polling endpoint. Finalizes install_status/install_error/
+    installed_version/installed_at on the McpServer row the first time a
+    terminal state (success/failed) is observed — safe to call repeatedly,
+    since re-finalizing an already-terminal row is a harmless no-op."""
+    server = db.get_or_404(McpServer, server_id)
+    if not server.install_method:
+        return jsonify({"error": "not an installer-managed server"}), 400
+
+    result = installer.get_install_status(server.name)
+
+    if server.install_status not in ("success", "failed") and result["status"] in ("success", "failed"):
+        if result["status"] == "success":
+            binary_path = None
+            if server.install_method == "pip":
+                binary_path = installer.verify_pip_binary(server.install_path, server.expected_binary)
+            elif server.install_method == "npm":
+                binary_path = installer.verify_npm_binary(server.install_path, server.expected_binary)
+            elif server.install_method == "docker":
+                binary_path = "docker" if installer.verify_docker_image(server.package_spec) else None
+
+            if binary_path:
+                if server.install_method != "docker":
+                    server.command = binary_path
+                server.install_status = "success"
+                server.install_error = None
+                server.installed_version = installer.resolve_installed_version(
+                    server.install_method, server.install_path, server.package_spec
+                )
+                server.installed_at = datetime.now(timezone.utc)
+            else:
+                server.install_status = "failed"
+                server.install_error = (
+                    f"Install succeeded but expected binary '{server.expected_binary}' was not "
+                    "found — check the log for the actual installed script name."
+                )[:500]
+        else:
+            server.install_status = "failed"
+            server.install_error = (result["error"] or "")[:500]
+        db.session.commit()
+        _invalidate_health_cache()
+
+    return jsonify(
+        {
+            "status": server.install_status,
+            "error": server.install_error,
+            "log_tail": result["log_tail"],
+            "installed_version": server.installed_version,
+        }
+    )
+
+
+@bp.route("/install/<int:server_id>/uninstall", methods=["POST"])
+@admin_required
+def install_uninstall(server_id):
+    blocked = _demo_mode_blocked()
+    if blocked:
+        return blocked
+
+    server = db.get_or_404(McpServer, server_id)
+    server_name = server.name
+
+    for selection in UserServerSelection.query.filter_by(server_id=server.id).all():
+        user_proxy.stop_user_server_proxy(selection.user_id, server.id)
+
+    installer.uninstall(server)
+
+    db.session.delete(server)
+    db.session.commit()
+    _invalidate_health_cache()
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, server_name=server_name,
+        error_message="installer-managed server uninstalled",
+    )
+    flash(f"Uninstalled '{server_name}'.", "success")
+    return redirect(url_for("admin.install_wizard"))
 
 
 @bp.route("/vaultwarden/wizard")

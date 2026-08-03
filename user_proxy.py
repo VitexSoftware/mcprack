@@ -320,9 +320,39 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
     paths["healthy_at"].write_text(str(time.time()))
 
 
-def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env):
+def _effective_args(server, args):
+    """For Docker-installed servers, dynamically appends `-e <NAME>` for
+    every currently configured env var name, computed fresh on each spawn
+    rather than baked once into stored args — `docker run` never forwards
+    host process env into the container on its own (only a bare `-e NAME`
+    does, pulling the value from the calling process's own environment), so
+    without this a Docker-sourced server would silently never see its
+    credentials. Computing it at spawn time (instead of once at install/
+    registration time) means adding or removing an env var later via the
+    credentials form takes effect on the next proxy start, with nothing
+    else to keep in sync. No-op for pip/npm/manually registered servers.
+
+    Registration enforces args always ending in the image ref (see
+    admin.py's docker install route), so args[-1] is reliably the image."""
+    if server is None or getattr(server, "install_method", None) != "docker":
+        return args
+
+    names = list(server.env_var_names) + list(server.env_config.keys())
+    if server.auth_env_key:
+        names.append(server.auth_env_key)
+
+    flags = []
+    for name in dict.fromkeys(names):  # de-dup, preserve first-seen order
+        flags += ["-e", name]
+
+    return list(args[:-1]) + flags + list(args[-1:])
+
+
+def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env, server=None):
     if not command:
         raise UserProxyError("Cannot start user proxy for server without command")
+
+    args = _effective_args(server, args)
 
     with _serialized(user_id, server_id):
         paths = _paths(user_id, server_id)

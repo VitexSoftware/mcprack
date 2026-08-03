@@ -193,3 +193,56 @@ def test_probe_fails_open_on_non_json_body():
     with patch("user_proxy.http.client.HTTPConnection") as mock_conn_cls:
         mock_conn_cls.return_value.getresponse.return_value = resp
         assert user_proxy._probe_upstream_health(12345) is True
+
+
+def _docker_server(env_var_names=(), env_config=None, auth_env_key=None):
+    server = MagicMock()
+    server.install_method = "docker"
+    server.env_var_names = list(env_var_names)
+    server.env_config = env_config or {}
+    server.auth_env_key = auth_env_key
+    return server
+
+
+def test_effective_args_noop_for_non_docker_server():
+    server = MagicMock(install_method="pip")
+    args = ["run", "--rm", "-i", "ghcr.io/org/foo:latest"]
+    assert user_proxy._effective_args(server, args) == args
+
+
+def test_effective_args_noop_when_server_is_none():
+    args = ["/some/binary"]
+    assert user_proxy._effective_args(None, args) == args
+
+
+def test_effective_args_injects_e_flags_for_docker_server_env_vars():
+    server = _docker_server(env_var_names=["API_TOKEN"], env_config={"BASE_URL": "https://x"})
+    args = ["run", "--rm", "-i", "ghcr.io/org/foo:latest"]
+    result = user_proxy._effective_args(server, args)
+
+    assert result[:3] == ["run", "--rm", "-i"]
+    assert result[-1] == "ghcr.io/org/foo:latest"
+    flags = result[3:-1]
+    assert "-e" in flags
+    for name in ("API_TOKEN", "BASE_URL"):
+        idx = flags.index(name)
+        assert flags[idx - 1] == "-e"
+
+
+def test_effective_args_includes_auth_env_key():
+    server = _docker_server(auth_env_key="AUTH_TOKEN")
+    result = user_proxy._effective_args(server, ["run", "--rm", "-i", "img"])
+    assert "-e" in result and "AUTH_TOKEN" in result
+
+
+def test_effective_args_reflects_env_vars_added_after_registration():
+    """Docker env forwarding must be computed fresh at spawn time — adding
+    an env var later (e.g. via the credentials form) must show up on the
+    next spawn without touching stored args."""
+    server = _docker_server(env_var_names=[])
+    args = ["run", "--rm", "-i", "img"]
+    assert "-e" not in user_proxy._effective_args(server, args)
+
+    server.env_var_names = ["NEW_VAR"]
+    result = user_proxy._effective_args(server, args)
+    assert "NEW_VAR" in result

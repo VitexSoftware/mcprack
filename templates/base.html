@@ -34,6 +34,7 @@
         <nav class="header-nav">
           {% if current_user.is_admin %}
             <a href="{{ url_for('admin.servers_list') }}" class="header-nav-link is-admin">{{ _('Servers') }}</a>
+            <a href="{{ url_for('admin.install_wizard') }}" class="header-nav-link is-admin">{{ _('Install') }}</a>
             <a href="{{ url_for('admin.users_list') }}" class="header-nav-link is-admin">{{ _('Users') }}</a>
             <a href="{{ url_for('admin.proxy_instances') }}" class="header-nav-link is-admin">{{ _('Proxy') }}</a>
             <a href="{{ url_for('admin.audit_log') }}" class="header-nav-link is-admin">{{ _('Audit Log') }}</a>
@@ -62,6 +63,7 @@
               {% if current_user.is_admin %}
                 <div class="header-user-menu-divider"></div>
                 <a href="{{ url_for('admin.servers_list') }}" class="header-user-menu-item">{{ _('All Servers') }}</a>
+                <a href="{{ url_for('admin.install_wizard') }}" class="header-user-menu-item">{{ _('Install New Server') }}</a>
                 <a href="{{ url_for('admin.users_list') }}" class="header-user-menu-item">{{ _('All Users') }}</a>
                 <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">{{ _('Proxy Instances') }}</a>
                 <a href="{{ url_for('admin.audit_log') }}" class="header-user-menu-item">{{ _('Audit Log') }}</a>

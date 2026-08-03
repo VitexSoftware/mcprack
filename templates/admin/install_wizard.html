@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}Install MCP servers — mcprack{% endblock %}
+{% block content %}
+
+<section class="section">
+  <h1>📦 Install new MCP servers</h1>
+  <p class="text-muted">Install a new MCP server straight from PyPI, npm, or a Docker image —
+  no shell access to the host needed. Python installs get their own isolated venv, npm installs
+  their own local (non-global) install directory, and Docker servers run ephemerally
+  (<code>docker run --rm -i</code>) per session — nothing runs permanently in the background.</p>
+
+  {% if demo_mode %}
+  <div class="flash-error" style="margin-bottom: var(--space-lg);">
+    Read-only on this public demo instance — installing new servers is disabled.
+  </div>
+  {% endif %}
+
+  <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm); margin-bottom: var(--space-lg);">
+    <p style="margin: 0;">
+      <strong>Environment:</strong>
+      python3/pip {{ "✓ available" if capabilities.pip else "✗ not found" }} &middot;
+      npm {{ "✓ available" if capabilities.npm else "✗ not found" }} &middot;
+      docker {{ "✓ available" if capabilities.docker else "✗ not usable by the mcprack service account" }}
+    </p>
+    {% if not capabilities.docker %}
+    <p style="margin: var(--space-sm) 0 0;">
+      Docker requires the <code>mcprack</code> service account to be in the host's <code>docker</code>
+      group — equivalent to root access, so this is a deliberate manual step, never done automatically:
+      <code>sudo usermod -aG docker mcprack &amp;&amp; systemctl restart mcprack</code>.
+    </p>
+    {% endif %}
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-lg); margin-bottom: var(--space-xl);">
+
+    <fieldset {{ "disabled" if demo_mode else "" }} style="border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); padding: var(--space-md);">
+      <legend>🐍 Install from PyPI (pip)</legend>
+      <form method="post" action="{{ url_for('admin.install_pip') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+          <label>Name (unique slug)</label>
+          <input type="text" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" name="label">
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" name="category" placeholder="pip-installed">
+        </div>
+        <div class="form-group">
+          <label>Package spec</label>
+          <input type="text" name="package_spec" placeholder="foo-mcp-server==1.2.0" required>
+        </div>
+        <div class="form-group">
+          <label>Expected binary name</label>
+          <input type="text" name="expected_binary" placeholder="foo-mcp" required>
+          <p class="text-muted" style="font-size: var(--font-size-xs);">
+            The exact console-script name pip installs into the venv's <code>bin/</code> — often
+            differs from the package name. Checked exactly; nothing is guessed.
+          </p>
+        </div>
+        <fieldset>
+          <legend>{{ _('Environment variables') }}</legend>
+          <div id="env-rows-pip"></div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('pip', '', '', false)">➕ {{ _('Add row') }}</button>
+        </fieldset>
+        <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.pip else "" }}>🐍 Install</button>
+      </form>
+    </fieldset>
+
+    <fieldset {{ "disabled" if demo_mode else "" }} style="border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); padding: var(--space-md);">
+      <legend>📦 Install from npm</legend>
+      <form method="post" action="{{ url_for('admin.install_npm') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+          <label>Name (unique slug)</label>
+          <input type="text" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" name="label">
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" name="category" placeholder="npm-installed">
+        </div>
+        <div class="form-group">
+          <label>Package spec</label>
+          <input type="text" name="package_spec" placeholder="@org/foo-mcp@1.2.0" required>
+        </div>
+        <div class="form-group">
+          <label>Expected binary name</label>
+          <input type="text" name="expected_binary" placeholder="foo-mcp" required>
+          <p class="text-muted" style="font-size: var(--font-size-xs);">
+            The exact name npm links into <code>node_modules/.bin/</code> — checked exactly,
+            nothing is guessed.
+          </p>
+        </div>
+        <fieldset>
+          <legend>{{ _('Environment variables') }}</legend>
+          <div id="env-rows-npm"></div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('npm', '', '', false)">➕ {{ _('Add row') }}</button>
+        </fieldset>
+        <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.npm else "" }}>📦 Install</button>
+      </form>
+    </fieldset>
+
+    <fieldset {{ "disabled" if demo_mode else "" }} style="border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); padding: var(--space-md);">
+      <legend>🐳 Install from Docker image</legend>
+      <form method="post" action="{{ url_for('admin.install_docker') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="form-group">
+          <label>Name (unique slug)</label>
+          <input type="text" name="name" required>
+        </div>
+        <div class="form-group">
+          <label>Label</label>
+          <input type="text" name="label">
+        </div>
+        <div class="form-group">
+          <label>Category</label>
+          <input type="text" name="category" placeholder="docker-installed">
+        </div>
+        <div class="form-group">
+          <label>Docker image</label>
+          <input type="text" name="image_ref" placeholder="ghcr.io/org/foo-mcp:latest" required>
+          <p class="text-muted" style="font-size: var(--font-size-xs);">
+            Run ephemerally per session as <code>docker run --rm -i &lt;image&gt;</code> — no
+            persistent container. Configured env vars below are forwarded into the container
+            automatically via <code>-e NAME</code>, recomputed every time it starts.
+          </p>
+        </div>
+        <fieldset>
+          <legend>{{ _('Environment variables') }}</legend>
+          <div id="env-rows-docker"></div>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('docker', '', '', false)">➕ {{ _('Add row') }}</button>
+        </fieldset>
+        <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.docker else "" }}>🐳 Pull &amp; register</button>
+      </form>
+    </fieldset>
+
+  </div>
+
+  <h2>Installer-managed servers</h2>
+  <div style="overflow-x: auto;">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Method</th>
+          <th>Package / image</th>
+          <th>Status</th>
+          <th>Version</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for server in servers %}
+        <tr id="install-row-{{ server.id }}" data-server-id="{{ server.id }}" data-status="{{ server.install_status }}">
+          <td><code>{{ server.name }}</code></td>
+          <td>{{ server.install_method }}</td>
+          <td><code>{{ server.package_spec }}</code></td>
+          <td class="install-status-cell">
+            {% if server.install_status == "success" %}
+              <span class="badge badge-success">✓ installed</span>
+            {% elif server.install_status == "failed" %}
+              <span class="badge badge-error" title="{{ server.install_error }}">✗ failed</span>
+            {% else %}
+              <span class="badge badge-warning">⏳ {{ server.install_status or "queued" }}</span>
+            {% endif %}
+          </td>
+          <td>{{ server.installed_version or '—' }}</td>
+          <td style="white-space: nowrap;">
+            <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+            <form class="inline" method="post" action="{{ url_for('admin.install_uninstall', server_id=server.id) }}"
+                  onsubmit="return confirm('Uninstall &quot;{{ server.name }}&quot;? This removes its venv/npm directory from disk.');">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-danger" {{ "disabled" if demo_mode else "" }}>Uninstall</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" style="text-align: center; padding: var(--space-lg);">
+            <p class="text-muted">No servers installed via mcprack yet.</p>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<script>
+  const envRowCounters = { pip: 0, npm: 0, docker: 0 };
+
+  function addEnvRow(form, key, value, sensitive) {
+    envRowCounters[form] += 1;
+    const id = envRowCounters[form];
+
+    const row = document.createElement("div");
+    row.className = "env-row";
+    row.style.cssText = "display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);";
+
+    const keyInput = document.createElement("input");
+    keyInput.type = "text";
+    keyInput.name = `env_key__${id}`;
+    keyInput.value = key || "";
+    keyInput.placeholder = "KEY";
+    keyInput.style.flex = "1";
+
+    const valueInput = document.createElement("input");
+    valueInput.type = "text";
+    valueInput.name = `env_value__${id}`;
+    valueInput.value = value || "";
+    valueInput.placeholder = "value";
+    valueInput.style.flex = "2";
+
+    const label = document.createElement("label");
+    label.style.cssText = "display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;";
+    const sensitiveInput = document.createElement("input");
+    sensitiveInput.type = "checkbox";
+    sensitiveInput.name = `env_sensitive__${id}`;
+    sensitiveInput.checked = !!sensitive;
+    label.appendChild(sensitiveInput);
+    label.appendChild(document.createTextNode(" " + {{ _('sensitive') | tojson }}));
+
+    const removeButton = document.createElement("button");
+    removeButton.type = "button";
+    removeButton.className = "btn btn-sm btn-danger";
+    removeButton.textContent = "✕";
+    removeButton.addEventListener("click", function () {
+      row.remove();
+    });
+
+    row.append(keyInput, valueInput, label, removeButton);
+    document.getElementById(`env-rows-${form}`).appendChild(row);
+  }
+
+  // Poll status for any row still in a non-terminal state, replacing its
+  // status cell text in place — same minimal-JS style as the env-row editor
+  // above, no framework or build step involved.
+  function pollInstallStatus() {
+    document.querySelectorAll("tr[data-status]").forEach(function (row) {
+      const status = row.dataset.status;
+      if (status === "success" || status === "failed") return;
+
+      const serverId = row.dataset.serverId;
+      fetch(`/admin/install/${serverId}/status`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.status && data.status !== status) {
+            window.location.reload();
+          }
+        })
+        .catch(() => {});
+    });
+  }
+
+  setInterval(pollInstallStatus, 3000);
+</script>
+
+{% endblock %}

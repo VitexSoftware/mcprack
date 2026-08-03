@@ -102,6 +102,19 @@ class McpServer(db.Model):
     category = db.Column(db.String(255), nullable=True)
     enabled = db.Column(db.Boolean, nullable=False, default=True)
 
+    # Install tracking — NULL/absent means "registered manually or via
+    # autodetect", exactly like every server before this feature existed.
+    # Only set when mcprack itself installed the server (see installer.py).
+    install_method = db.Column(db.String(10), nullable=True)  # 'pip' | 'npm' | 'docker'
+    package_spec = db.Column(db.String(500), nullable=True)
+    expected_binary = db.Column(db.String(255), nullable=True)
+    install_path = db.Column(db.String(500), nullable=True)
+    install_status = db.Column(db.String(20), nullable=True)  # queued|running|success|failed
+    install_log_path = db.Column(db.String(500), nullable=True)
+    install_error = db.Column(db.String(500), nullable=True)
+    installed_version = db.Column(db.String(100), nullable=True)
+    installed_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
