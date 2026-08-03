@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Audit Log — Request Detail — mcprack{% endblock %}
+{% block title %}{{ _('Audit Log') }} — {{ _('Request Detail') }} — mcprack{% endblock %}
 {% block content %}
 
 <section class="section">
-  <h1>🔗 Audit Trail for Request</h1>
+  <h1>🔗 {{ _('Audit Trail for Request') }}</h1>
   <p class="text-muted"><code>{{ request_id }}</code></p>
   <p>
-    <a href="{{ url_for('admin.audit_log') }}" class="btn btn-secondary">&larr; Back to Audit Log</a>
+    <a href="{{ url_for('admin.audit_log') }}" class="btn btn-secondary">&larr; {{ _('Back to Audit Log') }}</a>
     {% if trace_url %}
-    <a href="{{ trace_url }}" target="_blank" rel="noopener" class="btn btn-primary">🔭 View trace</a>
+    <a href="{{ trace_url }}" target="_blank" rel="noopener" class="btn btn-primary">🔭 {{ _('View trace') }}</a>
     {% else %}
-    <span class="text-muted" title="Set OTEL_TRACE_UI_URL_TEMPLATE to enable this link">🔭 View trace (not configured)</span>
+    <span class="text-muted" title="{{ _('Set OTEL_TRACE_UI_URL_TEMPLATE to enable this link') }}">🔭 {{ _('View trace (not configured)') }}</span>
     {% endif %}
   </p>
 
@@ -18,13 +18,13 @@
     <table>
       <thead>
         <tr>
-          <th>Timestamp (UTC)</th>
-          <th>User</th>
-          <th>Server</th>
-          <th>Action</th>
-          <th>Result</th>
-          <th>Detail</th>
-          <th>Duration</th>
+          <th>{{ _('Timestamp (UTC)') }}</th>
+          <th>{{ _('User') }}</th>
+          <th>{{ _('Server') }}</th>
+          <th>{{ _('Action') }}</th>
+          <th>{{ _('Result') }}</th>
+          <th>{{ _('Detail') }}</th>
+          <th>{{ _('Duration') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -36,9 +36,9 @@
           <td><code>{{ e.action }}</code></td>
           <td>
             {% if e.result == 'success' %}
-              <span class="badge badge-success">✓ success</span>
+              <span class="badge badge-success">✓ {{ _('success') }}</span>
             {% else %}
-              <span class="badge badge-error">✗ error</span>
+              <span class="badge badge-error">✗ {{ _('error') }}</span>
             {% endif %}
           </td>
           <td>{{ e.error_message or '—' }}</td>
@@ -47,7 +47,7 @@
         {% else %}
         <tr>
           <td colspan="7" style="text-align: center; padding: var(--space-lg);">
-            <p class="text-muted">No entries found for this request id.</p>
+            <p class="text-muted">{{ _('No entries found for this request id.') }}</p>
           </td>
         </tr>
         {% endfor %}

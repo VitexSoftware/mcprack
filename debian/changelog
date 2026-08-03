@@ -6,6 +6,11 @@ mcprack (1.0.0) unstable; urgency=medium
   * Add a command-line management CLI (`mcprack user|server|secret ...`)
     for administering accounts, catalog servers, and credentials without
     the web UI, plus an mcprack(1) man page.
+  * Wrap remaining page content (catalog, credential override, admin
+    users/servers/audit-log/proxy/Vaultwarden/OTEL pages) in translation
+    markers — previously only the nav bar and a few pages were
+    localized, so switching language left most page content in English.
+    Fill in the corresponding Czech and Slovak translations.
 
  -- CyberVitexus <info@vitexsoftware.cz>  Mon, 03 Aug 2026 11:23:29 +0200
 

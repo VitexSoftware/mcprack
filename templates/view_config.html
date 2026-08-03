@@ -4,7 +4,7 @@
 
 <section>
   <h1>{{ filename }}</h1>
-  <p class="text-muted">Copy the configuration below into your client's config file, or download it directly.</p>
+  <p class="text-muted">{{ _("Copy the configuration below into your client's config file, or download it directly.") }}</p>
 
   <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); margin: var(--space-lg) 0;">
     <textarea id="config-json" rows="20" readonly onclick="this.select()">{{ config_json }}</textarea>
@@ -12,18 +12,18 @@
 
   <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin: var(--space-lg) 0;">
     <button type="button" id="copy-button" class="btn btn-primary" onclick="copyConfig()">
-      📋 Copy to clipboard
+      📋 {{ _('Copy to clipboard') }}
     </button>
     <a href="{{ url_for('catalog.download', client=client) }}" class="btn btn-secondary" download>
-      ⬇️ Download File
+      ⬇️ {{ _('Download File') }}
     </a>
     <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">
-      ← Back to Catalog
+      ← {{ _('Back to Catalog') }}
     </a>
   </div>
 
   <div id="copy-status" style="display: none; padding: var(--space-md); background-color: rgba(16, 185, 129, 0.1); color: var(--color-success); border-radius: var(--border-radius-lg); border-left: 4px solid var(--color-success); font-size: var(--font-size-sm);">
-    ✓ Copied to clipboard!
+    ✓ {{ _('Copied to clipboard!') }}
   </div>
 </section>
 
@@ -34,8 +34,8 @@
 
     function showCopied() {
       status.style.display = "block";
-      setTimeout(function () { 
-        status.style.display = "none"; 
+      setTimeout(function () {
+        status.style.display = "none";
       }, 3000);
     }
 
@@ -54,7 +54,7 @@
         document.execCommand("copy");
         showCopied();
       } catch (err) {
-        status.textContent = "Copy failed — select the text manually.";
+        status.textContent = {{ _('Copy failed — select the text manually.') | tojson }};
         status.style.display = "block";
       }
     }

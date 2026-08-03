@@ -1,37 +1,37 @@
 {% extends "base.html" %}
-{% block title %}MCP Servers — Admin — mcprack{% endblock %}
+{% block title %}{{ _('MCP Servers') }} — {{ _('Admin') }} — mcprack{% endblock %}
 {% block content %}
 
 <section class="section">
-  <h1>🔧 MCP Server Registry</h1>
-  <p class="text-muted">Manage MCP servers available in your catalog. Register new servers, check their health status, and manage credentials.</p>
+  <h1>🔧 {{ _('MCP Server Registry') }}</h1>
+  <p class="text-muted">{{ _('Manage MCP servers available in your catalog. Register new servers, check their health status, and manage credentials.') }}</p>
 
   <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-lg); flex-wrap: wrap;">
     <a href="{{ url_for('admin.server_new') }}" class="btn btn-primary">
-      ➕ Register New Server
+      ➕ {{ _('Register New Server') }}
     </a>
     <form method="post" action="{{ url_for('admin.servers_autodetect') }}" class="inline">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-secondary">
-        🔍 Autodetect Local Servers
+        🔍 {{ _('Autodetect Local Servers') }}
       </button>
     </form>
   </div>
 
   <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm); margin-bottom: var(--space-lg);">
-    <p style="margin: 0;"><strong>ℹ️ Autodetect:</strong> Scans this machine for Claude Desktop config, running mcp-rack-* proxies, and known MCP binaries on PATH. Registers any servers not already in the catalog. Only command and args are imported—you'll need to set default credentials.</p>
+    <p style="margin: 0;"><strong>ℹ️ {{ _('Autodetect:') }}</strong> {{ _("Scans this machine for Claude Desktop config, running mcp-rack-* proxies, and known MCP binaries on PATH. Registers any servers not already in the catalog. Only command and args are imported—you'll need to set default credentials.") }}</p>
   </div>
 
   <div style="overflow-x: auto;">
     <table>
       <thead>
         <tr>
-          <th>Name</th>
-          <th>Label</th>
-          <th>Transport</th>
-          <th>Category</th>
-          <th>Status</th>
-          <th>Actions</th>
+          <th>{{ _('Name') }}</th>
+          <th>{{ _('Label') }}</th>
+          <th>{{ _('Transport') }}</th>
+          <th>{{ _('Category') }}</th>
+          <th>{{ _('Status') }}</th>
+          <th>{{ _('Actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -53,40 +53,40 @@
           <td>{{ server.category or '—' }}</td>
           <td>
             {% if not h.get('reachable', True) %}
-              <span class="badge badge-error" title="{% if server.transport == 'stdio' %}Command not found on PATH{% else %}Host/port not reachable{% endif %}">
-                &#9888; {{ "won't start" if server.transport == "stdio" else "unreachable" }}
+              <span class="badge badge-error" title="{% if server.transport == 'stdio' %}{{ _('Command not found on PATH') }}{% else %}{{ _('Host/port not reachable') }}{% endif %}">
+                &#9888; {{ _("won't start") if server.transport == "stdio" else _("unreachable") }}
               </span>
             {% endif %}
             {% if h.get('missing_credentials') %}
-              <span class="badge badge-warning" title="Missing in Vaultwarden: {{ h['missing_credentials'] | join(', ') }}">
-                &#128273; missing: {{ h['missing_credentials'] | join(', ') }}
+              <span class="badge badge-warning" title="{{ _('Missing in Vaultwarden: %(keys)s', keys=h['missing_credentials'] | join(', ')) }}">
+                &#128273; {{ _('missing: %(keys)s', keys=h['missing_credentials'] | join(', ')) }}
               </span>
             {% endif %}
             {% if h.get('reachable', True) and not h.get('missing_credentials') %}
-              <span class="badge badge-success">✓ ok</span>
+              <span class="badge badge-success">✓ {{ _('ok') }}</span>
             {% endif %}
           </td>
           <td style="white-space: nowrap;">
-            <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">Edit</a>
+            <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">{{ _('Edit') }}</a>
             {% if not server.url %}
             <form class="inline" method="post" action="{{ url_for('admin.server_test_stdio', server_id=server.id) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-secondary" title="Actually start the command briefly to catch runtime-broken registrations (e.g. a missing dependency) that 'file exists and is executable' alone can't.">
-                🩺 Test
+              <button type="submit" class="btn btn-sm btn-secondary" title="{{ _("Actually start the command briefly to catch runtime-broken registrations (e.g. a missing dependency) that 'file exists and is executable' alone can't.") }}">
+                🩺 {{ _('Test') }}
               </button>
             </form>
             {% endif %}
             <form class="inline" method="post" action="{{ url_for('admin.server_delete', server_id=server.id) }}"
-                  onsubmit="return confirm('Delete &quot;{{ server.name }}&quot;?');">
+                  onsubmit="return confirm('{{ _('Delete &quot;%(name)s&quot;?', name=server.name) }}');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+              <button type="submit" class="btn btn-sm btn-danger">{{ _('Delete') }}</button>
             </form>
           </td>
         </tr>
         {% else %}
         <tr>
           <td colspan="6" style="text-align: center; padding: var(--space-lg);">
-            <p class="text-muted">No servers registered yet. Use the buttons above to register new servers or autodetect existing ones.</p>
+            <p class="text-muted">{{ _('No servers registered yet. Use the buttons above to register new servers or autodetect existing ones.') }}</p>
           </td>
         </tr>
         {% endfor %}

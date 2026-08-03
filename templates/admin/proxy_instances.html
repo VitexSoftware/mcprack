@@ -1,20 +1,19 @@
 {% extends "base.html" %}
-{% block title %}Proxy instances & subscriptions — mcprack{% endblock %}
+{% block title %}{{ _('Proxy instances & subscriptions') }} — mcprack{% endblock %}
 {% block content %}
 
 <section class="section">
-  <h1>🔷 Server subscriptions</h1>
-  <p class="text-muted">Which users have selected which MCP servers, and whether a live
-  per-user proxy instance is currently running for that pair.</p>
+  <h1>🔷 {{ _('Server subscriptions') }}</h1>
+  <p class="text-muted">{{ _('Which users have selected which MCP servers, and whether a live per-user proxy instance is currently running for that pair.') }}</p>
 
   <div style="overflow-x: auto;">
     <table>
       <thead>
         <tr>
-          <th>User</th>
-          <th>Server</th>
-          <th>Selected</th>
-          <th>Proxy status</th>
+          <th>{{ _('User') }}</th>
+          <th>{{ _('Server') }}</th>
+          <th>{{ _('Selected') }}</th>
+          <th>{{ _('Proxy status') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -25,18 +24,18 @@
           <td>{{ row.selected_at.strftime('%Y-%m-%d %H:%M') if row.selected_at else '—' }}</td>
           <td>
             {% if row.proxy_running %}
-              <span class="badge badge-success">✓ running</span>
+              <span class="badge badge-success">✓ {{ _('running') }}</span>
             {% elif row.is_stdio_proxy_candidate %}
-              <span class="badge badge-warning">not started yet</span>
+              <span class="badge badge-warning">{{ _('not started yet') }}</span>
             {% else %}
-              <span class="text-muted">— (network endpoint, no proxy needed)</span>
+              <span class="text-muted">— {{ _('(network endpoint, no proxy needed)') }}</span>
             {% endif %}
           </td>
         </tr>
         {% else %}
         <tr>
           <td colspan="4" style="text-align: center; padding: var(--space-lg);">
-            <p class="text-muted">No users have selected any servers yet.</p>
+            <p class="text-muted">{{ _('No users have selected any servers yet.') }}</p>
           </td>
         </tr>
         {% endfor %}
@@ -46,22 +45,21 @@
 </section>
 
 <section class="section">
-  <h2>Running per-user proxy instances</h2>
-  <p class="text-muted">Only stdio servers without a fixed network URL are started here, on demand,
-  one isolated instance per (user, server) pair.</p>
+  <h2>{{ _('Running per-user proxy instances') }}</h2>
+  <p class="text-muted">{{ _('Only stdio servers without a fixed network URL are started here, on demand, one isolated instance per (user, server) pair.') }}</p>
 
   <div style="overflow-x: auto;">
     <table>
       <thead>
         <tr>
-          <th>User</th>
-          <th>Server</th>
-          <th>PID</th>
-          <th>Port</th>
-          <th>Status</th>
-          <th>Idle</th>
-          <th>Log</th>
-          <th>Actions</th>
+          <th>{{ _('User') }}</th>
+          <th>{{ _('Server') }}</th>
+          <th>{{ _('PID') }}</th>
+          <th>{{ _('Port') }}</th>
+          <th>{{ _('Status') }}</th>
+          <th>{{ _('Idle') }}</th>
+          <th>{{ _('Log') }}</th>
+          <th>{{ _('Actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -73,25 +71,25 @@
           <td>{{ row.port }}</td>
           <td>
             {% if row.running %}
-            <span class="badge badge-success">✓ running</span>
+            <span class="badge badge-success">✓ {{ _('running') }}</span>
             {% else %}
-            <span class="badge badge-warning">stale</span>
+            <span class="badge badge-warning">{{ _('stale') }}</span>
             {% endif %}
           </td>
           <td>{{ (row.idle_seconds|string + " s") if row.idle_seconds is not none else "-" }}</td>
           <td><small class="text-muted">{{ row.log_path }}</small></td>
           <td>
             <form class="inline" method="post" action="{{ url_for('admin.proxy_instance_stop', user_id=row.user_id, server_id=row.server_id) }}"
-                  onsubmit="return confirm('Stop proxy for {{ row.username }} / {{ row.server_name }}?');">
+                  onsubmit="return confirm('{{ _('Stop proxy for %(username)s / %(server_name)s?', username=row.username, server_name=row.server_name) }}');">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-              <button type="submit" class="btn btn-sm btn-danger">Stop</button>
+              <button type="submit" class="btn btn-sm btn-danger">{{ _('Stop') }}</button>
             </form>
           </td>
         </tr>
         {% else %}
         <tr>
           <td colspan="8" style="text-align: center; padding: var(--space-lg);">
-            <p class="text-muted">No per-user proxy instances running right now.</p>
+            <p class="text-muted">{{ _('No per-user proxy instances running right now.') }}</p>
           </td>
         </tr>
         {% endfor %}

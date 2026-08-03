@@ -1,14 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Your {{ server.label }} Credentials — mcprack{% endblock %}
+{% block title %}{{ _('Your %(label)s Credentials', label=server.label) }} — mcprack{% endblock %}
 {% block content %}
 
 <section>
-  <h1>🔐 Your credentials for {{ server.label }}</h1>
-  <p class="text-muted">These credentials are stored securely in Vaultwarden and only apply to configs you download. They override the admin's default credentials.</p>
+  <h1>🔐 {{ _('Your credentials for %(label)s', label=server.label) }}</h1>
+  <p class="text-muted">{{ _("These credentials are stored securely in Vaultwarden and only apply to configs you download. They override the admin's default credentials.") }}</p>
 
   {% if server.env_var_names %}
   <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); margin: var(--space-lg) 0; font-size: var(--font-size-sm);">
-    <p style="margin: 0; font-weight: var(--font-weight-medium); margin-bottom: var(--space-xs);">Expected keys:</p>
+    <p style="margin: 0; font-weight: var(--font-weight-medium); margin-bottom: var(--space-xs);">{{ _('Expected keys:') }}</p>
     <code style="display: block; margin: 0;">{{ server.env_var_names | join(', ') }}</code>
   </div>
   {% endif %}
@@ -16,24 +16,24 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <div class="form-group">
-      <label for="env_text">Credentials (KEY=value format, one per line)</label>
+      <label for="env_text">{{ _('Credentials (KEY=value format, one per line)') }}</label>
       <textarea id="env_text" name="env_text" placeholder="EXAMPLE_API_KEY=your-key-here&#10;EXAMPLE_PASSWORD=your-password-here">{{ env_text }}</textarea>
-      <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">Store sensitive values like API keys, tokens, and passwords in KEY=value format.</p>
+      <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">{{ _('Store sensitive values like API keys, tokens, and passwords in KEY=value format.') }}</p>
     </div>
 
     <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
       <button type="submit" name="action" value="save" class="btn btn-primary">
-        💾 Save My Credentials
+        💾 {{ _('Save My Credentials') }}
       </button>
-      
+
       {% if has_override %}
         <button type="submit" name="action" value="reset" class="btn btn-secondary">
-          🔄 Reset to Default
+          🔄 {{ _('Reset to Default') }}
         </button>
       {% endif %}
-      
+
       <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">
-        ← Back to Catalog
+        ← {{ _('Back to Catalog') }}
       </a>
     </div>
   </form>

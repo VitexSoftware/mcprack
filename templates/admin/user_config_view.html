@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ filename }} — for {{ target_user.display_name }} — mcprack{% endblock %}
+{% block title %}{{ filename }} — {{ _('for %(name)s', name=target_user.display_name) }} — mcprack{% endblock %}
 {% block content %}
 
 <section>
   <h1>{{ filename }}</h1>
-  <p class="text-muted">Config for <strong>{{ target_user.display_name }}</strong> ({{ target_user.username }}). Copy the configuration below or download it directly, then send it to the user.</p>
+  <p class="text-muted">{{ _('Config for <strong>%(name)s</strong> (%(username)s). Copy the configuration below or download it directly, then send it to the user.', name=target_user.display_name, username=target_user.username) }}</p>
 
   <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); margin: var(--space-lg) 0;">
     <textarea id="config-json" rows="20" readonly onclick="this.select()">{{ config_json }}</textarea>
@@ -12,18 +12,18 @@
 
   <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin: var(--space-lg) 0;">
     <button type="button" id="copy-button" class="btn btn-primary" onclick="copyConfig()">
-      📋 Copy to clipboard
+      📋 {{ _('Copy to clipboard') }}
     </button>
     <a href="{{ url_for('admin.user_config_download', user_id=target_user.id, client=client) }}" class="btn btn-secondary" download>
-      ⬇️ Download File
+      ⬇️ {{ _('Download File') }}
     </a>
     <a href="{{ url_for('admin.user_edit', user_id=target_user.id) }}" class="btn btn-secondary">
-      ← Back to {{ target_user.username }}
+      ← {{ _('Back to %(username)s', username=target_user.username) }}
     </a>
   </div>
 
   <div id="copy-status" style="display: none; padding: var(--space-md); background-color: rgba(16, 185, 129, 0.1); color: var(--color-success); border-radius: var(--border-radius-lg); border-left: 4px solid var(--color-success); font-size: var(--font-size-sm);">
-    ✓ Copied to clipboard!
+    ✓ {{ _('Copied to clipboard!') }}
   </div>
 </section>
 
@@ -54,7 +54,7 @@
         document.execCommand("copy");
         showCopied();
       } catch (err) {
-        status.textContent = "Copy failed — select the text manually.";
+        status.textContent = {{ _('Copy failed — select the text manually.') | tojson }};
         status.style.display = "block";
       }
     }

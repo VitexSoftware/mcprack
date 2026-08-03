@@ -1,9 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Vaultwarden diagnostics — mcprack{% endblock %}
+{% block title %}{{ _('Vaultwarden diagnostics') }} — mcprack{% endblock %}
 {% block content %}
-<h1>Vaultwarden connection wizard</h1>
-<p>Checks each prerequisite in order and stops at the first problem, so you
-can fix one thing at a time instead of guessing from a raw error message.</p>
+<h1>{{ _('Vaultwarden connection wizard') }}</h1>
+<p>{{ _('Checks each prerequisite in order and stops at the first problem, so you can fix one thing at a time instead of guessing from a raw error message.') }}</p>
 
 <ol class="wizard">
   {% for step in steps %}
@@ -23,53 +22,44 @@ can fix one thing at a time instead of guessing from a raw error message.</p>
 </ol>
 
 {% if steps and steps[-1].status == "ok" %}
-<p class="flash-success">All checks passed — Vaultwarden is fully configured and reachable.</p>
+<p class="flash-success">{{ _('All checks passed — Vaultwarden is fully configured and reachable.') }}</p>
 {% else %}
-<p><small>Edit <code>/etc/mcprack/env</code> on the mcprack host to fix the flagged setting, then
-restart the mcprack service, then re-run this diagnostics page.</small></p>
+<p><small>{{ _('Edit <code>/etc/mcprack/env</code> on the mcprack host to fix the flagged setting, then restart the mcprack service, then re-run this diagnostics page.') }}</small></p>
 {% endif %}
 
 <p>
-  <a href="{{ url_for('admin.vaultwarden_wizard') }}">Re-run diagnostics</a>
+  <a href="{{ url_for('admin.vaultwarden_wizard') }}">{{ _('Re-run diagnostics') }}</a>
   &middot;
-  <a href="{{ url_for('admin.servers_list') }}">Back to servers</a>
+  <a href="{{ url_for('admin.servers_list') }}">{{ _('Back to servers') }}</a>
 </p>
 
 <section class="section">
-  <h2>Migrate secrets between local storage and Vaultwarden</h2>
-  <p class="text-muted">These are deliberate, one-off data moves — not automatic
-  fallbacks. Neither backend is ever chosen silently at request time based on
-  live reachability; which one is authoritative is decided purely by whether
-  <code>BW_SERVER</code> is configured.</p>
+  <h2>{{ _('Migrate secrets between local storage and Vaultwarden') }}</h2>
+  <p class="text-muted">{{ _("These are deliberate, one-off data moves — not automatic fallbacks. Neither backend is ever chosen silently at request time based on live reachability; which one is authoritative is decided purely by whether <code>BW_SERVER</code> is configured.") }}</p>
 
   <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-top: var(--space-md);">
     <form method="post" action="{{ url_for('admin.vaultwarden_migrate_to_vaultwarden') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary" {{ "disabled" if not vaultwarden_configured else "" }}>
-        ⬆️ Move local secrets into Vaultwarden
+        ⬆️ {{ _('Move local secrets into Vaultwarden') }}
       </button>
       <p class="text-muted" style="font-size: var(--font-size-xs); max-width: 32ch;">
-        Run this once Vaultwarden has been newly configured, to move over
-        whatever accumulated locally while it wasn't.
+        {{ _('Run this once Vaultwarden has been newly configured, to move over whatever accumulated locally while it was not.') }}
       </p>
     </form>
 
     <form method="post" action="{{ url_for('admin.vaultwarden_snapshot_to_local') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-secondary" {{ "disabled" if not vaultwarden_configured else "" }}>
-        ⬇️ Snapshot Vaultwarden secrets locally
+        ⬇️ {{ _('Snapshot Vaultwarden secrets locally') }}
       </button>
       <p class="text-muted" style="font-size: var(--font-size-xs); max-width: 32ch;">
-        Run this <em>before</em> a planned Vaultwarden outage. Vaultwarden's
-        copy is left untouched — afterwards you can unset
-        <code>BW_SERVER</code> for the duration and switch back once it's
-        back up.
+        {{ _("Run this <em>before</em> a planned Vaultwarden outage. Vaultwarden's copy is left untouched — afterwards you can unset <code>BW_SERVER</code> for the duration and switch back once it's back up.") }}
       </p>
     </form>
   </div>
   {% if not vaultwarden_configured %}
-  <p class="text-muted" style="font-size: var(--font-size-xs);">Both actions require
-  <code>BW_SERVER</code> to be configured and reachable.</p>
+  <p class="text-muted" style="font-size: var(--font-size-xs);">{{ _('Both actions require <code>BW_SERVER</code> to be configured and reachable.') }}</p>
   {% endif %}
 </section>
 {% endblock %}

@@ -1,42 +1,42 @@
 {% extends "base.html" %}
-{% block title %}{{ "Edit" if user else "New" }} user — mcprack{% endblock %}
+{% block title %}{{ _('Edit user') if user else _('New user') }} — mcprack{% endblock %}
 {% block content %}
-<h1>{{ "Edit" if user else "Create local" }} user</h1>
+<h1>{{ _('Edit user') if user else _('Create local user') }}</h1>
 <form method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   {% if not user %}
-  <label for="username">Username</label>
+  <label for="username">{{ _('Username') }}</label>
   <input type="text" id="username" name="username" required autofocus>
 
-  <label for="email">Email</label>
+  <label for="email">{{ _('Email') }}</label>
   <input type="email" id="email" name="email">
 
-  <label for="password">Password</label>
+  <label for="password">{{ _('Password') }}</label>
   <input type="password" id="password" name="password" required>
   {% else %}
   <p><strong>{{ user.username }}</strong> ({{ user.auth_type }})</p>
   {% if user.auth_type == "local" %}
-  <label for="password">New password (leave blank to keep current)</label>
+  <label for="password">{{ _('New password (leave blank to keep current)') }}</label>
   <input type="password" id="password" name="password">
   {% endif %}
   <label>
     <input type="checkbox" name="is_active" {{ "checked" if user.is_active else "" }}>
-    Active
+    {{ _('Active') }}
   </label>
   {% endif %}
 
   <label>
     <input type="checkbox" name="is_admin" {{ "checked" if user and user.is_admin else "" }}>
-    Admin
+    {{ _('Admin') }}
   </label>
 
   {% if user %}
-  <h2>Server access</h2>
-  <p>Explicitly allow or deny each currently available MCP server for this user.</p>
+  <h2>{{ _('Server access') }}</h2>
+  <p>{{ _('Explicitly allow or deny each currently available MCP server for this user.') }}</p>
   {% if available_servers %}
   <table>
     <thead>
-      <tr><th>Server</th><th>Access</th></tr>
+      <tr><th>{{ _('Server') }}</th><th>{{ _('Access') }}</th></tr>
     </thead>
     <tbody>
       {% for server in available_servers %}
@@ -46,11 +46,11 @@
         <td>
           <label>
             <input type="radio" name="server_access_{{ server.id }}" value="allow" {{ "checked" if allowed else "" }}>
-            Allow
+            {{ _('Allow') }}
           </label>
           <label>
             <input type="radio" name="server_access_{{ server.id }}" value="deny" {{ "checked" if not allowed else "" }}>
-            Deny
+            {{ _('Deny') }}
           </label>
         </td>
       </tr>
@@ -58,11 +58,11 @@
     </tbody>
   </table>
   {% else %}
-  <p>No enabled servers available.</p>
+  <p>{{ _('No enabled servers available.') }}</p>
   {% endif %}
 
-  <h2>Client configs</h2>
-  <p>View or download this user's MCP client config directly — useful for users who never log in themselves.</p>
+  <h2>{{ _('Client configs') }}</h2>
+  <p>{{ _("View or download this user's MCP client config directly — useful for users who never log in themselves.") }}</p>
   <ul>
     {% for client in clients %}
     <li><a href="{{ url_for('admin.user_config_view', user_id=user.id, client=client) }}">{{ client }}</a></li>
@@ -70,6 +70,6 @@
   </ul>
   {% endif %}
 
-  <button type="submit">Save</button>
+  <button type="submit">{{ _('Save') }}</button>
 </form>
 {% endblock %}

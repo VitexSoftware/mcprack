@@ -1,52 +1,50 @@
 {% extends "base.html" %}
-{% block title %}Audit Log — Admin — mcprack{% endblock %}
+{% block title %}{{ _('Audit Log') }} — {{ _('Admin') }} — mcprack{% endblock %}
 {% block content %}
 
 <section class="section">
-  <h1>📜 Audit Log</h1>
+  <h1>📜 {{ _('Audit Log') }}</h1>
   <p class="text-muted">
-    Append-only security audit trail — who did what, against which server, and whether it
-    succeeded. Entries cannot be edited or deleted here.
-    {% if retention_days %}Entries older than {{ retention_days }} days are archived and purged by the
-    <code>flask audit-archive</code> CLI command.{% endif %}
+    {{ _('Append-only security audit trail — who did what, against which server, and whether it succeeded. Entries cannot be edited or deleted here.') }}
+    {% if retention_days %}{{ _('Entries older than %(days)s days are archived and purged by the <code>flask audit-archive</code> CLI command.', days=retention_days) }}{% endif %}
   </p>
 
   <form method="get" style="display: flex; gap: var(--space-md); flex-wrap: wrap; align-items: end; margin-bottom: var(--space-lg);">
     <div>
-      <label for="server_id">Server</label><br>
+      <label for="server_id">{{ _('Server') }}</label><br>
       <select name="server_id" id="server_id">
-        <option value="">All servers</option>
+        <option value="">{{ _('All servers') }}</option>
         {% for server in servers %}
         <option value="{{ server.id }}" {% if filters.server_id == server.id %}selected{% endif %}>{{ server.name }}</option>
         {% endfor %}
       </select>
     </div>
     <div>
-      <label for="user_id">User</label><br>
+      <label for="user_id">{{ _('User') }}</label><br>
       <select name="user_id" id="user_id">
-        <option value="">All users</option>
+        <option value="">{{ _('All users') }}</option>
         {% for user in users %}
         <option value="{{ user.id }}" {% if filters.user_id == user.id %}selected{% endif %}>{{ user.username }}</option>
         {% endfor %}
       </select>
     </div>
     <div>
-      <label for="since">From</label><br>
+      <label for="since">{{ _('From') }}</label><br>
       <input type="datetime-local" name="since" id="since" value="{{ filters.since }}">
     </div>
     <div>
-      <label for="until">To</label><br>
+      <label for="until">{{ _('To') }}</label><br>
       <input type="datetime-local" name="until" id="until" value="{{ filters.until }}">
     </div>
     <div>
       <label>
         <input type="checkbox" name="errors_only" {% if filters.errors_only %}checked{% endif %}>
-        Errors only
+        {{ _('Errors only') }}
       </label>
     </div>
     <div>
-      <button type="submit" class="btn btn-primary">Filter</button>
-      <a href="{{ url_for('admin.audit_log') }}" class="btn btn-secondary">Reset</a>
+      <button type="submit" class="btn btn-primary">{{ _('Filter') }}</button>
+      <a href="{{ url_for('admin.audit_log') }}" class="btn btn-secondary">{{ _('Reset') }}</a>
     </div>
   </form>
 
@@ -54,15 +52,15 @@
     <table>
       <thead>
         <tr>
-          <th>Timestamp (UTC)</th>
-          <th>User</th>
-          <th>Server</th>
-          <th>Action</th>
-          <th>Result</th>
-          <th>Detail</th>
-          <th>Source</th>
-          <th>Duration</th>
-          <th>Request</th>
+          <th>{{ _('Timestamp (UTC)') }}</th>
+          <th>{{ _('User') }}</th>
+          <th>{{ _('Server') }}</th>
+          <th>{{ _('Action') }}</th>
+          <th>{{ _('Result') }}</th>
+          <th>{{ _('Detail') }}</th>
+          <th>{{ _('Source') }}</th>
+          <th>{{ _('Duration') }}</th>
+          <th>{{ _('Request') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -74,9 +72,9 @@
           <td><code>{{ e.action }}</code></td>
           <td>
             {% if e.result == 'success' %}
-              <span class="badge badge-success">✓ success</span>
+              <span class="badge badge-success">✓ {{ _('success') }}</span>
             {% else %}
-              <span class="badge badge-error" title="{{ e.error_code or '' }}">✗ error</span>
+              <span class="badge badge-error" title="{{ e.error_code or '' }}">✗ {{ _('error') }}</span>
             {% endif %}
           </td>
           <td>{{ e.error_message or '—' }}</td>
@@ -91,14 +89,14 @@
         {% else %}
         <tr>
           <td colspan="9" style="text-align: center; padding: var(--space-lg);">
-            <p class="text-muted">No audit entries match the current filters.</p>
+            <p class="text-muted">{{ _('No audit entries match the current filters.') }}</p>
           </td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  <p class="text-muted" style="margin-top: var(--space-md);">Showing the most recent {{ entries | length }} matching entries (limit 500).</p>
+  <p class="text-muted" style="margin-top: var(--space-md);">{{ _('Showing the most recent %(count)s matching entries (limit 500).', count=entries | length) }}</p>
 </section>
 
 {% endblock %}
