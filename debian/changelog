@@ -3,6 +3,9 @@ mcprack (1.0.0) unstable; urgency=medium
   * Add MCP server installer subsystem (pip, npm, docker) with per-
     server isolated venv/npm dirs, ephemeral Docker run, async install
     jobs, and admin Install wizard.
+  * Add a command-line management CLI (`mcprack user|server|secret ...`)
+    for administering accounts, catalog servers, and credentials without
+    the web UI, plus an mcprack(1) man page.
 
  -- CyberVitexus <info@vitexsoftware.cz>  Mon, 03 Aug 2026 11:23:29 +0200
 

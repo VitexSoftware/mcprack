@@ -1,0 +1,154 @@
+.TH MCPRACK 1 "August 2026" "mcprack" "User Commands"
+.SH NAME
+mcprack \- command-line administration for the mcprack MCP server catalog
+.SH SYNOPSIS
+.B mcprack
+.RI [ --host " " HOST ]
+.RI [ --port " " PORT ]
+.br
+.B mcprack
+.I COMMAND
+.RI [ ARGS ...]
+.SH DESCRIPTION
+.B mcprack
+is a self-service catalog and client-config generator for Model Context
+Protocol (MCP) servers. This command is a dual-mode launcher installed by
+the Debian package:
+.PP
+With no arguments, or an argument starting with
+.BR - ,
+it starts the Flask development server (development/manual use only \-
+production runs via
+.B gunicorn
+and the
+.B mcprack.service
+systemd unit):
+.PP
+.RS
+mcprack --host 0.0.0.0 --port 8913
+.RE
+.PP
+With any other first argument, it forwards to the Flask management CLI,
+equivalent to running
+.B "flask --app app:create_app"
+with the same arguments. This exposes the top-level
+.BR create-admin ", " db " and " audit-archive
+commands, plus the
+.BR user ", " server " and " secret
+command groups documented below.
+.SH COMMANDS
+.SS Top-level
+.TP
+.B create-admin
+Create an initial admin account interactively.
+.TP
+.B db upgrade
+Apply pending database migrations (Alembic, via Flask-Migrate).
+.TP
+.B db stamp head
+Mark the database schema as up to date without running migrations.
+.TP
+.B audit-archive
+Archive or prune old audit log entries. See
+.B --help
+for retention/output flags.
+.SS user \- manage mcprack user accounts
+.TP
+.B user list
+List all user accounts (id, username, auth type, email, admin/disabled flags).
+.TP
+.BI "user create " "[--username USERNAME] [--password PASSWORD] [--email EMAIL] [--admin]"
+Create a local user account. Prompts for username/password if omitted.
+.TP
+.BI "user delete " "USERNAME " "--yes"
+Permanently delete a user account and their selections/overrides.
+Requires
+.B --yes
+confirmation.
+.TP
+.BI "user passwd " USERNAME
+Reset a local user's password (fails for non-local auth types).
+.TP
+.BI "user enable " USERNAME
+Re-enable a disabled user account.
+.TP
+.BI "user disable " USERNAME
+Disable a user account, blocking login without deleting it.
+.TP
+.BI "user promote " USERNAME
+Grant admin privileges to a user.
+.TP
+.BI "user demote " USERNAME
+Revoke admin privileges from a user.
+.SS server \- manage MCP catalog servers
+.TP
+.B server list
+List all MCP catalog servers (id, name, transport, enabled/disabled, category).
+.TP
+.BI "server show " NAME
+Show a server's non-secret configuration: label, transport, enabled state,
+category, command/args or url, declared secret keys, and install method
+if the server was installed via the pip/npm/docker installer subsystem.
+.TP
+.BI "server enable " NAME
+Enable a server so users can select it in the catalog.
+.TP
+.BI "server disable " NAME
+Disable a server, hiding it from the catalog.
+.TP
+.BI "server delete " "NAME " "--yes"
+Permanently delete a server and any stored credentials. Requires
+.B --yes
+confirmation.
+.SS secret \- manage a server's credential (secret env var) values
+.TP
+.B secret backend
+Show which secret store backend is active: Vaultwarden, or the local
+encrypted fallback (used when
+.B BW_SERVER
+is unset).
+.TP
+.BI "secret list " SERVER_NAME
+List a server's declared secret env var keys and whether each currently
+has a value set.
+.TP
+.BI "secret set " "SERVER_NAME KEY " "[--value VALUE]"
+Set or overwrite one credential value for a server. Prompts for a hidden
+value if
+.B --value
+is omitted.
+.TP
+.BI "secret unset " "SERVER_NAME KEY"
+Remove one credential value from a server.
+.SH EXAMPLES
+.TP
+Create an admin user directly from the shell:
+.B mcprack user create --username alice --admin
+.TP
+Take a broken server out of the catalog without deleting it:
+.B mcprack server disable jenkins
+.TP
+Rotate a server's API token:
+.B mcprack secret set jenkins JENKINS_TOKEN
+.TP
+Check which secret backend is active:
+.B mcprack secret backend
+.PP
+Every command and subcommand accepts
+.BR --help .
+.SH FILES
+.TP
+.I /etc/mcprack/env
+Runtime configuration (database URI, secret key, Vaultwarden/LDAP
+settings). Sourced before running
+.B mcprack
+as the
+.B mcprack
+system user; see
+.B README.Debian
+for the full variable reference.
+.SH SEE ALSO
+.BR flask (1),
+.I /usr/share/doc/mcprack/README.Debian
+.SH AUTHOR
+Vítězslav Dvořák <info@vitexsoftware.cz>

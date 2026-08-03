@@ -4,6 +4,7 @@ extensions.py /usr/lib/mcprack/
 config.py /usr/lib/mcprack/
 models.py /usr/lib/mcprack/
 auth.py /usr/lib/mcprack/
+cli.py /usr/lib/mcprack/
 admin.py /usr/lib/mcprack/
 catalog.py /usr/lib/mcprack/
 config_formats.py /usr/lib/mcprack/

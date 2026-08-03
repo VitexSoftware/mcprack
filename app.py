@@ -133,6 +133,10 @@ def register_static_routes(app):
 
 
 def register_cli(app):
+    from cli import register_management_cli
+
+    register_management_cli(app)
+
     @app.cli.command("create-admin")
     @click.option("--username", prompt=True)
     @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)

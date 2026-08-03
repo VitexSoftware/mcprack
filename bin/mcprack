@@ -1,5 +1,26 @@
 #!/bin/sh
-# Launcher for the mcprack Flask app (dev/manual use — production runs via
-# gunicorn + the mcprack.service systemd unit, see debian/mcprack.service).
+# mcprack command-line tool.
+#
+# With no arguments, or arguments starting with "-", runs the dev server
+# (dev/manual use only — production runs via gunicorn + the mcprack.service
+# systemd unit, see debian/mcprack.service):
+#   mcprack --host 0.0.0.0 --port 8913
+#
+# Otherwise forwards to the Flask management CLI (see app.py/cli.py):
+#   mcprack user list
+#   mcprack user create --username alice --admin
+#   mcprack server list
+#   mcprack server disable some-server
+#   mcprack secret set some-server API_KEY
+#   mcprack create-admin
+#   mcprack db upgrade
 cd /usr/lib/mcprack || cd "$(dirname "$0")/.."
-exec python3 -m flask --app app:create_app run "$@"
+
+case "$1" in
+    ""|-*)
+        exec python3 -m flask --app app:create_app run "$@"
+        ;;
+    *)
+        exec python3 -m flask --app app:create_app "$@"
+        ;;
+esac

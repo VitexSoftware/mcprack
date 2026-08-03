@@ -175,6 +175,57 @@ Open http://127.0.0.1:5000, log in with the admin account you just created,
 register a server under **Servers**, then visit the catalog to select it and
 download a config.
 
+## Command-line administration
+
+Besides the web UI, users, MCP catalog servers, and per-server credentials
+can all be managed from the command line via `cli.py`, registered onto
+mcprack's Flask CLI. In development, invoke it with `flask <command>`
+(e.g. `flask user list`); on a Debian install, the `mcprack` launcher
+script forwards any non-flag first argument the same way, so
+`mcprack user list` works too (see "Installation (Debian/Ubuntu package)"
+below). With no arguments, or arguments starting with `-`, `mcprack` runs
+the dev server instead (`mcprack --host 0.0.0.0 --port 8913`).
+
+**`user`** — manage mcprack accounts:
+
+```bash
+flask user list
+flask user create --username alice --admin   # prompts for password if omitted
+flask user passwd alice
+flask user enable alice
+flask user disable alice                     # blocks login without deleting
+flask user promote alice
+flask user demote alice
+flask user delete alice --yes
+```
+
+**`server`** — manage MCP catalog servers:
+
+```bash
+flask server list
+flask server show jenkins                    # non-secret config only
+flask server enable jenkins
+flask server disable jenkins
+flask server delete jenkins --yes             # also clears stored secrets
+```
+
+**`secret`** — manage a server's credential (secret env var) values:
+
+```bash
+flask secret backend                          # Vaultwarden or local encrypted fallback?
+flask secret list jenkins
+flask secret set jenkins JENKINS_TOKEN
+flask secret unset jenkins JENKINS_TOKEN
+```
+
+Every command and option has `--help` (e.g. `flask user create --help`),
+generated automatically, so it's not duplicated here in full — on a
+Debian install, `man mcprack` also covers the full command reference.
+
+This CLI does not cover the pip/npm/docker server installer subsystem
+below, which stays UI-only; `server show` only surfaces a server's
+`install_method`/`installed_version` read-only.
+
 ## Database
 
 `SQLALCHEMY_DATABASE_URI` defaults to SQLite but PostgreSQL

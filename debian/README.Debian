@@ -123,14 +123,26 @@ Migrations and the initial admin account are created automatically by
 restoring a database dump):
 
     # Apply migrations
-    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db upgrade'
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack db upgrade'
 
     # Create another admin account
-    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask create-admin'
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack create-admin'
 
 Then start the service:
 
     systemctl enable --now mcprack.service
+
+### Command-line administration (user / server / secret)
+
+Beyond `create-admin`, the `mcprack` binary also forwards `user`,
+`server`, and `secret` subcommands for managing accounts, catalog
+servers, and their credential values without the web UI, e.g.:
+
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack user create --username alice --admin'
+    su -s /bin/sh mcprack -c 'cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack server list'
+
+See the "Command-line administration" section in the main README, or
+`man mcprack`, for the full command reference.
 
 
 ## Troubleshooting
@@ -151,8 +163,8 @@ on every postinst run, not just on first install), but an install that hit
 this under an older package needs a one-time manual fix:
 
     sudo chmod 0640 /etc/mcprack/env
-    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db upgrade"
-    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask create-admin"
+    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack db upgrade"
+    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack create-admin"
 
 ### "table already exists" from `flask db upgrade`
 
@@ -169,7 +181,7 @@ shouldn't happen on fresh bootstraps going forward. If you're recovering
 an install that already hit it, tell Alembic the schema is current instead
 of trying to upgrade it:
 
-    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=app:create_app python3 -m flask db stamp head"
+    sudo su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; mcprack db stamp head"
 
 ## MCP HTTP Proxy (how remote clients reach stdio servers)
 
