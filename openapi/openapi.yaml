@@ -1,0 +1,1035 @@
+openapi: 3.0.3
+info:
+  title: mcprack API
+  description: >
+    Self-service MCP (Model Context Protocol) server catalog and client
+    config generator. This API lets an admin manage the server catalog and
+    users, and lets any user manage their own server selections, personal
+    credential overrides, API tokens, and generated client configs.
+  version: "0.0.0"
+  contact:
+    name: VitexSoftware
+    url: https://github.com/VitexSoftware/mcprack
+servers:
+  - url: /api/v1
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+tags:
+  - name: profile
+  - name: tokens
+  - name: servers
+  - name: selections
+  - name: overrides
+  - name: config
+  - name: admin-servers
+  - name: admin-users
+  - name: audit-log
+  - name: meta
+
+paths:
+  /me:
+    get:
+      tags: [profile]
+      summary: Current user's profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /tokens:
+    get:
+      tags: [tokens]
+      summary: List the current user's API tokens
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Token"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      tags: [tokens]
+      summary: Create a new API token for the current user
+      description: >
+        The raw token value is returned exactly once, in this response. It
+        cannot be retrieved again — only its hash is persisted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  example: ci-script
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    allOf:
+                      - $ref: "#/components/schemas/Token"
+                      - type: object
+                        properties:
+                          token:
+                            type: string
+                            description: Raw bearer token — shown only once.
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /tokens/{tokenId}:
+    delete:
+      tags: [tokens]
+      summary: Revoke one of the current user's API tokens
+      parameters:
+        - $ref: "#/components/parameters/TokenId"
+      responses:
+        "204":
+          description: Revoked
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /servers:
+    get:
+      tags: [servers]
+      summary: List servers visible to the current user
+      description: Enabled servers the current user is permitted to use.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Server"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/selections:
+    get:
+      tags: [selections]
+      summary: List the current user's selected servers
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Selection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    put:
+      tags: [selections]
+      summary: Replace the current user's selected servers
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [server_ids]
+              properties:
+                server_ids:
+                  type: array
+                  items:
+                    type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      server_ids:
+                        type: array
+                        items:
+                          type: integer
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/overrides/{serverId}:
+    get:
+      tags: [overrides]
+      summary: Get the current user's override status for a server
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+        - name: reveal
+          in: query
+          description: Set to "1" to include decrypted override values.
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Override"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/UpstreamUnavailable"
+    put:
+      tags: [overrides]
+      summary: Set the current user's credential override for a server
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [env]
+              properties:
+                env:
+                  type: object
+                  additionalProperties:
+                    type: string
+      responses:
+        "200":
+          description: OK
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          $ref: "#/components/responses/UpstreamUnavailable"
+    delete:
+      tags: [overrides]
+      summary: Reset a server override back to its default credentials
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "204":
+          description: Reset
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502":
+          $ref: "#/components/responses/UpstreamUnavailable"
+
+  /me/config/{client}:
+    get:
+      tags: [config]
+      summary: Generate the current user's client config
+      parameters:
+        - name: client
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [claude, copilot]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      filename:
+                        type: string
+                      config:
+                        type: object
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: >
+            Unknown client, or nothing to generate (e.g. no servers
+            selected, or credentials unavailable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /admin/servers:
+    get:
+      tags: [admin-servers]
+      summary: List all registered servers (admin)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: include_health
+          in: query
+          description: Set to "1" to include reachability/credential health per server.
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ServerDetail"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [admin-servers]
+      summary: Register a new server (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ServerDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/servers/{serverId}:
+    get:
+      tags: [admin-servers]
+      summary: Get a server's full detail (admin)
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+        - name: reveal_secrets
+          in: query
+          description: Set to "1" to include decrypted secret values.
+          schema:
+            type: string
+            enum: ["1"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ServerDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [admin-servers]
+      summary: Update a server (admin, partial update)
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServerUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/ServerDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [admin-servers]
+      summary: Delete a server (admin)
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/users:
+    get:
+      tags: [admin-users]
+      summary: List all users (admin)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/User"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [admin-users]
+      summary: Create a local user (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/users/{userId}:
+    get:
+      tags: [admin-users]
+      summary: Get a user's detail + server permissions (admin)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [admin-users]
+      summary: Update a user's flags, password, or server permissions (admin)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [admin-users]
+      summary: Delete a user (admin)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "204":
+          description: Deleted
+        "400":
+          description: Cannot delete your own account.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /audit-log:
+    get:
+      tags: [audit-log]
+      summary: List audit trail entries (admin)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+        - name: server_id
+          in: query
+          schema:
+            type: integer
+        - name: user_id
+          in: query
+          schema:
+            type: integer
+        - name: since
+          in: query
+          description: "YYYY-MM-DDTHH:MM"
+          schema:
+            type: string
+        - name: until
+          in: query
+          description: "YYYY-MM-DDTHH:MM"
+          schema:
+            type: string
+        - name: errors_only
+          in: query
+          schema:
+            type: string
+            enum: ["on"]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLogEntry"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /openapi.json:
+    get:
+      tags: [meta]
+      summary: This OpenAPI 3 document
+      security: []
+      responses:
+        "200":
+          description: OK
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: The session cookie set by POST /login (flask_login).
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: A personal API token minted via POST /api/v1/tokens.
+
+  parameters:
+    ServerId:
+      name: serverId
+      in: path
+      required: true
+      schema:
+        type: integer
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+    TokenId:
+      name: tokenId
+      in: path
+      required: true
+      schema:
+        type: integer
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        default: 1
+    PerPage:
+      name: per_page
+      in: query
+      schema:
+        type: integer
+        default: 50
+        maximum: 200
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Forbidden:
+      description: Admin privileges required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    Conflict:
+      description: Already exists
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+    UpstreamUnavailable:
+      description: Credential store (Vaultwarden) unreachable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorEnvelope"
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+        pages:
+          type: integer
+
+    Token:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        prefix:
+          type: string
+          description: First characters of the raw token, for display only.
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+          nullable: true
+        revoked_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          nullable: true
+        first_name:
+          type: string
+          nullable: true
+        last_name:
+          type: string
+          nullable: true
+        display_name:
+          type: string
+        auth_type:
+          type: string
+          enum: [local, ldap]
+        is_admin:
+          type: boolean
+        is_active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    UserDetail:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            permissions:
+              type: object
+              description: Map of server id -> is_allowed.
+              additionalProperties:
+                type: boolean
+
+    UserCreate:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        email:
+          type: string
+        is_admin:
+          type: boolean
+          default: false
+
+    UserUpdate:
+      type: object
+      properties:
+        is_admin:
+          type: boolean
+        is_active:
+          type: boolean
+        password:
+          type: string
+          description: If present, resets the password (local users only).
+        permissions:
+          type: object
+          description: Map of server id -> is_allowed.
+          additionalProperties:
+            type: boolean
+
+    Server:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        transport:
+          type: string
+          enum: [stdio, http, sse]
+        category:
+          type: string
+          nullable: true
+        enabled:
+          type: boolean
+        allow_user_override:
+          type: boolean
+
+    ServerDetail:
+      allOf:
+        - $ref: "#/components/schemas/Server"
+        - type: object
+          properties:
+            command:
+              type: string
+              nullable: true
+            args:
+              type: array
+              items:
+                type: string
+            url:
+              type: string
+              nullable: true
+            auth_header_name:
+              type: string
+              nullable: true
+            auth_env_key:
+              type: string
+              nullable: true
+            env:
+              type: object
+              additionalProperties:
+                type: string
+            env_var_names:
+              type: array
+              items:
+                type: string
+            secrets:
+              type: object
+              description: Only present when ?reveal_secrets=1 was passed.
+              additionalProperties:
+                type: string
+            has_secrets:
+              type: boolean
+            vaultwarden_item_name:
+              type: string
+              nullable: true
+            install_method:
+              type: string
+              nullable: true
+              enum: [pip, npm, docker, null]
+            package_spec:
+              type: string
+              nullable: true
+            expected_binary:
+              type: string
+              nullable: true
+            install_status:
+              type: string
+              nullable: true
+            installed_version:
+              type: string
+              nullable: true
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            health:
+              type: object
+              description: Only present when ?include_health=1 was passed.
+              properties:
+                reachable:
+                  type: boolean
+                missing_credentials:
+                  type: array
+                  items:
+                    type: string
+
+    ServerCreate:
+      type: object
+      required: [name, transport]
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        transport:
+          type: string
+          enum: [stdio, http, sse]
+        category:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        allow_user_override:
+          type: boolean
+          default: true
+        command:
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        url:
+          type: string
+        auth_header_name:
+          type: string
+        auth_env_key:
+          type: string
+        env:
+          type: object
+          description: Non-secret environment values.
+          additionalProperties:
+            type: string
+        secrets:
+          type: object
+          description: Secret environment values, stored via Vaultwarden or the local encrypted store.
+          additionalProperties:
+            type: string
+
+    ServerUpdate:
+      allOf:
+        - $ref: "#/components/schemas/ServerCreate"
+      description: Same shape as ServerCreate; any field omitted keeps its current value.
+
+    Selection:
+      type: object
+      properties:
+        server_id:
+          type: integer
+        server_name:
+          type: string
+        selected_at:
+          type: string
+          format: date-time
+
+    Override:
+      type: object
+      properties:
+        server_id:
+          type: integer
+        has_override:
+          type: boolean
+        env_keys:
+          type: array
+          items:
+            type: string
+          description: Present when the override exists and ?reveal=1 was not passed.
+        env:
+          type: object
+          description: Present when the override exists and ?reveal=1 was passed.
+          additionalProperties:
+            type: string
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        user_id:
+          type: integer
+          nullable: true
+        server_id:
+          type: integer
+          nullable: true
+        server_name:
+          type: string
+          nullable: true
+        action:
+          type: string
+          enum:
+            - tool_call
+            - config_download
+            - credential_access
+            - proxy_start
+            - proxy_stop
+            - admin_change
+            - login
+            - login_failed
+        result:
+          type: string
+          enum: [success, error]
+        error_code:
+          type: string
+          nullable: true
+        error_message:
+          type: string
+          nullable: true
+        source_ip:
+          type: string
+          nullable: true
+        hostname:
+          type: string
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        request_id:
+          type: string
+          nullable: true

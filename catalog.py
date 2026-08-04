@@ -234,14 +234,14 @@ def user_proxy_mcp(token, server_id):
 csrf.exempt(user_proxy_mcp)
 
 
-@bp.route("/selection", methods=["POST"])
-@login_required
-def selection():
-    submitted_ids = {int(sid) for sid in request.form.getlist("server_id")}
-    allowed_ids = _allowed_enabled_server_ids(current_user.id)
-    submitted_ids &= allowed_ids
+def set_user_selection(user_id, submitted_ids):
+    """Replace user_id's selected servers with submitted_ids, restricted to
+    servers they're actually allowed to see. Returns the final set of
+    server ids selected. Caller is responsible for db.session.commit()."""
+    allowed_ids = _allowed_enabled_server_ids(user_id)
+    submitted_ids = set(submitted_ids) & allowed_ids
 
-    existing = UserServerSelection.query.filter_by(user_id=current_user.id).all()
+    existing = UserServerSelection.query.filter_by(user_id=user_id).all()
     existing_ids = {row.server_id for row in existing}
 
     for row in existing:
@@ -249,8 +249,16 @@ def selection():
             db.session.delete(row)
 
     for server_id in submitted_ids - existing_ids:
-        db.session.add(UserServerSelection(user_id=current_user.id, server_id=server_id))
+        db.session.add(UserServerSelection(user_id=user_id, server_id=server_id))
 
+    return submitted_ids
+
+
+@bp.route("/selection", methods=["POST"])
+@login_required
+def selection():
+    submitted_ids = {int(sid) for sid in request.form.getlist("server_id")}
+    set_user_selection(current_user.id, submitted_ids)
     db.session.commit()
     flash("Selection saved.", "success")
     return redirect(url_for("catalog.index"))
@@ -317,8 +325,12 @@ def override(server_id):
 def _build_client_config_json(client, user=None):
     """Resolve `user`'s (default: the current user) selected+enabled servers
     into a rendered client config, as a pretty-printed JSON string. Returns
-    None (with a flash already set) if there's nothing selected, or `client`
-    is unknown.
+    (config_json, filename, error_message) — config_json is None and
+    error_message is set if there's nothing selected, `client` is unknown,
+    or credentials couldn't be resolved. Callers decide how to surface
+    error_message (flash for HTML views, a JSON error envelope for the API)
+    since this function itself must stay presentation-agnostic to be usable
+    from both.
 
     Users always connect remotely: a stdio-implemented server (no network
     url of its own) is never spawned by the client directly — it always
@@ -346,8 +358,7 @@ def _build_client_config_json(client, user=None):
     )
 
     if not selected:
-        flash("You haven't selected any MCP servers yet.", "error")
-        return None, filename
+        return None, filename, "You haven't selected any MCP servers yet."
 
     entries = []
     try:
@@ -373,12 +384,12 @@ def _build_client_config_json(client, user=None):
                 }
             )
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        flash(
+        return (
+            None,
+            filename,
             f"Could not reach Vaultwarden to resolve credentials: {exc} "
             "(ask an admin to check Admin → Vaultwarden diagnostics).",
-            "error",
         )
-        return None, filename
 
     for i, server in enumerate(selected):
         if not entries[i].get("url") and server.command:
@@ -393,15 +404,16 @@ def _build_client_config_json(client, user=None):
             entries[i]["transport"] = "http"
 
     payload = render_fn(entries)
-    return json.dumps(payload, indent=2), filename
+    return json.dumps(payload, indent=2), filename, None
 
 
 @bp.route("/download/<client>")
 @login_required
 def download(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename = _build_client_config_json(client)
+        config_json, filename, error_message = _build_client_config_json(client)
     if config_json is None:
+        flash(error_message, "error")
         audit.log_audit_event(
             "config_download",
             "error",
@@ -423,8 +435,9 @@ def download(client):
 @login_required
 def view(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename = _build_client_config_json(client)
+        config_json, filename, error_message = _build_client_config_json(client)
     if config_json is None:
+        flash(error_message, "error")
         return redirect(url_for("catalog.index"))
 
     return render_template(

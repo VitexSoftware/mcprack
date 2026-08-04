@@ -211,19 +211,21 @@ def _parse_env_rows(form):
     return non_secret, secret
 
 
-def _apply_server_form(server, form):
+def _apply_server_fields(server, data):
+    """Plain-dict field assignment shared by the HTML form and the JSON API
+    — no Werkzeug form dependency, so it works the same from either caller."""
     def _nullable_text(value):
         value = (value or "").strip()
         if not value or value.lower() == "none":
             return None
         return value
 
-    server.label = form.get("label", server.name)
-    server.description = form.get("description", "")
-    server.transport = form["transport"]
-    server.category = form.get("category", "")
-    server.enabled = form.get("enabled") == "on"
-    server.allow_user_override = form.get("allow_user_override") == "on"
+    server.label = data.get("label") or server.name
+    server.description = data.get("description", "") or ""
+    server.transport = data["transport"]
+    server.category = data.get("category", "") or ""
+    server.enabled = bool(data.get("enabled"))
+    server.allow_user_override = bool(data.get("allow_user_override"))
 
     # Command/args (how the server is actually run) and url/auth (how remote
     # users reach it over the network) are independent of each other: a
@@ -231,17 +233,27 @@ def _apply_server_form(server, form):
     # proxied — in that case remote users should always get the network
     # address, never a "run this locally" command. Only a server with no
     # url at all falls back to local stdio spawn. See config_formats.py.
-    server.command = _nullable_text(form.get("command", ""))
-    server.args = [a for a in form.get("args", "").split() if a]
-    server.url = _nullable_text(form.get("url", ""))
-    server.auth_header_name = _nullable_text(form.get("auth_header_name", ""))
-    server.auth_env_key = _nullable_text(form.get("auth_env_key", ""))
+    server.command = _nullable_text(data.get("command", ""))
+    args = data.get("args", [])
+    if isinstance(args, str):
+        args = [a for a in args.split() if a]
+    server.args = list(args or [])
+    server.url = _nullable_text(data.get("url", ""))
+    server.auth_header_name = _nullable_text(data.get("auth_header_name", ""))
+    server.auth_env_key = _nullable_text(data.get("auth_env_key", ""))
 
+
+def _apply_server_secrets(server, non_secret, secret):
+    """Persists non-secret env config directly and secret values via
+    secret_store, shared by the HTML form and the JSON API. Returns an error
+    message string on failure (caller decides how to surface it), or None
+    on success."""
     had_secrets_before = secret_store.server_needs_secrets(server)
-    non_secret, secret_values = _parse_env_rows(form)
+    non_secret = dict(non_secret or {})
+    secret_values = dict(secret or {})
 
     # The auth token key always carries a credential — force it into the
-    # secret set even if the admin left its row unchecked.
+    # secret set even if the caller left it in the non-secret map.
     if server.auth_env_key and server.auth_env_key in non_secret:
         secret_values[server.auth_env_key] = non_secret.pop(server.auth_env_key)
 
@@ -253,16 +265,40 @@ def _apply_server_form(server, form):
     # Nothing to save and nothing to clear — skip Vaultwarden/local storage
     # entirely rather than touching either backend for an empty write.
     if not secret_values and not had_secrets_before:
-        return
+        return None
 
     try:
         secret_store.save_server_secrets(server, secret_values)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        flash(
-            f"Could not save credentials: {exc} "
-            "(see Vaultwarden diagnostics in the nav bar to find out why).",
-            "error",
-        )
+        return f"Could not save credentials: {exc} (see Vaultwarden diagnostics in the nav bar to find out why)."
+    return None
+
+
+def _apply_server_form(server, form):
+    """HTML form entry point: builds plain dicts from the Werkzeug form and
+    delegates to the JSON-friendly helpers above, so the two views share all
+    business logic and HTML behavior is unchanged."""
+    _apply_server_fields(
+        server,
+        {
+            "label": form.get("label", server.name),
+            "description": form.get("description", ""),
+            "transport": form["transport"],
+            "category": form.get("category", ""),
+            "enabled": form.get("enabled") == "on",
+            "allow_user_override": form.get("allow_user_override") == "on",
+            "command": form.get("command", ""),
+            "args": form.get("args", ""),
+            "url": form.get("url", ""),
+            "auth_header_name": form.get("auth_header_name", ""),
+            "auth_env_key": form.get("auth_env_key", ""),
+        },
+    )
+
+    non_secret, secret_values = _parse_env_rows(form)
+    error_message = _apply_server_secrets(server, non_secret, secret_values)
+    if error_message:
+        flash(error_message, "error")
 
 
 @bp.route("/servers/autodetect", methods=["POST"])
@@ -799,6 +835,22 @@ def user_new():
     return render_template("admin/user_form.html", user=None)
 
 
+def set_user_server_permissions(user, available_servers, permission_overrides):
+    """Replace user's explicit per-server ACL for available_servers.
+    permission_overrides maps server_id -> is_allowed (bool); servers not
+    present in the map default to allowed. Caller commits."""
+    UserServerPermission.query.filter_by(user_id=user.id).delete()
+    for server in available_servers:
+        is_allowed = permission_overrides.get(server.id, True)
+        db.session.add(
+            UserServerPermission(
+                user_id=user.id,
+                server_id=server.id,
+                is_allowed=bool(is_allowed),
+            )
+        )
+
+
 @bp.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
 @admin_required
 def user_edit(user_id):
@@ -815,17 +867,11 @@ def user_edit(user_id):
             user.set_password(new_password)
 
         # Persist explicit per-server ACL for currently available servers.
-        UserServerPermission.query.filter_by(user_id=user.id).delete()
-        for server in available_servers:
-            value = request.form.get(f"server_access_{server.id}", "allow")
-            is_allowed = value != "deny"
-            db.session.add(
-                UserServerPermission(
-                    user_id=user.id,
-                    server_id=server.id,
-                    is_allowed=is_allowed,
-                )
-            )
+        permission_overrides = {
+            server.id: request.form.get(f"server_access_{server.id}", "allow") != "deny"
+            for server in available_servers
+        }
+        set_user_server_permissions(user, available_servers, permission_overrides)
 
         db.session.commit()
         audit.log_audit_event(
@@ -850,8 +896,9 @@ def user_edit(user_id):
 @admin_required
 def user_config_view(user_id, client):
     target_user = db.get_or_404(User, user_id)
-    config_json, filename = catalog._build_client_config_json(client, user=target_user)
+    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user)
     if config_json is None:
+        flash(error_message, "error")
         return redirect(url_for("admin.user_edit", user_id=user_id))
 
     return render_template(
@@ -867,8 +914,9 @@ def user_config_view(user_id, client):
 @admin_required
 def user_config_download(user_id, client):
     target_user = db.get_or_404(User, user_id)
-    config_json, filename = catalog._build_client_config_json(client, user=target_user)
+    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user)
     if config_json is None:
+        flash(error_message, "error")
         audit.log_audit_event(
             "config_download",
             "error",
@@ -893,37 +941,53 @@ def user_config_download(user_id, client):
     )
 
 
-@bp.route("/audit-log")
-@admin_required
-def audit_log():
-    """Read-only, filterable view of the append-only audit trail. No route
-    exists to edit or delete individual entries — see AuditLogEntry."""
+def build_audit_log_query(args):
+    """Filtered (unordered) AuditLogEntry query from a request.args-like
+    mapping, shared by the HTML view and the JSON API. Returns
+    (query, filters_dict) — filters_dict echoes back the parsed filter
+    values for display/serialization."""
     query = AuditLogEntry.query
 
-    server_id = request.args.get("server_id", type=int)
+    server_id = args.get("server_id", type=int)
     if server_id:
         query = query.filter(AuditLogEntry.server_id == server_id)
 
-    user_id = request.args.get("user_id", type=int)
+    user_id = args.get("user_id", type=int)
     if user_id:
         query = query.filter(AuditLogEntry.user_id == user_id)
 
-    since = request.args.get("since", "").strip()
+    since = args.get("since", "").strip()
     if since:
         parsed = _parse_datetime_local(since)
         if parsed:
             query = query.filter(AuditLogEntry.timestamp >= parsed)
 
-    until = request.args.get("until", "").strip()
+    until = args.get("until", "").strip()
     if until:
         parsed = _parse_datetime_local(until)
         if parsed:
             query = query.filter(AuditLogEntry.timestamp <= parsed)
 
-    errors_only = request.args.get("errors_only") == "on"
+    errors_only = args.get("errors_only") == "on"
     if errors_only:
         query = query.filter(AuditLogEntry.result == "error")
 
+    filters = {
+        "server_id": server_id,
+        "user_id": user_id,
+        "since": since,
+        "until": until,
+        "errors_only": errors_only,
+    }
+    return query, filters
+
+
+@bp.route("/audit-log")
+@admin_required
+def audit_log():
+    """Read-only, filterable view of the append-only audit trail. No route
+    exists to edit or delete individual entries — see AuditLogEntry."""
+    query, filters = build_audit_log_query(request.args)
     entries = query.order_by(AuditLogEntry.timestamp.desc()).limit(500).all()
 
     servers = McpServer.query.order_by(McpServer.name).all()
@@ -934,13 +998,7 @@ def audit_log():
         entries=entries,
         servers=servers,
         users=users,
-        filters={
-            "server_id": server_id,
-            "user_id": user_id,
-            "since": since,
-            "until": until,
-            "errors_only": errors_only,
-        },
+        filters=filters,
         retention_days=current_app.config.get("AUDIT_RETENTION_DAYS"),
     )
 

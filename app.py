@@ -70,10 +70,18 @@ def create_app(config_object=Config):
     from auth import bp as auth_bp
     from admin import bp as admin_bp
     from catalog import bp as catalog_bp
+    from api import bp as api_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(catalog_bp)
+    app.register_blueprint(api_bp)
+    # Bearer-token requests carry no ambient cookie for a forged cross-site
+    # request to exploit, and no browser JS calls into /api/v1/* exist today
+    # - see api.py's module docstring for the full rationale.
+    csrf.exempt(api_bp)
+
+    import api_auth  # noqa: F401 - registers the bearer-token request_loader
 
     import telemetry
 

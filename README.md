@@ -117,6 +117,7 @@ onto the `User` model) and isn't implemented yet.
 - **Vaultwarden integration** — Leverages the same `bw-cli` / Secure Note pattern used by the `mcp_rack` Ansible role
 - **Works without Vaultwarden too** — If it's not configured, sensitive values fall back to a local Fernet-encrypted column instead; admins can migrate between the two deliberately from Admin → Vaultwarden diagnostics
 - **LDAP/AD support** — Optional directory authentication for enterprise deployments
+- **JSON REST API** — Full `/api/v1` API (servers, users, selections, overrides, client configs, audit log) for scripts/CI, authenticated with session cookies or personal API tokens, documented with an OpenAPI 3 spec
 
 ## Architecture
 
@@ -225,6 +226,40 @@ Debian install, `man mcprack` also covers the full command reference.
 This CLI does not cover the pip/npm/docker server installer subsystem
 below, which stays UI-only; `server show` only surfaces a server's
 `install_method`/`installed_version` read-only.
+
+## REST API
+
+Besides the web UI and CLI, mcprack exposes a JSON REST API at `/api/v1`,
+for scripts, CI pipelines, or any external integration. It's authenticated
+the same way as the rest of the app — a session cookie from `/login` — plus
+a new bearer-token option for callers that can't hold a browser session:
+
+```bash
+# session-cookie flow (browser-like)
+curl -c cookies.txt -d "username=admin&password=..." http://localhost:5000/login
+curl -b cookies.txt http://localhost:5000/api/v1/me
+
+# personal API token flow (scripts/CI — mint once, reuse anywhere)
+TOKEN=$(curl -b cookies.txt -X POST http://localhost:5000/api/v1/tokens \
+  -H 'Content-Type: application/json' -d '{"name":"ci-script"}' | jq -r .data.token)
+curl -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/v1/servers
+curl -H "Authorization: Bearer $TOKEN" http://localhost:5000/api/v1/me/config/claude
+```
+
+The raw token is shown exactly once, at creation — only its hash is stored,
+so it can't be recovered later. Revoke a token with
+`DELETE /api/v1/tokens/{id}`, done as the same user who created it.
+
+**Coverage:** `/me` (profile), `/tokens` (self-service API tokens),
+`/servers` + `/admin/servers` (catalog, admin CRUD), `/me/selections`,
+`/me/overrides/{serverId}`, `/me/config/{client}`, `/admin/users`, and
+`/audit-log` (admin, same filters as the web UI). Every response is a JSON
+envelope — `{"data": ...}` on success, `{"error": {"code", "message"}}` on
+failure — and list endpoints are paginated (`?page=`, `?per_page=`).
+
+**OpenAPI 3 spec:** served live at `/api/v1/openapi.json` (source in
+`openapi/openapi.yaml`), so it can be imported into Postman, fed to a
+codegen tool, or validated with `openapi-spec-validator`.
 
 ## Database
 

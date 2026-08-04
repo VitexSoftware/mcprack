@@ -1,4 +1,6 @@
+import hashlib
 import json
+import secrets
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
@@ -62,6 +64,42 @@ class User(UserMixin, db.Model):
     def display_name(self):
         parts = [p for p in (self.first_name, self.last_name) if p]
         return " ".join(parts) if parts else self.username
+
+
+class ApiToken(db.Model):
+    """Personal API access token, for scripts/CI to call /api/v1/* without a
+    browser session cookie. Only the sha256 hash of the token is ever
+    persisted — the raw value is returned once, at creation, and can never
+    be retrieved again. Unsalted sha256 is fine here (unlike a password
+    hash) because the token itself already carries 256 bits of `secrets`
+    entropy, so it isn't at risk from offline guessing the way a low-entropy
+    secret would be — this also keeps lookup an indexed O(1) query."""
+
+    __tablename__ = "api_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    name = db.Column(db.String(150), nullable=False)
+    token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    prefix = db.Column(db.String(12), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+
+    user = db.relationship("User", backref=db.backref("api_tokens", cascade="all, delete-orphan"))
+
+    @staticmethod
+    def generate(name, user_id):
+        """Returns (raw_token, ApiToken) — the ApiToken is not yet added to
+        the session. Raw token format: 'mcpk_' + secrets.token_urlsafe(32)."""
+        raw = "mcpk_" + secrets.token_urlsafe(32)
+        token_hash = hashlib.sha256(raw.encode()).hexdigest()
+        token = ApiToken(user_id=user_id, name=name, token_hash=token_hash, prefix=raw[:12])
+        return raw, token
+
+    @property
+    def is_revoked(self):
+        return self.revoked_at is not None
 
 
 class McpServer(db.Model):

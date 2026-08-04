@@ -1,3 +1,16 @@
+mcprack (1.1.0) unstable; urgency=medium
+
+  * Add JSON REST API (/api/v1) with dual session-cookie/bearer-token
+    auth, personal API tokens, and an OpenAPI 3 spec served at
+    /api/v1/openapi.json.
+  * Cover servers, users, selections, per-user overrides, and the audit
+    log via the new API, reusing the same business logic as the existing
+    admin/catalog HTML views.
+  * Add python3-yaml (PyYAML) as a runtime dependency for serving the
+    OpenAPI spec.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Tue, 04 Aug 2026 11:43:48 +0200
+
 mcprack (1.0.0) unstable; urgency=medium
 
   * Add MCP server installer subsystem (pip, npm, docker) with per-

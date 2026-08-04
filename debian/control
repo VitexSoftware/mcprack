@@ -24,6 +24,7 @@ Depends:
  python3-flask-wtf,
  python3-flask-limiter,
  python3-flask-babel,
+ python3-yaml,
  python3-ldap3,
  python3-cryptography,
  python3-uvicorn (>= 0.34),
