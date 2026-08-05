@@ -176,6 +176,27 @@ Open http://127.0.0.1:5000, log in with the admin account you just created,
 register a server under **Servers**, then visit the catalog to select it and
 download a config.
 
+## Installation via pip
+
+mcprack is also [published on PyPI](https://pypi.org/project/mcprack/) as a
+standalone package, for trying it out or running it outside of Debian/Ubuntu:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate
+pip install mcprack
+
+export SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+mcprack db upgrade        # bootstraps the schema on first run
+mcprack create-admin
+mcprack --host 0.0.0.0 --port 8913
+```
+
+The `mcprack` console script forwards to the same Flask management CLI as
+the Debian package (`mcprack user list`, `mcprack server show ...`, etc. —
+see "Command-line administration" below) and to the same `/api/v1` REST API.
+For production use, prefer the Debian package below — it wires up gunicorn,
+systemd hardening, and dbconfig-common, none of which pip installs for you.
+
 ## Command-line administration
 
 Besides the web UI, users, MCP catalog servers, and per-server credentials
