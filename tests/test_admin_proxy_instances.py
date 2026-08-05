@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from extensions import db
-from models import McpServer, User, UserServerSelection
+from mcprack.extensions import db
+from mcprack.models import McpServer, User, UserServerSelection
 
 
 def _login_admin(client):
@@ -36,8 +36,8 @@ def test_proxy_instances_page_renders_rows(app, client):
             }
         ]
 
-    with patch("admin.user_proxy.cleanup_idle_proxies"), \
-         patch("admin.user_proxy.list_proxy_instances", return_value=rows):
+    with patch("mcprack.admin.user_proxy.cleanup_idle_proxies"), \
+         patch("mcprack.admin.user_proxy.list_proxy_instances", return_value=rows):
         resp = client.get("/admin/proxy-instances")
 
     assert resp.status_code == 200
@@ -63,8 +63,8 @@ def test_proxy_instances_page_shows_subscriptions_with_navigation_links(app, cli
         db.session.commit()
         user_id, server_id = user.id, server.id
 
-    with patch("admin.user_proxy.cleanup_idle_proxies"), \
-         patch("admin.user_proxy.list_proxy_instances", return_value=[]):
+    with patch("mcprack.admin.user_proxy.cleanup_idle_proxies"), \
+         patch("mcprack.admin.user_proxy.list_proxy_instances", return_value=[]):
         resp = client.get("/admin/proxy-instances")
 
     assert resp.status_code == 200
@@ -80,7 +80,7 @@ def test_proxy_instances_page_shows_subscriptions_with_navigation_links(app, cli
 def test_proxy_instance_stop_calls_manager(app, client):
     _login_admin(client)
 
-    with patch("admin.user_proxy.stop_user_server_proxy") as stop_mock:
+    with patch("mcprack.admin.user_proxy.stop_user_server_proxy") as stop_mock:
         resp = client.post("/admin/proxy-instances/stop/7/9", follow_redirects=False)
 
     assert resp.status_code == 302

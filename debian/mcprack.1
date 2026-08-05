@@ -30,7 +30,7 @@ mcprack --host 0.0.0.0 --port 8913
 .PP
 With any other first argument, it forwards to the Flask management CLI,
 equivalent to running
-.B "flask --app app:create_app"
+.B "flask --app mcprack.app:create_app"
 with the same arguments. This exposes the top-level
 .BR create-admin ", " db " and " audit-archive
 commands, plus the

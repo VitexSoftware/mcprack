@@ -23,13 +23,13 @@ import yaml
 from flask import Blueprint, abort, jsonify, request
 from flask_login import current_user
 
-import admin
-import audit
-import catalog
-import secret_store
-import vaultwarden
-from extensions import db, limiter
-from models import (
+from . import admin
+from . import audit
+from . import catalog
+from . import secret_store
+from . import vaultwarden
+from .extensions import db, limiter
+from .models import (
     ApiToken,
     AuditLogEntry,
     McpServer,
@@ -595,7 +595,7 @@ def _load_openapi_spec():
 
 @bp.route("/openapi.json", methods=["GET"])
 def openapi_spec():
-    from version import get_version
+    from .version import get_version
 
     spec = copy.deepcopy(_load_openapi_spec())
     spec.setdefault("info", {})["version"] = get_version()

@@ -2,8 +2,8 @@ from unittest.mock import MagicMock, patch
 
 from ldap3.core.exceptions import LDAPBindError
 
-from extensions import db
-from models import User
+from mcprack.extensions import db
+from mcprack.models import User
 
 
 class FakeAttr:
@@ -43,7 +43,7 @@ def test_local_login_never_calls_ldap(app, client):
         db.session.add(user)
         db.session.commit()
 
-    with patch("auth.ldap3.Connection") as mock_connection:
+    with patch("mcprack.auth.ldap3.Connection") as mock_connection:
         resp = client.post(
             "/login",
             data={"username": "alice", "password": "correct horse"},
@@ -60,7 +60,7 @@ def test_local_login_wrong_password_rejected(app, client):
         db.session.add(user)
         db.session.commit()
 
-    with patch("auth.ldap3.Connection") as mock_connection:
+    with patch("mcprack.auth.ldap3.Connection") as mock_connection:
         resp = client.post(
             "/login",
             data={"username": "bob", "password": "wrong-password"},
@@ -91,7 +91,7 @@ def test_ldap_login_search_then_bind_provisions_user(app, client):
             return bind_conn
         return search_conn
 
-    with patch("auth.ldap3.Connection", side_effect=connection_side_effect):
+    with patch("mcprack.auth.ldap3.Connection", side_effect=connection_side_effect):
         resp = client.post(
             "/login",
             data={"username": "carol", "password": "correct-ad-password"},
@@ -123,7 +123,7 @@ def test_ldap_login_wrong_password_rejected(app, client):
             raise LDAPBindError("invalid credentials")
         return search_conn
 
-    with patch("auth.ldap3.Connection", side_effect=connection_side_effect):
+    with patch("mcprack.auth.ldap3.Connection", side_effect=connection_side_effect):
         resp = client.post(
             "/login",
             data={"username": "dave", "password": "wrong"},

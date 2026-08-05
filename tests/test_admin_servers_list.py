@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from extensions import db
-from models import McpServer, User
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _login_admin(client):
@@ -30,10 +30,10 @@ def test_servers_list_flags_missing_credentials_and_unreachable(app, client):
         db.session.add_all([broken, healthy])
         db.session.commit()
 
-    with patch("admin.vaultwarden.unlock", return_value="sess"), \
-         patch("admin.vaultwarden.lock"), \
-         patch("admin.vaultwarden.get_notes", return_value={}), \
-         patch("admin.health.check_reachable", side_effect=lambda s: s.name == "healthy-stdio"):
+    with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.get_notes", return_value={}), \
+         patch("mcprack.admin.health.check_reachable", side_effect=lambda s: s.name == "healthy-stdio"):
         resp = client.get("/admin/servers")
 
     body = resp.data.decode()
@@ -50,10 +50,10 @@ def test_servers_list_survives_vaultwarden_outage(app, client):
         db.session.add(server)
         db.session.commit()
 
-    import vaultwarden
+    from mcprack import vaultwarden
 
-    with patch("admin.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")), \
-         patch("admin.health.check_reachable", return_value=True):
+    with patch("mcprack.admin.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")), \
+         patch("mcprack.admin.health.check_reachable", return_value=True):
         resp = client.get("/admin/servers")
 
     assert resp.status_code == 200
@@ -69,11 +69,11 @@ def test_server_edit_shows_icon_when_appstream_icon_found(app, client):
         db.session.commit()
         server_id = server.id
 
-    with patch("admin.vaultwarden.unlock", return_value="sess"), \
-         patch("admin.vaultwarden.lock"), \
-         patch("admin.vaultwarden.get_notes", return_value={}), \
-         patch("admin.appstream_icons.resolve_server_icon_path", return_value="/usr/share/icons/hicolor/scalable/apps/mastodon-mcp-server.svg"), \
-         patch("admin.appstream_icons.is_safe_icon_path", return_value=True):
+    with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.get_notes", return_value={}), \
+         patch("mcprack.admin.appstream_icons.resolve_server_icon_path", return_value="/usr/share/icons/hicolor/scalable/apps/mastodon-mcp-server.svg"), \
+         patch("mcprack.admin.appstream_icons.is_safe_icon_path", return_value=True):
         resp = client.get(f"/admin/servers/{server_id}/edit")
 
     assert resp.status_code == 200
@@ -85,9 +85,9 @@ def test_server_edit_shows_icon_when_appstream_icon_found(app, client):
 def test_server_create_splits_sensitive_and_non_sensitive_rows(app, client):
     _login_admin(client)
 
-    with patch("admin.vaultwarden.unlock", return_value="sess"), \
-         patch("admin.vaultwarden.lock"), \
-         patch("admin.vaultwarden.set_notes") as mock_set_notes:
+    with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.set_notes") as mock_set_notes:
         resp = client.post(
             "/admin/servers/new",
             data={
@@ -121,9 +121,9 @@ def test_server_create_splits_sensitive_and_non_sensitive_rows(app, client):
 def test_server_create_forces_auth_env_key_sensitive_even_if_unchecked(app, client):
     _login_admin(client)
 
-    with patch("admin.vaultwarden.unlock", return_value="sess"), \
-         patch("admin.vaultwarden.lock"), \
-         patch("admin.vaultwarden.set_notes") as mock_set_notes:
+    with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.set_notes") as mock_set_notes:
         resp = client.post(
             "/admin/servers/new",
             data={
@@ -153,7 +153,7 @@ def test_server_create_forces_auth_env_key_sensitive_even_if_unchecked(app, clie
 def test_server_without_secrets_skips_vaultwarden_on_create(app, client):
     _login_admin(client)
 
-    with patch("admin.vaultwarden.unlock") as mock_unlock:
+    with patch("mcprack.admin.vaultwarden.unlock") as mock_unlock:
         resp = client.post(
             "/admin/servers/new",
             data={

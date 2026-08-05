@@ -17,15 +17,15 @@ from flask import (
 from flask_login import current_user, login_required
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-import appstream_icons
-import audit
-import secret_store
-import telemetry
-import user_proxy
-import vaultwarden
-from config_formats import render_claude_config, render_copilot_config
-from extensions import csrf, db
-from models import (
+from . import appstream_icons
+from . import audit
+from . import secret_store
+from . import telemetry
+from . import user_proxy
+from . import vaultwarden
+from .config_formats import render_claude_config, render_copilot_config
+from .extensions import csrf, db
+from .models import (
     McpServer,
     User,
     UserServerOverride,

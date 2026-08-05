@@ -1,5 +1,5 @@
-from extensions import db
-from models import McpServer, User
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _login_admin(client):

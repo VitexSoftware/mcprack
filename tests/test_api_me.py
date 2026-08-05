@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from extensions import db
-from models import McpServer, User, UserServerSelection
+from mcprack.extensions import db
+from mcprack.models import McpServer, User, UserServerSelection
 
 
 def _create_user(app, username="alice"):
@@ -72,7 +72,7 @@ def test_overrides_round_trip(app, client):
     server_id = _add_server(app)
     _login(client)
 
-    with patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         resp = client.get(f"/api/v1/me/overrides/{server_id}")
         assert resp.status_code == 200
         assert resp.get_json()["data"]["has_override"] is False

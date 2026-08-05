@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
-import secret_store
-from extensions import db
-from models import McpServer, User
+from mcprack import secret_store
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _login_admin(client):
@@ -25,13 +25,13 @@ def test_migrate_to_vaultwarden_moves_local_secrets_and_flashes_summary(app, cli
         )
         db.session.add(server)
         db.session.commit()
-        with patch("secret_store.is_vaultwarden_configured", return_value=False):
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
             secret_store.save_server_secrets(server, {"AUTH_TOKEN": "topsecret"})
         db.session.commit()
 
-    with patch("admin.secret_store.is_vaultwarden_configured", return_value=True), \
-         patch("admin.secret_store.vaultwarden.session"), \
-         patch("admin.secret_store.vaultwarden.set_notes") as mock_set_notes:
+    with patch("mcprack.admin.secret_store.is_vaultwarden_configured", return_value=True), \
+         patch("mcprack.admin.secret_store.vaultwarden.session"), \
+         patch("mcprack.admin.secret_store.vaultwarden.set_notes") as mock_set_notes:
         resp = client.post("/admin/vaultwarden/migrate-to-vaultwarden", follow_redirects=True)
 
     assert resp.status_code == 200
@@ -47,7 +47,7 @@ def test_migrate_to_vaultwarden_moves_local_secrets_and_flashes_summary(app, cli
 def test_migrate_to_vaultwarden_refuses_when_not_configured(app, client):
     _login_admin(client)
 
-    with patch("admin.secret_store.is_vaultwarden_configured", return_value=False):
+    with patch("mcprack.admin.secret_store.is_vaultwarden_configured", return_value=False):
         resp = client.post("/admin/vaultwarden/migrate-to-vaultwarden", follow_redirects=True)
 
     assert resp.status_code == 200
@@ -67,10 +67,10 @@ def test_snapshot_to_local_copies_without_clearing_vaultwarden(app, client):
         db.session.add(server)
         db.session.commit()
 
-    with patch("admin.secret_store.is_vaultwarden_configured", return_value=True), \
-         patch("admin.secret_store.vaultwarden.session"), \
-         patch("admin.secret_store.vaultwarden.set_notes") as mock_set_notes, \
-         patch("admin.secret_store.vaultwarden.get_notes", return_value={"AUTH_TOKEN": "topsecret"}):
+    with patch("mcprack.admin.secret_store.is_vaultwarden_configured", return_value=True), \
+         patch("mcprack.admin.secret_store.vaultwarden.session"), \
+         patch("mcprack.admin.secret_store.vaultwarden.set_notes") as mock_set_notes, \
+         patch("mcprack.admin.secret_store.vaultwarden.get_notes", return_value={"AUTH_TOKEN": "topsecret"}):
         resp = client.post("/admin/vaultwarden/snapshot-to-local", follow_redirects=True)
 
     assert resp.status_code == 200

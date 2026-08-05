@@ -4,9 +4,9 @@
 	dh $@
 
 override_dh_auto_build:
-	pybabel compile -d translations
+	pybabel compile -d mcprack/translations
 	dh_auto_build
 
 override_dh_auto_clean:
-	rm -f translations/*/LC_MESSAGES/*.mo
+	rm -f mcprack/translations/*/LC_MESSAGES/*.mo
 	dh_auto_clean

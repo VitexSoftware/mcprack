@@ -26,7 +26,7 @@ import json
 from cryptography.fernet import Fernet, InvalidToken
 from flask import current_app
 
-import vaultwarden
+from . import vaultwarden
 
 _KEY_SALT = b"mcprack-secret-storage-v1"
 
@@ -109,7 +109,7 @@ def resolve_server_env(server, user=None):
 
     env.update(_decrypt(server.env_secrets_encrypted))
     if user is not None:
-        from models import UserServerOverride
+        from .models import UserServerOverride
 
         override_row = UserServerOverride.query.filter_by(
             user_id=user.id, server_id=server.id
@@ -141,7 +141,7 @@ def save_server_secrets(server, values):
 
 
 def load_user_override_secrets(server, user):
-    from models import UserServerOverride
+    from .models import UserServerOverride
 
     override_row = UserServerOverride.query.filter_by(
         user_id=user.id, server_id=server.id
@@ -156,8 +156,8 @@ def load_user_override_secrets(server, user):
 
 
 def save_user_override_secrets(server, user, values):
-    from extensions import db
-    from models import UserServerOverride
+    from .extensions import db
+    from .models import UserServerOverride
 
     override_row = UserServerOverride.query.filter_by(
         user_id=user.id, server_id=server.id
@@ -179,8 +179,8 @@ def save_user_override_secrets(server, user, values):
 
 
 def delete_user_override_secrets(server, user):
-    from extensions import db
-    from models import UserServerOverride
+    from .extensions import db
+    from .models import UserServerOverride
 
     if is_vaultwarden_configured():
         override_item = f"{server.vault_item}-user-{user.username}"
@@ -203,8 +203,8 @@ def migrate_local_to_vaultwarden():
     reachable — each write is verified before the local copy is cleared, so
     a failure on one server never loses data. Returns
     {"moved": [label, ...], "failed": [(label, error), ...]}."""
-    from extensions import db
-    from models import McpServer, UserServerOverride
+    from .extensions import db
+    from .models import McpServer, UserServerOverride
 
     if not is_vaultwarden_configured():
         raise SecretStoreError("Vaultwarden is not configured — nothing to migrate to.")
@@ -247,8 +247,8 @@ def snapshot_vaultwarden_to_local():
     Vaultwarden outage. Vaultwarden stays the source of truth until the
     admin deliberately unsets BW_SERVER. Returns
     {"copied": [label, ...], "failed": [(label, error), ...]}."""
-    from extensions import db
-    from models import McpServer, UserServerOverride
+    from .extensions import db
+    from .models import McpServer, UserServerOverride
 
     if not is_vaultwarden_configured():
         raise SecretStoreError("Vaultwarden is not configured — nothing to snapshot from.")

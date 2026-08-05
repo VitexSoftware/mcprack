@@ -1,8 +1,8 @@
 from unittest.mock import patch
 
-import secret_store
-from extensions import db
-from models import McpServer, User
+from mcprack import secret_store
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _make_user(username="alice", admin=False, active=True):
@@ -115,7 +115,7 @@ def test_server_list_show_enable_disable(app):
 
 
 def test_server_delete_clears_secrets(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         server = _make_server("jenkins", env_var_names=["API_TOKEN"])
         secret_store.save_server_secrets(server, {"API_TOKEN": "abc123"})
         db.session.commit()
@@ -136,7 +136,7 @@ def test_server_commands_fail_for_unknown_name(app):
 
 
 def test_secret_set_list_unset(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         _make_server("jenkins", env_var_names=["API_TOKEN"])
         runner = app.test_cli_runner()
 
@@ -158,7 +158,7 @@ def test_secret_set_list_unset(app):
 
 
 def test_secret_unset_unknown_key_fails(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         _make_server("jenkins", env_var_names=["API_TOKEN"])
         runner = app.test_cli_runner()
         result = runner.invoke(args=["secret", "unset", "jenkins", "NOPE"])
@@ -167,14 +167,14 @@ def test_secret_unset_unknown_key_fails(app):
 
 
 def test_secret_backend_reports_vaultwarden_when_configured(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=True):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True):
         runner = app.test_cli_runner()
         result = runner.invoke(args=["secret", "backend"])
         assert "Vaultwarden" in result.output
 
 
 def test_secret_backend_reports_local_when_not_configured(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         runner = app.test_cli_runner()
         result = runner.invoke(args=["secret", "backend"])
         assert "Local encrypted fallback" in result.output

@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from extensions import db
-from models import User
+from mcprack.extensions import db
+from mcprack.models import User
 
 
 def _login_admin(client):
@@ -23,7 +23,7 @@ def test_wizard_renders_steps_in_order(app, client):
         {"key": "bw_api_key_set", "label": "BW_CLIENTID / BW_CLIENTSECRET are configured", "status": "skipped", "detail": "Not checked — fix the step above first."},
     ]
 
-    with patch("admin.vaultwarden.diagnose", return_value=fake_steps):
+    with patch("mcprack.admin.vaultwarden.diagnose", return_value=fake_steps):
         resp = client.get("/admin/vaultwarden/wizard")
 
     assert resp.status_code == 200
@@ -54,7 +54,7 @@ def test_wizard_shows_success_message_when_all_ok(app, client):
 
     fake_steps = [{"key": "bw_unlock", "label": "Vault unlocks with BW_PASSWORD", "status": "ok", "detail": "Vault unlocked successfully."}]
 
-    with patch("admin.vaultwarden.diagnose", return_value=fake_steps):
+    with patch("mcprack.admin.vaultwarden.diagnose", return_value=fake_steps):
         resp = client.get("/admin/vaultwarden/wizard")
 
     assert b"All checks passed" in resp.data

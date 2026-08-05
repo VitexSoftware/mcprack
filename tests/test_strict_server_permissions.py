@@ -1,6 +1,6 @@
-from catalog import _allowed_enabled_server_ids
-from extensions import db
-from models import McpServer, User
+from mcprack.catalog import _allowed_enabled_server_ids
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _make_user_and_server(app):

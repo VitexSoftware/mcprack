@@ -9,8 +9,8 @@ import subprocess
 import time
 from pathlib import Path
 
-import audit
-import telemetry
+from . import audit
+from . import telemetry
 
 
 STATE_DIR = Path("/var/lib/mcprack/user-proxies")

@@ -3,9 +3,11 @@ import os
 import yaml
 from openapi_spec_validator import validate
 
-from version import get_version
+from mcprack.version import get_version
 
-_SPEC_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "openapi", "openapi.yaml")
+_SPEC_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "mcprack", "openapi", "openapi.yaml"
+)
 
 
 def test_spec_file_is_valid_openapi_3():

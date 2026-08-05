@@ -2,9 +2,9 @@ import re
 
 import pytest
 
-from app import create_app
-from config import Config
-from extensions import db as _db
+from mcprack.app import create_app
+from mcprack.config import Config
+from mcprack.extensions import db as _db
 
 
 class CsrfEnabledConfig(Config):
@@ -57,8 +57,8 @@ def test_login_post_with_valid_csrf_token_is_accepted(csrf_client):
 
 
 def test_user_proxy_mcp_post_is_csrf_exempt(csrf_client):
-    from catalog import _make_proxy_token
-    from models import McpServer, User
+    from mcprack.catalog import _make_proxy_token
+    from mcprack.models import McpServer, User
 
     with csrf_client.application.app_context():
         user = User(username="alice", auth_type="local")

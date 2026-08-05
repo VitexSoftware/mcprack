@@ -1,8 +1,9 @@
 """Command-line administration for mcprack: user accounts, MCP catalog
 servers, and their per-server credential (secret env var) values.
 
-Invoked via `flask --app app:create_app <group> <command>` (or the `mcprack`
-launcher script, which forwards its arguments here). Kept separate from
+Invoked via `flask --app mcprack.app:create_app <group> <command>` (or the
+`mcprack` launcher script / console entry point, which forwards its
+arguments here). Kept separate from
 app.py's own top-level create-admin/audit-archive commands, which existing
 scripts (debian/postinst) already call by name and must keep working
 unchanged.
@@ -11,9 +12,9 @@ unchanged.
 import click
 from flask.cli import AppGroup
 
-import secret_store
-from extensions import db
-from models import McpServer, User
+from . import secret_store
+from .extensions import db
+from .models import McpServer, User
 
 
 user_cli = AppGroup("user", help="Manage mcprack user accounts.")

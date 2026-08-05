@@ -1,10 +1,10 @@
 import pytest
 
-import installer
-import user_proxy
-from app import create_app
-from config import Config
-from extensions import db as _db
+from mcprack import installer
+from mcprack import user_proxy
+from mcprack.app import create_app
+from mcprack.config import Config
+from mcprack.extensions import db as _db
 
 
 class TestConfig(Config):
@@ -23,7 +23,7 @@ class TestConfig(Config):
 @pytest.fixture(scope="session", autouse=True)
 def _compile_translations():
     import subprocess
-    subprocess.run(["pybabel", "compile", "-d", "translations"])
+    subprocess.run(["pybabel", "compile", "-d", "mcprack/translations"])
 
 
 @pytest.fixture(autouse=True)

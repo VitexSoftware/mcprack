@@ -1,8 +1,8 @@
 import pytest
 
-from app import create_app
-from config import Config
-from secret_store import INSECURE_DEFAULT_SECRET_KEY
+from mcprack.app import create_app
+from mcprack.config import Config
+from mcprack.secret_store import INSECURE_DEFAULT_SECRET_KEY
 
 
 class InsecureProductionConfig(Config):

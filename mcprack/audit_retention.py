@@ -10,8 +10,8 @@ import csv
 import json
 from datetime import datetime, timedelta, timezone
 
-from extensions import db
-from models import AuditLogEntry
+from .extensions import db
+from .models import AuditLogEntry
 
 FIELDS = (
     "id",

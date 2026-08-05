@@ -1,8 +1,8 @@
 import pytest
 
-from app import create_app
-from config import Config
-from extensions import db as _db
+from mcprack.app import create_app
+from mcprack.config import Config
+from mcprack.extensions import db as _db
 
 
 class RateLimitedConfig(Config):

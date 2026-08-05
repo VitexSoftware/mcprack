@@ -21,9 +21,9 @@ import time
 
 from flask import current_app
 
-import audit
-import health
-import telemetry
+from . import audit
+from . import health
+from . import telemetry
 
 logger = logging.getLogger(__name__)
 

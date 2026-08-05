@@ -7,9 +7,9 @@ from flask_babel import _
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-import audit
-from extensions import db, limiter, login_manager
-from models import User
+from . import audit
+from .extensions import db, limiter, login_manager
+from .models import User
 
 bp = Blueprint("auth", __name__)
 

@@ -252,7 +252,7 @@ def _instrument_flask(app, tracer_provider, meter_provider):
 def _instrument_sqlalchemy(app, tracer_provider):
     from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
-    from extensions import db
+    from .extensions import db
 
     # Unlike FlaskInstrumentor, SQLAlchemyInstrumentor's instrument() is a
     # process-global one-shot (a second call just warns and no-ops) — fine
@@ -274,7 +274,7 @@ def span(name, attributes=None):
         yield None
         return
 
-    import audit
+    from . import audit
 
     with _state["tracer"].start_as_current_span(name) as current_span:
         if attributes:

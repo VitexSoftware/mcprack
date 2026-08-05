@@ -1,8 +1,8 @@
 import hashlib
 from datetime import datetime, timezone
 
-from extensions import db, login_manager
-from models import ApiToken, User
+from .extensions import db, login_manager
+from .models import ApiToken, User
 
 
 @login_manager.request_loader

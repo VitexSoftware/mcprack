@@ -1,4 +1,4 @@
-from config_formats import render_claude_config, render_copilot_config
+from mcprack.config_formats import render_claude_config, render_copilot_config
 
 STDIO_SERVER = {
     "name": "webdriver",

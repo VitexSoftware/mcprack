@@ -2,7 +2,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
-import detection
+from mcprack import detection
 
 LIST_UNITS_OUTPUT = (
     "mcp-rack-zabbix-mcp-server.service loaded active running MCP Rack - Zabbix MCP Server Proxy\n"
@@ -59,8 +59,8 @@ def test_detect_mcp_rack_proxies_parses_units():
                 return _proc(stdout=WARDEN_UNIT_TEXT)
         return _proc(returncode=1)
 
-    with patch("detection.subprocess.run", side_effect=fake_run):
-        with patch("detection.socket.getfqdn", return_value="mcphost.spojenet.cz"):
+    with patch("mcprack.detection.subprocess.run", side_effect=fake_run):
+        with patch("mcprack.detection.socket.getfqdn", return_value="mcphost.spojenet.cz"):
             entries = detection.detect_mcp_rack_proxies()
 
     by_name = {e["name"]: e for e in entries}
@@ -72,7 +72,7 @@ def test_detect_mcp_rack_proxies_parses_units():
 
 
 def test_detect_mcp_rack_proxies_empty_when_systemctl_missing():
-    with patch("detection.subprocess.run", side_effect=FileNotFoundError):
+    with patch("mcprack.detection.subprocess.run", side_effect=FileNotFoundError):
         entries = detection.detect_mcp_rack_proxies()
     assert entries == []
 
@@ -81,7 +81,7 @@ def test_detect_local_stdio_binaries_finds_known_tools_on_path():
     def fake_which(binary):
         return "/usr/bin/warden-mcp" if binary == "warden-mcp" else None
 
-    with patch("detection.shutil.which", side_effect=fake_which):
+    with patch("mcprack.detection.shutil.which", side_effect=fake_which):
         entries = detection.detect_local_stdio_binaries()
 
     assert len(entries) == 1
@@ -92,7 +92,7 @@ def test_detect_local_stdio_binaries_finds_known_tools_on_path():
 
 
 def test_detect_local_stdio_binaries_skips_already_named():
-    with patch("detection.shutil.which", return_value="/usr/bin/warden-mcp"):
+    with patch("mcprack.detection.shutil.which", return_value="/usr/bin/warden-mcp"):
         entries = detection.detect_local_stdio_binaries(already_named={"warden-mcp"})
     assert all(e["name"] != "warden-mcp" for e in entries)
 
@@ -101,18 +101,18 @@ def test_detect_local_stdio_binaries_skips_already_known_command_path():
     """Same binary, different catalog name (e.g. Claude config calls it
     'mastodon' while the fallback registry key is 'mastodon-mcp') should
     still be deduplicated — by resolved path, not just by name."""
-    with patch("detection.shutil.which", return_value="/usr/bin/mastodon-mcp"):
+    with patch("mcprack.detection.shutil.which", return_value="/usr/bin/mastodon-mcp"):
         entries = detection.detect_local_stdio_binaries(already_commands={"/usr/bin/mastodon-mcp"})
     assert all(e["name"] != "mastodon-mcp" for e in entries)
 
 
 def test_detect_local_mcp_servers_combines_all_sources_without_duplicates():
-    with patch("detection.detect_from_claude_config", return_value=[]), \
+    with patch("mcprack.detection.detect_from_claude_config", return_value=[]), \
          patch(
-             "detection.detect_mcp_rack_proxies",
+             "mcprack.detection.detect_mcp_rack_proxies",
              return_value=[{"name": "warden-mcp", "label": "x", "transport": "http", "url": "http://h:1/mcp", "category": "mcp-rack"}],
          ), \
-         patch("detection.shutil.which", return_value="/usr/bin/warden-mcp"):
+         patch("mcprack.detection.shutil.which", return_value="/usr/bin/warden-mcp"):
         entries = detection.detect_local_mcp_servers()
 
     names = [e["name"] for e in entries]
@@ -122,9 +122,9 @@ def test_detect_local_mcp_servers_combines_all_sources_without_duplicates():
 
 def test_detect_local_mcp_servers_claude_config_entries_take_priority():
     claude_entry = {"name": "webdriver", "label": "webdriver", "transport": "stdio", "command": "/real/path", "args": [], "category": "claude-config"}
-    with patch("detection.detect_from_claude_config", return_value=[claude_entry]), \
-         patch("detection.detect_mcp_rack_proxies", return_value=[]), \
-         patch("detection.shutil.which", return_value="/wrong/guessed/path"):
+    with patch("mcprack.detection.detect_from_claude_config", return_value=[claude_entry]), \
+         patch("mcprack.detection.detect_mcp_rack_proxies", return_value=[]), \
+         patch("mcprack.detection.shutil.which", return_value="/wrong/guessed/path"):
         entries = detection.detect_local_mcp_servers()
 
     by_name = {e["name"]: e for e in entries}
@@ -197,7 +197,7 @@ def test_detect_from_claude_config_ignores_entries_without_command_or_url(tmp_pa
 
 
 def test_reachable_host_resolves_wildcard_bind_addresses():
-    with patch("detection.socket.getfqdn", return_value="myhost.example.cz"):
+    with patch("mcprack.detection.socket.getfqdn", return_value="myhost.example.cz"):
         assert detection._reachable_host("0.0.0.0") == "myhost.example.cz"
         assert detection._reachable_host("127.0.0.1") == "myhost.example.cz"
     assert detection._reachable_host("10.11.56.226") == "10.11.56.226"

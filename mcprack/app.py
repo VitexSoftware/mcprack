@@ -1,12 +1,21 @@
+import os
+
 import click
 from flask import current_app, Flask, request
 from flask_migrate import stamp
 from sqlalchemy import inspect
 
 from flask import session
-from config import Config
-from extensions import babel, csrf, db, limiter, login_manager, migrate
-from secret_store import INSECURE_DEFAULT_SECRET_KEY
+from .config import Config
+from .extensions import babel, csrf, db, limiter, login_manager, migrate
+from .secret_store import INSECURE_DEFAULT_SECRET_KEY
+
+# Bundled inside the package (mcprack/migrations) rather than resolved
+# relative to the current working directory - Flask-Migrate's own default -
+# so `flask db upgrade` / the automatic create_all()+stamp() bootstrap below
+# work the same whether mcprack is run from a git checkout, a Debian
+# install, or a plain `pip install mcprack`, regardless of cwd.
+MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "migrations")
 
 
 def _enforce_secret_key(app):
@@ -42,7 +51,7 @@ def create_app(config_object=Config):
     _enforce_secret_key(app)
 
     db.init_app(app)
-    migrate.init_app(app, db)
+    migrate.init_app(app, db, directory=MIGRATIONS_DIR)
     login_manager.init_app(app)
     csrf.init_app(app)
     limiter.init_app(app)
@@ -67,10 +76,10 @@ def create_app(config_object=Config):
             )
         return response
 
-    from auth import bp as auth_bp
-    from admin import bp as admin_bp
-    from catalog import bp as catalog_bp
-    from api import bp as api_bp
+    from .auth import bp as auth_bp
+    from .admin import bp as admin_bp
+    from .catalog import bp as catalog_bp
+    from .api import bp as api_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
@@ -81,13 +90,13 @@ def create_app(config_object=Config):
     # - see api.py's module docstring for the full rationale.
     csrf.exempt(api_bp)
 
-    import api_auth  # noqa: F401 - registers the bearer-token request_loader
+    from . import api_auth  # noqa: F401 - registers the bearer-token request_loader
 
-    import telemetry
+    from . import telemetry
 
     telemetry.init_app(app)
 
-    import models  # noqa: F401 - Register models for table creation
+    from . import models  # noqa: F401 - Register models for table creation
     with app.app_context():
         # Once Alembic has taken ownership of this database (alembic_version
         # exists), let `flask db upgrade` own all schema evolution. Calling
@@ -102,7 +111,7 @@ def create_app(config_object=Config):
             db.create_all()
             stamp()
 
-    from version import get_version
+    from .version import get_version
 
     app.jinja_env.globals["app_version"] = get_version()
 
@@ -125,7 +134,7 @@ def register_static_routes(app):
         from flask import jsonify
         from sqlalchemy import text
 
-        from extensions import db
+        from .extensions import db
 
         checks = {}
         try:
@@ -141,7 +150,7 @@ def register_static_routes(app):
 
 
 def register_cli(app):
-    from cli import register_management_cli
+    from .cli import register_management_cli
 
     register_management_cli(app)
 
@@ -151,7 +160,7 @@ def register_cli(app):
     @click.option("--email", default="")
     def create_admin(username, password, email):
         """Create the first local admin account."""
-        from models import User
+        from .models import User
 
         if User.query.filter_by(username=username).first():
             click.echo(f"User '{username}' already exists.")
@@ -192,8 +201,8 @@ def register_cli(app):
         """Export audit_log_entries older than the retention window to
         JSON/CSV, then delete them from the database. The archival run
         itself is recorded as a new (never-deleted) audit entry."""
-        import audit
-        import audit_retention
+        from . import audit
+        from . import audit_retention
 
         retention_days = days if days is not None else current_app.config["AUDIT_RETENTION_DAYS"]
         cutoff = audit_retention.cutoff_datetime(retention_days)

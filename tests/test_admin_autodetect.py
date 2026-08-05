@@ -1,7 +1,7 @@
 from unittest.mock import patch
 
-from extensions import db
-from models import McpServer, User
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _login_admin(client):
@@ -34,7 +34,7 @@ def test_autodetect_creates_new_servers(app, client):
         },
     ]
 
-    with patch("admin.detection.detect_local_mcp_servers", return_value=detected):
+    with patch("mcprack.admin.detection.detect_local_mcp_servers", return_value=detected):
         resp = client.post("/admin/servers/autodetect", follow_redirects=True)
 
     assert resp.status_code == 200
@@ -70,7 +70,7 @@ def test_autodetect_skips_existing_servers(app, client):
         }
     ]
 
-    with patch("admin.detection.detect_local_mcp_servers", return_value=detected):
+    with patch("mcprack.admin.detection.detect_local_mcp_servers", return_value=detected):
         resp = client.post("/admin/servers/autodetect", follow_redirects=True)
 
     assert b"No new MCP servers detected" in resp.data

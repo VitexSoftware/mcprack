@@ -1,5 +1,5 @@
-from extensions import db
-from models import ApiToken, User
+from mcprack.extensions import db
+from mcprack.models import ApiToken, User
 
 
 def _create_user(app, username="alice", is_admin=False):

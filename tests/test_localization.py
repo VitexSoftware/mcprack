@@ -1,7 +1,7 @@
 import pytest
 from flask import session
-from extensions import db
-from models import User
+from mcprack.extensions import db
+from mcprack.models import User
 
 def test_set_locale_route(client):
     # Set locale via route

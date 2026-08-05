@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from extensions import db
-from models import McpServer, User
+from mcprack.extensions import db
+from mcprack.models import McpServer, User
 
 
 def _login_admin(client):
@@ -23,7 +23,7 @@ def test_install_wizard_requires_admin(client):
 def test_install_pip_creates_queued_server_and_starts_install(app, client):
     _login_admin(client)
 
-    with patch("installer.start_pip_install", return_value="/var/lib/mcprack/installs/foo/venv") as mock_start:
+    with patch("mcprack.installer.start_pip_install", return_value="/var/lib/mcprack/installs/foo/venv") as mock_start:
         resp = client.post(
             "/admin/install/pip",
             data={
@@ -65,7 +65,7 @@ def test_install_pip_rejects_duplicate_name(app, client):
 def test_install_docker_blocked_when_docker_not_available(app, client):
     _login_admin(client)
 
-    with patch("installer.docker_available", return_value=False):
+    with patch("mcprack.installer.docker_available", return_value=False):
         resp = client.post(
             "/admin/install/docker",
             data={"name": "foo", "image_ref": "ghcr.io/org/foo:latest"},
@@ -80,8 +80,8 @@ def test_install_docker_blocked_when_docker_not_available(app, client):
 def test_install_docker_registers_server_with_run_args(app, client):
     _login_admin(client)
 
-    with patch("installer.docker_available", return_value=True), \
-         patch("installer.start_docker_pull") as mock_pull:
+    with patch("mcprack.installer.docker_available", return_value=True), \
+         patch("mcprack.installer.start_docker_pull") as mock_pull:
         resp = client.post(
             "/admin/install/docker",
             data={"name": "foo", "image_ref": "ghcr.io/org/foo:latest"},
@@ -111,9 +111,9 @@ def test_install_status_finalizes_success_and_sets_command(app, client):
         db.session.commit()
         server_id = server.id
 
-    with patch("installer.get_install_status", return_value={"status": "success", "log_tail": "", "error": None}), \
-         patch("installer.verify_pip_binary", return_value="/tmp/does-not-matter/bin/foo-mcp"), \
-         patch("installer.resolve_installed_version", return_value="1.0"):
+    with patch("mcprack.installer.get_install_status", return_value={"status": "success", "log_tail": "", "error": None}), \
+         patch("mcprack.installer.verify_pip_binary", return_value="/tmp/does-not-matter/bin/foo-mcp"), \
+         patch("mcprack.installer.resolve_installed_version", return_value="1.0"):
         resp = client.get(f"/admin/install/{server_id}/status")
 
     assert resp.status_code == 200
@@ -140,8 +140,8 @@ def test_install_status_finalizes_failed_when_binary_missing(app, client):
         db.session.commit()
         server_id = server.id
 
-    with patch("installer.get_install_status", return_value={"status": "success", "log_tail": "", "error": None}), \
-         patch("installer.verify_pip_binary", return_value=None):
+    with patch("mcprack.installer.get_install_status", return_value={"status": "success", "log_tail": "", "error": None}), \
+         patch("mcprack.installer.verify_pip_binary", return_value=None):
         resp = client.get(f"/admin/install/{server_id}/status")
 
     data = resp.get_json()
@@ -160,8 +160,8 @@ def test_install_uninstall_stops_proxies_and_removes_server(app, client):
         db.session.commit()
         server_id = server.id
 
-    with patch("installer.uninstall") as mock_uninstall, \
-         patch("user_proxy.stop_user_server_proxy") as mock_stop:
+    with patch("mcprack.installer.uninstall") as mock_uninstall, \
+         patch("mcprack.user_proxy.stop_user_server_proxy") as mock_stop:
         resp = client.post(f"/admin/install/{server_id}/uninstall", follow_redirects=True)
 
     assert resp.status_code == 200

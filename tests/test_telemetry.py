@@ -2,9 +2,9 @@ import logging
 
 import pytest
 
-import telemetry
-from app import create_app
-from config import Config
+from mcprack import telemetry
+from mcprack.app import create_app
+from mcprack.config import Config
 
 
 try:
@@ -175,7 +175,7 @@ def test_request_id_appears_as_span_attribute(monkeypatch):
 
     app = create_app(OtelEnabledConfig)
 
-    import audit
+    from mcprack import audit
 
     with app.test_request_context("/"):
         request_id = audit.current_request_id()

@@ -6,7 +6,8 @@
 # systemd unit, see debian/mcprack.service):
 #   mcprack --host 0.0.0.0 --port 8913
 #
-# Otherwise forwards to the Flask management CLI (see app.py/cli.py):
+# Otherwise forwards to the Flask management CLI (see mcprack/app.py,
+# mcprack/cli.py, mcprack/__main__.py):
 #   mcprack user list
 #   mcprack user create --username alice --admin
 #   mcprack server list
@@ -14,13 +15,11 @@
 #   mcprack secret set some-server API_KEY
 #   mcprack create-admin
 #   mcprack db upgrade
+#
+# Just delegates to `python3 -m mcprack`, which is also what a pip install
+# wires up as the `mcprack` console script (see mcprack/__main__.py) — this
+# script only exists so the Debian package still has a launcher at a fixed
+# path outside any venv, and to set the correct working directory.
 cd /usr/lib/mcprack || cd "$(dirname "$0")/.."
 
-case "$1" in
-    ""|-*)
-        exec python3 -m flask --app app:create_app run "$@"
-        ;;
-    *)
-        exec python3 -m flask --app app:create_app "$@"
-        ;;
-esac
+exec python3 -m mcprack "$@"

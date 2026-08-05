@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-import vaultwarden
+from mcprack import vaultwarden
 
 
 def _proc(stdout="", returncode=0, stderr=""):
@@ -15,7 +15,7 @@ def _proc(stdout="", returncode=0, stderr=""):
 
 def test_get_notes_parses_key_value_lines(app):
     with app.app_context():
-        with patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.return_value = _proc(
                 stdout="AUTH_TOKEN=abc123\n# a comment\n\nAPI_URL=https://example.test\n"
             )
@@ -30,7 +30,7 @@ def test_get_notes_parses_key_value_lines(app):
 
 def test_get_notes_ignores_malformed_lines(app):
     with app.app_context():
-        with patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.return_value = _proc(stdout="not-a-kv-line\nOK=yes\n")
             values = vaultwarden.get_notes("session-token", "MCP-x")
 
@@ -39,7 +39,7 @@ def test_get_notes_ignores_malformed_lines(app):
 
 def test_set_notes_creates_item_when_missing(app):
     with app.app_context():
-        with patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             # 1st call: list items -> empty list (item doesn't exist yet)
             # 2nd call: create item
             mock_run.side_effect = [
@@ -62,7 +62,7 @@ def test_set_notes_creates_item_when_missing(app):
 def test_set_notes_edits_existing_item(app):
     existing_item = {"id": "item-123", "name": "MCP-jenkins", "notes": "OLD=1"}
     with app.app_context():
-        with patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.side_effect = [
                 _proc(stdout=json.dumps([{"id": "item-123", "name": "MCP-jenkins"}])),
                 _proc(stdout=json.dumps(existing_item)),
@@ -80,7 +80,7 @@ def test_set_notes_edits_existing_item(app):
 
 def test_run_raises_vaultwarden_error_on_subprocess_timeout(app):
     with app.app_context():
-        with patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.side_effect = subprocess.TimeoutExpired(cmd=["bw", "status"], timeout=12)
             with pytest.raises(vaultwarden.VaultwardenError) as exc:
                 vaultwarden._run(["status", "--raw"])
@@ -90,7 +90,7 @@ def test_run_raises_vaultwarden_error_on_subprocess_timeout(app):
 
 def test_delete_item_noop_when_not_found(app):
     with app.app_context():
-        with patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.return_value = _proc(stdout="[]")
             vaultwarden.delete_item("session-token", "MCP-missing")
 
@@ -106,7 +106,7 @@ def test_resolve_env_merges_override_over_default(app):
         username = "carol"
 
     with app.app_context():
-        with patch("vaultwarden.get_notes") as mock_get_notes:
+        with patch("mcprack.vaultwarden.get_notes") as mock_get_notes:
             mock_get_notes.side_effect = [
                 {"AUTH_TOKEN": "default-token", "API_URL": "https://default.test"},
                 {"AUTH_TOKEN": "carols-own-token"},
@@ -171,7 +171,7 @@ def test_resolve_env_without_user_returns_defaults_only(app):
         vault_item = "MCP-jenkins"
 
     with app.app_context():
-        with patch("vaultwarden.get_notes") as mock_get_notes:
+        with patch("mcprack.vaultwarden.get_notes") as mock_get_notes:
             mock_get_notes.return_value = {"AUTH_TOKEN": "default-token"}
             merged = vaultwarden.resolve_env("session-token", FakeServer(), user=None)
 
@@ -185,10 +185,10 @@ def _step_statuses(steps):
 
 def test_diagnose_all_checks_pass(app):
     with app.app_context():
-        with patch("vaultwarden.os.path.isfile", return_value=True), \
-             patch("vaultwarden.os.access", return_value=True), \
-             patch("vaultwarden.health.check_http_reachable", return_value=True), \
-             patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=True), \
+             patch("mcprack.vaultwarden.os.access", return_value=True), \
+             patch("mcprack.vaultwarden.health.check_http_reachable", return_value=True), \
+             patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.side_effect = [
                 _proc(),  # config server
                 _proc(stdout='{"status":"unauthenticated"}'),  # status --raw
@@ -212,7 +212,7 @@ def test_diagnose_all_checks_pass(app):
 
 def test_diagnose_stops_at_missing_binary(app):
     with app.app_context():
-        with patch("vaultwarden.os.path.isfile", return_value=False):
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=False):
             steps = vaultwarden.diagnose()
 
     statuses = _step_statuses(steps)
@@ -222,9 +222,9 @@ def test_diagnose_stops_at_missing_binary(app):
 
 def test_diagnose_stops_at_unreachable_server(app):
     with app.app_context():
-        with patch("vaultwarden.os.path.isfile", return_value=True), \
-             patch("vaultwarden.os.access", return_value=True), \
-             patch("vaultwarden.health.check_http_reachable", return_value=False):
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=True), \
+             patch("mcprack.vaultwarden.os.access", return_value=True), \
+             patch("mcprack.vaultwarden.health.check_http_reachable", return_value=False):
             steps = vaultwarden.diagnose()
 
     statuses = _step_statuses(steps)
@@ -241,10 +241,10 @@ def test_diagnose_stops_at_unreachable_server(app):
 
 def test_diagnose_reports_bad_api_credentials(app):
     with app.app_context():
-        with patch("vaultwarden.os.path.isfile", return_value=True), \
-             patch("vaultwarden.os.access", return_value=True), \
-             patch("vaultwarden.health.check_http_reachable", return_value=True), \
-             patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=True), \
+             patch("mcprack.vaultwarden.os.access", return_value=True), \
+             patch("mcprack.vaultwarden.health.check_http_reachable", return_value=True), \
+             patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.side_effect = [
                 _proc(),  # config server
                 _proc(stdout='{"status":"unauthenticated"}'),  # status --raw
@@ -264,10 +264,10 @@ def test_diagnose_reports_bad_api_credentials(app):
 
 def test_diagnose_reports_bad_master_password(app):
     with app.app_context():
-        with patch("vaultwarden.os.path.isfile", return_value=True), \
-             patch("vaultwarden.os.access", return_value=True), \
-             patch("vaultwarden.health.check_http_reachable", return_value=True), \
-             patch("vaultwarden.subprocess.run") as mock_run:
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=True), \
+             patch("mcprack.vaultwarden.os.access", return_value=True), \
+             patch("mcprack.vaultwarden.health.check_http_reachable", return_value=True), \
+             patch("mcprack.vaultwarden.subprocess.run") as mock_run:
             mock_run.side_effect = [
                 _proc(),  # config server
                 _proc(stdout='{"status":"unlocked"}'),  # status --raw: already authenticated
@@ -285,8 +285,8 @@ def test_diagnose_reports_bad_master_password(app):
 
 def test_session_unlocks_yields_and_locks(app):
     with app.app_context():
-        with patch("vaultwarden.unlock", return_value="sess-token") as mock_unlock, \
-             patch("vaultwarden.lock") as mock_lock:
+        with patch("mcprack.vaultwarden.unlock", return_value="sess-token") as mock_unlock, \
+             patch("mcprack.vaultwarden.lock") as mock_lock:
             with vaultwarden.session() as sess:
                 assert sess == "sess-token"
                 mock_unlock.assert_called_once()
@@ -296,8 +296,8 @@ def test_session_unlocks_yields_and_locks(app):
 
 def test_session_locks_even_if_body_raises(app):
     with app.app_context():
-        with patch("vaultwarden.unlock", return_value="sess-token"), \
-             patch("vaultwarden.lock") as mock_lock:
+        with patch("mcprack.vaultwarden.unlock", return_value="sess-token"), \
+             patch("mcprack.vaultwarden.lock") as mock_lock:
             with pytest.raises(RuntimeError):
                 with vaultwarden.session():
                     raise RuntimeError("boom")
@@ -306,8 +306,8 @@ def test_session_locks_even_if_body_raises(app):
 
 def test_session_propagates_unlock_failure_without_locking(app):
     with app.app_context():
-        with patch("vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")), \
-             patch("vaultwarden.lock") as mock_lock:
+        with patch("mcprack.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")), \
+             patch("mcprack.vaultwarden.lock") as mock_lock:
             with pytest.raises(vaultwarden.VaultwardenError):
                 with vaultwarden.session():
                     pass
@@ -324,8 +324,8 @@ def test_session_serializes_across_concurrent_callers(app):
     import fcntl
 
     with app.app_context():
-        with patch("vaultwarden.unlock", return_value="sess-token"), \
-             patch("vaultwarden.lock"):
+        with patch("mcprack.vaultwarden.unlock", return_value="sess-token"), \
+             patch("mcprack.vaultwarden.lock"):
             with vaultwarden.session():
                 lock_path = vaultwarden._lock_file_path()
                 with open(lock_path, "w") as probe:
@@ -360,7 +360,7 @@ def test_session_lock_contention_fails_fast(app):
 
     with app.app_context():
         app.config["BW_LOCK_TIMEOUT"] = 0.1
-        with patch("vaultwarden.unlock", return_value="sess-token"), patch("vaultwarden.lock"):
+        with patch("mcprack.vaultwarden.unlock", return_value="sess-token"), patch("mcprack.vaultwarden.lock"):
             with pytest.raises(vaultwarden.VaultwardenError) as exc:
                 with vaultwarden.session():
                     pass

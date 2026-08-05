@@ -1,19 +1,19 @@
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for, Response
 from datetime import datetime, timezone
 
-import audit
-import catalog
-import detection
-import health
-import installer
-import appstream_icons
-import secret_store
-import user_proxy
-import vaultwarden
-from auth import admin_required
-from extensions import db
+from . import audit
+from . import catalog
+from . import detection
+from . import health
+from . import installer
+from . import appstream_icons
+from . import secret_store
+from . import user_proxy
+from . import vaultwarden
+from .auth import admin_required
+from .extensions import db
 from flask_login import current_user
-from models import AuditLogEntry, McpServer, User, UserServerPermission, UserServerSelection
+from .models import AuditLogEntry, McpServer, User, UserServerPermission, UserServerSelection
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -690,7 +690,7 @@ def vaultwarden_wizard():
 def otel_wizard():
     """Read-only status page + on-demand connectivity test — same pattern
     as the Vaultwarden wizard above, but for OpenTelemetry export."""
-    import telemetry
+    from . import telemetry
 
     state = telemetry.status()
     return render_template("admin/otel_wizard.html", state=state)
@@ -699,7 +699,7 @@ def otel_wizard():
 @bp.route("/otel/wizard/test", methods=["POST"])
 @admin_required
 def otel_wizard_test():
-    import telemetry
+    from . import telemetry
 
     ok, detail = telemetry.send_test_signal()
     flash(detail, "success" if ok else "error")

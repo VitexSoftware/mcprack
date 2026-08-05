@@ -2,9 +2,9 @@ from unittest.mock import patch
 
 import pytest
 
-import secret_store
-from extensions import db
-from models import McpServer, User, UserServerOverride
+from mcprack import secret_store
+from mcprack.extensions import db
+from mcprack.models import McpServer, User, UserServerOverride
 
 
 def _server(**overrides):
@@ -57,7 +57,7 @@ def test_resolve_server_env_skips_vaultwarden_entirely_when_not_needed(app):
         server.env_config = {"LOG_LEVEL": "debug"}
         db.session.commit()
 
-        with patch("secret_store.vaultwarden.session") as mock_session:
+        with patch("mcprack.secret_store.vaultwarden.session") as mock_session:
             env = secret_store.resolve_server_env(server)
 
         mock_session.assert_not_called()
@@ -70,16 +70,16 @@ def test_resolve_server_env_merges_config_and_vaultwarden_secrets(app):
         server.env_config = {"REGION": "eu"}
         db.session.commit()
 
-        with patch("secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("secret_store.vaultwarden.session"), \
-             patch("secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}):
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch("mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}):
             env = secret_store.resolve_server_env(server)
 
         assert env == {"REGION": "eu", "AUTH_TOKEN": "secret"}
 
 
 def test_local_encryption_roundtrip(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         server = _server()
         secret_store.save_server_secrets(server, {"AUTH_TOKEN": "topsecret"})
         db.session.commit()
@@ -92,7 +92,7 @@ def test_local_encryption_roundtrip(app):
 
 
 def test_local_storage_refuses_insecure_default_secret_key(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         server = _server()
         app.config["SECRET_KEY"] = secret_store.INSECURE_DEFAULT_SECRET_KEY
         try:
@@ -105,14 +105,14 @@ def test_local_storage_refuses_insecure_default_secret_key(app):
 def test_migrate_local_to_vaultwarden_moves_and_clears_local_copy(app):
     with app.app_context():
         server = _server()
-        with patch("secret_store.is_vaultwarden_configured", return_value=False):
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
             secret_store.save_server_secrets(server, {"AUTH_TOKEN": "topsecret"})
         db.session.commit()
         assert server.env_secrets_encrypted is not None
 
-        with patch("secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("secret_store.vaultwarden.session"), \
-             patch("secret_store.vaultwarden.set_notes") as mock_set_notes:
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch("mcprack.secret_store.vaultwarden.set_notes") as mock_set_notes:
             summary = secret_store.migrate_local_to_vaultwarden()
 
         mock_set_notes.assert_called_once()
@@ -124,14 +124,14 @@ def test_migrate_local_to_vaultwarden_moves_and_clears_local_copy(app):
 def test_migrate_local_to_vaultwarden_keeps_local_copy_on_write_failure(app):
     with app.app_context():
         server = _server()
-        with patch("secret_store.is_vaultwarden_configured", return_value=False):
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
             secret_store.save_server_secrets(server, {"AUTH_TOKEN": "topsecret"})
         db.session.commit()
 
-        with patch("secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("secret_store.vaultwarden.session"), \
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
              patch(
-                 "secret_store.vaultwarden.set_notes",
+                 "mcprack.secret_store.vaultwarden.set_notes",
                  side_effect=secret_store.vaultwarden.VaultwardenError("boom"),
              ):
             summary = secret_store.migrate_local_to_vaultwarden()
@@ -145,10 +145,10 @@ def test_snapshot_vaultwarden_to_local_keeps_vaultwarden_copy(app):
     with app.app_context():
         server = _server()
 
-        with patch("secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("secret_store.vaultwarden.session"), \
-             patch("secret_store.vaultwarden.set_notes") as mock_set_notes, \
-             patch("secret_store.vaultwarden.get_notes", return_value={"AUTH_TOKEN": "topsecret"}):
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch("mcprack.secret_store.vaultwarden.set_notes") as mock_set_notes, \
+             patch("mcprack.secret_store.vaultwarden.get_notes", return_value={"AUTH_TOKEN": "topsecret"}):
             summary = secret_store.snapshot_vaultwarden_to_local()
 
         mock_set_notes.assert_not_called()
@@ -158,7 +158,7 @@ def test_snapshot_vaultwarden_to_local_keeps_vaultwarden_copy(app):
 
 
 def test_user_override_secrets_roundtrip_local(app):
-    with app.app_context(), patch("secret_store.is_vaultwarden_configured", return_value=False):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         server = _server(allow_user_override=True)
         user = User(username="alice", auth_type="local")
         user.set_password("pw")

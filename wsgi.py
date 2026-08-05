@@ -1,6 +1,6 @@
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app import create_app
+from mcprack.app import create_app
 
 application = create_app()
 

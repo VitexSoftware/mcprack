@@ -17,8 +17,8 @@ import uuid
 
 import flask
 
-from extensions import db
-from models import AuditLogEntry
+from .extensions import db
+from .models import AuditLogEntry
 
 logger = logging.getLogger(__name__)
 

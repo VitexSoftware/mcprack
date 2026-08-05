@@ -1,9 +1,10 @@
 import html
 import json
+import os
 from unittest.mock import patch
 
-from extensions import db
-from models import McpServer, User, UserServerPermission, UserServerSelection
+from mcprack.extensions import db
+from mcprack.models import McpServer, User, UserServerPermission, UserServerSelection
 
 
 def _login(client, username="alice"):
@@ -49,9 +50,9 @@ def test_view_renders_textarea_with_config_json(app, client):
     user_id = _login(client)
     _add_selected_server(app, user_id)
 
-    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("catalog.vaultwarden.lock"), \
-         patch("catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
         resp = client.get("/view/claude")
 
     assert resp.status_code == 200
@@ -72,12 +73,12 @@ def test_view_redirects_with_flash_when_nothing_selected(app, client):
 
 
 def test_view_survives_vaultwarden_outage(app, client):
-    import vaultwarden
+    from mcprack import vaultwarden
 
     user_id = _login(client)
     _add_selected_server(app, user_id)
 
-    with patch("catalog.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")):
+    with patch("mcprack.catalog.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")):
         resp = client.get("/view/claude", follow_redirects=True)
 
     assert resp.status_code == 200
@@ -85,12 +86,12 @@ def test_view_survives_vaultwarden_outage(app, client):
 
 
 def test_download_survives_vaultwarden_outage(app, client):
-    import vaultwarden
+    from mcprack import vaultwarden
 
     user_id = _login(client)
     _add_selected_server(app, user_id)
 
-    with patch("catalog.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")):
+    with patch("mcprack.catalog.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")):
         resp = client.get("/download/claude", follow_redirects=True)
 
     assert resp.status_code == 200
@@ -116,14 +117,14 @@ def test_view_and_download_render_identical_payload(app, client):
     user_id = _login(client)
     _add_selected_server(app, user_id)
 
-    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("catalog.vaultwarden.lock"), \
-         patch("catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
         view_resp = client.get("/view/copilot")
 
-    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("catalog.vaultwarden.lock"), \
-         patch("catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
         download_resp = client.get("/download/copilot")
 
     assert json.loads(download_resp.data) == json.loads(_extract_textarea_text(view_resp.data.decode()))
@@ -134,7 +135,7 @@ def test_view_escapes_html_sensitive_characters_in_resolved_values(app):
     metacharacters must not break out of the textarea — Jinja's default
     autoescaping must stay in effect (no |safe) so this can't become a
     stored-XSS vector via an admin- or user-supplied Vaultwarden value."""
-    from config_formats import render_claude_config
+    from mcprack.config_formats import render_claude_config
     from flask import render_template_string
 
     malicious = [
@@ -162,8 +163,8 @@ def test_server_icon_falls_back_to_default_when_no_appstream_icon(app, client):
     _login(client)
     server_id = _add_enabled_server(app, name="no-icon")
 
-    with patch("catalog.appstream_icons.resolve_server_icon_path", return_value=None), \
-         patch("catalog.appstream_icons.is_safe_icon_path", return_value=False):
+    with patch("mcprack.catalog.appstream_icons.resolve_server_icon_path", return_value=None), \
+         patch("mcprack.catalog.appstream_icons.is_safe_icon_path", return_value=False):
         resp = client.get(f"/icon/server/{server_id}")
 
     assert resp.status_code == 302
@@ -174,9 +175,12 @@ def test_server_icon_serves_appstream_file_when_available(app, client):
     _login(client)
     server_id = _add_enabled_server(app, name="with-icon")
 
-    icon_path = "/home/vitex/Projects/VitexSoftware/mcprack/static/mcprack-app-icon.svg"
-    with patch("catalog.appstream_icons.resolve_server_icon_path", return_value=icon_path), \
-         patch("catalog.appstream_icons.is_safe_icon_path", return_value=True):
+    icon_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        "mcprack", "static", "mcprack-app-icon.svg",
+    )
+    with patch("mcprack.catalog.appstream_icons.resolve_server_icon_path", return_value=icon_path), \
+         patch("mcprack.catalog.appstream_icons.is_safe_icon_path", return_value=True):
         resp = client.get(f"/icon/server/{server_id}")
 
     assert resp.status_code == 200
@@ -200,15 +204,15 @@ def test_user_proxy_route_requires_valid_token_and_selection(app, client):
         server_id = stdio.id
 
     with app.app_context():
-        from catalog import _make_proxy_token
+        from mcprack.catalog import _make_proxy_token
 
         token = _make_proxy_token(user_id, server_id)
 
-    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("catalog.vaultwarden.lock"), \
-         patch("catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "x"}), \
-         patch("catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
-         patch("catalog._forward_to_user_proxy", return_value=app.response_class("ok", status=200)):
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "x"}), \
+         patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
+         patch("mcprack.catalog._forward_to_user_proxy", return_value=app.response_class("ok", status=200)):
         resp = client.post(f"/proxy/mcp/{token}/{server_id}")
 
     assert resp.status_code == 200
@@ -226,7 +230,7 @@ def test_user_proxy_route_returns_clean_jsonrpc_error_on_broken_upstream(app, cl
     """A permanently broken upstream (e.g. a stdio command that crashes on
     every invocation) must fail deterministically with a proper JSON-RPC
     error body, not a bare 502 or an unbounded hang."""
-    import user_proxy
+    from mcprack import user_proxy
 
     user_id = _login(client)
     with app.app_context():
@@ -241,12 +245,12 @@ def test_user_proxy_route_returns_clean_jsonrpc_error_on_broken_upstream(app, cl
         server_id = stdio.id
 
     with app.app_context():
-        from catalog import _make_proxy_token
+        from mcprack.catalog import _make_proxy_token
         token = _make_proxy_token(user_id, server_id)
 
     body = json.dumps({"jsonrpc": "2.0", "id": 42, "method": "initialize"})
     with patch(
-        "catalog.user_proxy.ensure_user_server_proxy",
+        "mcprack.catalog.user_proxy.ensure_user_server_proxy",
         side_effect=user_proxy.UserProxyError("Upstream MCP server 'broken' failed its startup handshake"),
     ):
         resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
@@ -261,7 +265,7 @@ def test_user_proxy_route_returns_clean_jsonrpc_error_on_broken_upstream(app, cl
 def test_forward_to_user_proxy_returns_clean_jsonrpc_error_on_timeout(app, client):
     import socket as _socket
 
-    import catalog
+    from mcprack import catalog
 
     user_id = _login(client)
     with app.app_context():
@@ -276,12 +280,12 @@ def test_forward_to_user_proxy_returns_clean_jsonrpc_error_on_timeout(app, clien
         server_id = stdio.id
 
     with app.app_context():
-        from catalog import _make_proxy_token
+        from mcprack.catalog import _make_proxy_token
         token = _make_proxy_token(user_id, server_id)
 
     body = json.dumps({"jsonrpc": "2.0", "id": "abc", "method": "initialize"})
-    with patch("catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
-         patch("catalog.http.client.HTTPConnection") as mock_conn_cls:
+    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
+         patch("mcprack.catalog.http.client.HTTPConnection") as mock_conn_cls:
         mock_conn_cls.return_value.request.side_effect = _socket.timeout("timed out")
         resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
 
@@ -409,9 +413,9 @@ def test_download_excludes_explicitly_denied_selected_server(app, client):
         )
         db.session.commit()
 
-    with patch("catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("catalog.vaultwarden.lock"), \
-         patch("catalog.vaultwarden.resolve_env", return_value={}):
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={}):
         resp = client.get("/download/copilot")
 
     payload = resp.data.decode()

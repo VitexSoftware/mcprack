@@ -2,10 +2,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-import audit
-import audit_retention
-from extensions import db
-from models import AuditLogEntry, McpServer, User
+from mcprack import audit
+from mcprack import audit_retention
+from mcprack.extensions import db
+from mcprack.models import AuditLogEntry, McpServer, User
 
 
 def _make_user():
@@ -95,7 +95,7 @@ def test_current_request_id_none_outside_request():
     this constructs its own app/app-context (no request context) to prove
     current_request_id() returns None for genuinely request-less callers
     like the audit-archive CLI command."""
-    from app import create_app
+    from mcprack.app import create_app
     from tests.conftest import TestConfig
 
     application = create_app(TestConfig)
