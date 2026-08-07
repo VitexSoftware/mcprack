@@ -1,3 +1,11 @@
+mcprack (1.2.0) unstable; urgency=medium
+
+  * Add support for mounting mcprack under a URL sub-path (e.g. behind a
+    shared Apache vhost at /mcprack) via X-Forwarded-Prefix; ProxyFix
+    now trusts that header and rewrites SCRIPT_NAME accordingly.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Fri, 07 Aug 2026 04:18:35 +0200
+
 mcprack (1.1.0) unstable; urgency=medium
 
   * Add JSON REST API (/api/v1) with dual session-cookie/bearer-token
