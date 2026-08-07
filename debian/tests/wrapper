@@ -1,0 +1,20 @@
+#!/bin/sh
+# Smoke-test the /usr/bin/mcprack launcher wrapper installed by this
+# package.
+set -e
+
+echo "Running: mcprack --help"
+# --help short-circuits Click before create_app()'s SECRET_KEY enforcement,
+# so this alone proves the shebang, exec, and module import all work
+# without needing a live SECRET_KEY/database.
+/usr/bin/mcprack --help
+
+echo "Running: mcprack user --help (as root, via /etc/mcprack/env)"
+# Any subcommand other than --help *does* call create_app(), which refuses
+# to run without a real SECRET_KEY from /etc/mcprack/env (0640 root:mcprack).
+# This is the exact case the wrapper's env-sourcing fix targets: without it,
+# `sudo mcprack user list` fails even as root because the wrapper never
+# loads that file into its own environment.
+sudo /usr/bin/mcprack user --help
+
+echo "wrapper: OK"

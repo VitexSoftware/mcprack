@@ -205,7 +205,10 @@ mcprack's Flask CLI. In development, invoke it with `flask <command>`
 (e.g. `flask user list`); on a Debian install, the `mcprack` launcher
 script forwards any non-flag first argument the same way, so
 `mcprack user list` works too (see "Installation (Debian/Ubuntu package)"
-below). With no arguments, or arguments starting with `-`, `mcprack` runs
+below) — run it as root (e.g. `sudo mcprack user list`), since it needs to
+read the real `SECRET_KEY` out of `/etc/mcprack/env`, which is `0640
+root:mcprack` and unreadable by other users. With no arguments, or
+arguments starting with `-`, `mcprack` runs
 the dev server instead (`mcprack --host 0.0.0.0 --port 8913`).
 
 **`user`** — manage mcprack accounts:

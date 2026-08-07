@@ -22,4 +22,16 @@
 # path outside any venv, and to set the correct working directory.
 cd /usr/lib/mcprack || cd "$(dirname "$0")/.."
 
+# /etc/mcprack/env holds SECRET_KEY and other production secrets, so it's
+# 0640 root:mcprack (see debian/postinst) — unreadable by arbitrary users.
+# mcprack.service loads it via systemd's EnvironmentFile=, but an
+# interactive `sudo mcprack user list` etc. gets none of that, so load it
+# ourselves whenever we can actually read it (i.e. running as root or as
+# a member of the mcprack group).
+if [ -r /etc/mcprack/env ]; then
+    set -a
+    . /etc/mcprack/env
+    set +a
+fi
+
 exec python3 -m mcprack "$@"
