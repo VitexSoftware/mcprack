@@ -24,18 +24,6 @@
       </a>
 
       {% if current_user.is_authenticated %}
-        <nav class="header-nav">
-          {% if current_user.is_admin %}
-            <a href="{{ url_for('admin.servers_list') }}" class="header-nav-link is-admin">{{ _('Servers') }}</a>
-            <a href="{{ url_for('admin.install_wizard') }}" class="header-nav-link is-admin">{{ _('Install') }}</a>
-            <a href="{{ url_for('admin.users_list') }}" class="header-nav-link is-admin">{{ _('Users') }}</a>
-            <a href="{{ url_for('admin.proxy_instances') }}" class="header-nav-link is-admin">{{ _('Proxy') }}</a>
-            <a href="{{ url_for('admin.audit_log') }}" class="header-nav-link is-admin">{{ _('Audit Log') }}</a>
-            <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-nav-link is-admin">{{ _('Diagnostics') }}</a>
-            <a href="{{ url_for('admin.otel_wizard') }}" class="header-nav-link is-admin">{{ _('OTEL') }}</a>
-          {% endif %}
-        </nav>
-
         <div class="header-user">
           <div class="language-switcher" style="display: inline-flex; gap: 5px; margin-right: 15px;">
             <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale', 'en') == 'en' else '0.5' }}">🇬🇧</a>

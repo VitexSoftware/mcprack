@@ -6,12 +6,12 @@
 document.addEventListener('DOMContentLoaded', function () {
   var counters = {};
 
-  function addEnvRow(containerId, sensitiveLabel, key, value, sensitive) {
+  function addEnvRow(containerId, sensitiveLabel, key, value, sensitive, required, requiredLabel) {
     counters[containerId] = (counters[containerId] || 0) + 1;
     var id = containerId + '-' + counters[containerId];
 
     var row = document.createElement('div');
-    row.className = 'env-row';
+    row.className = 'env-row' + (required ? ' env-row-required' : '');
     row.dataset.rowId = id;
     row.style.cssText = 'display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);';
 
@@ -38,6 +38,18 @@ document.addEventListener('DOMContentLoaded', function () {
     label.appendChild(sensitiveInput);
     label.appendChild(document.createTextNode(' ' + sensitiveLabel));
 
+    var requiredLabelEl = document.createElement('label');
+    requiredLabelEl.style.cssText = 'display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;';
+    var requiredInput = document.createElement('input');
+    requiredInput.type = 'checkbox';
+    requiredInput.name = 'env_required__' + id;
+    requiredInput.checked = !!required;
+    requiredInput.addEventListener('change', function () {
+      row.classList.toggle('env-row-required', requiredInput.checked);
+    });
+    requiredLabelEl.appendChild(requiredInput);
+    requiredLabelEl.appendChild(document.createTextNode(' ' + (requiredLabel || 'required')));
+
     var removeButton = document.createElement('button');
     removeButton.type = 'button';
     removeButton.className = 'btn btn-sm btn-danger';
@@ -46,12 +58,13 @@ document.addEventListener('DOMContentLoaded', function () {
       row.remove();
     });
 
-    row.append(keyInput, valueInput, label, removeButton);
+    row.append(keyInput, valueInput, label, requiredLabelEl, removeButton);
     document.getElementById(containerId).appendChild(row);
   }
 
   document.querySelectorAll('[data-env-rows-container]').forEach(function (container) {
     var sensitiveLabel = container.dataset.sensitiveLabel || 'sensitive';
+    var requiredLabel = container.dataset.requiredLabel || 'required';
     var initial = [];
     try {
       initial = JSON.parse(container.dataset.initial || '[]');
@@ -59,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function () {
       initial = [];
     }
     initial.forEach(function (row) {
-      addEnvRow(container.id, sensitiveLabel, row.key, row.value, row.sensitive);
+      addEnvRow(container.id, sensitiveLabel, row.key, row.value, row.sensitive, row.required, requiredLabel);
     });
   });
 
@@ -68,7 +81,8 @@ document.addEventListener('DOMContentLoaded', function () {
       var containerId = btn.dataset.target;
       var container = document.getElementById(containerId);
       var sensitiveLabel = (container && container.dataset.sensitiveLabel) || 'sensitive';
-      addEnvRow(containerId, sensitiveLabel, '', '', false);
+      var requiredLabel = (container && container.dataset.requiredLabel) || 'required';
+      addEnvRow(containerId, sensitiveLabel, '', '', false, false, requiredLabel);
     });
   });
 });

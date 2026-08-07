@@ -63,7 +63,7 @@
         </div>
         <fieldset>
           <legend>{{ _('Environment variables') }}</legend>
-          <div id="env-rows-pip" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}"></div>
+          <div id="env-rows-pip" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-pip">➕ {{ _('Add row') }}</button>
         </fieldset>
         <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.pip else "" }}>🐍 Install</button>
@@ -100,7 +100,7 @@
         </div>
         <fieldset>
           <legend>{{ _('Environment variables') }}</legend>
-          <div id="env-rows-npm" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}"></div>
+          <div id="env-rows-npm" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-npm">➕ {{ _('Add row') }}</button>
         </fieldset>
         <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.npm else "" }}>📦 Install</button>
@@ -134,7 +134,7 @@
         </div>
         <fieldset>
           <legend>{{ _('Environment variables') }}</legend>
-          <div id="env-rows-docker" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}"></div>
+          <div id="env-rows-docker" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-docker">➕ {{ _('Add row') }}</button>
         </fieldset>
         <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.docker else "" }}>🐳 Pull &amp; register</button>

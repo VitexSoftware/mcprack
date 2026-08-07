@@ -1,3 +1,6 @@
+import html
+import json
+import re
 from unittest.mock import patch
 
 from mcprack.extensions import db
@@ -40,6 +43,31 @@ def test_servers_list_flags_missing_credentials_and_unreachable(app, client):
     assert "missing: AUTH_TOKEN" in body
     assert "unreachable" in body
     assert "ok" in body
+
+
+def test_servers_list_flags_missing_required_default(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="needs-config", label="Needs Config", transport="stdio",
+            command="/bin/true", enabled=True,
+        )
+        server.required_env_keys = ["API_KEY"]
+        complete = McpServer(
+            name="all-set", label="All Set", transport="stdio",
+            command="/bin/true", enabled=True,
+        )
+        complete.required_env_keys = ["ALREADY_SET"]
+        complete.env_config = {"ALREADY_SET": "value"}
+        db.session.add_all([server, complete])
+        db.session.commit()
+
+    with patch("mcprack.admin.health.check_reachable", return_value=True):
+        resp = client.get("/admin/servers")
+
+    body = resp.data.decode()
+    assert "1 required value(s) missing" in body
 
 
 def test_servers_list_survives_vaultwarden_outage(app, client):
@@ -226,3 +254,90 @@ def test_server_test_stdio_rejects_network_servers(app, client):
     resp = client.post(f"/admin/servers/{server_id}/test", follow_redirects=True)
     assert resp.status_code == 200
     assert b"nothing to test here" in resp.data
+
+
+def test_server_edit_prefills_detected_but_unconfigured_rows(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="foo", label="Foo", transport="stdio", command="/bin/true", enabled=True,
+        )
+        server.detected_env_vars = [
+            {"name": "API_KEY", "required": True, "secret": True, "description": None, "source": "registry"},
+            {"name": "LOG_LEVEL", "required": False, "secret": False, "description": None, "source": "source-scan"},
+        ]
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.get_notes", return_value={}):
+        resp = client.get(f"/admin/servers/{server_id}/edit")
+
+    body = resp.data.decode()
+    match = re.search(r'id="env-rows"[^>]*data-initial=\'([^\']*)\'', body)
+    assert match, body
+    rows = json.loads(html.unescape(match.group(1)))
+    by_key = {row["key"]: row for row in rows}
+
+    # required=True is only pre-checked for the registry-sourced suggestion
+    assert by_key["API_KEY"] == {"key": "API_KEY", "value": "", "sensitive": True, "required": True}
+    assert by_key["LOG_LEVEL"] == {"key": "LOG_LEVEL", "value": "", "sensitive": False, "required": False}
+
+
+def test_server_edit_excludes_already_configured_detected_suggestion(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="foo", label="Foo", transport="stdio", command="/bin/true", enabled=True,
+        )
+        server.env_config = {"ALREADY_SET": "value"}
+        server.detected_env_vars = [
+            {"name": "ALREADY_SET", "required": False, "secret": False, "description": None, "source": "source-scan"},
+        ]
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.get_notes", return_value={}):
+        resp = client.get(f"/admin/servers/{server_id}/edit")
+
+    body = resp.data.decode()
+    # Appears once (the real configured row), not duplicated as a suggestion.
+    assert body.count("ALREADY_SET") == 1
+
+
+def test_server_edit_persists_manually_checked_required_flag(app, client):
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="foo", label="Foo", transport="stdio", command="/bin/true", enabled=True,
+        )
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    resp = client.post(
+        f"/admin/servers/{server_id}/edit",
+        data={
+            "transport": "stdio",
+            "command": "/bin/true",
+            "args": "",
+            "env_key__1": "SOME_VAR",
+            "env_value__1": "x",
+            "env_required__1": "on",
+            "enabled": "on",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+
+    with app.app_context():
+        server = db.session.get(McpServer, server_id)
+        assert server.required_env_keys == ["SOME_VAR"]

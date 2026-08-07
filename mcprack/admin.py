@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from . import audit
 from . import catalog
 from . import detection
+from . import env_detection
 from . import health
 from . import installer
 from . import appstream_icons
@@ -80,8 +81,23 @@ def _compute_server_health(servers):
     ):
         return _health_cache
 
+    def _missing_required(server, secret_values):
+        """Admin-default view only (no per-user overrides) — an admin
+        default gap doesn't necessarily mean the server is unusable if
+        allow_user_override lets each user supply their own value, but it's
+        still worth flagging as incomplete."""
+        if not server.required_env_keys:
+            return []
+        effective = dict(server.env_config or {})
+        effective.update(secret_values or {})
+        return sorted(key for key in server.required_env_keys if not effective.get(key))
+
     health_by_id = {
-        server.id: {"missing_credentials": [], "reachable": health.check_reachable(server)}
+        server.id: {
+            "missing_credentials": [],
+            "missing_required": _missing_required(server, {}),
+            "reachable": health.check_reachable(server),
+        }
         for server in servers
     }
     needing_secrets = [s for s in servers if secret_store.server_needs_secrets(s)]
@@ -95,6 +111,7 @@ def _compute_server_health(servers):
             health_by_id[server.id]["missing_credentials"] = vaultwarden.missing_credential_keys(
                 server, values
             )
+            health_by_id[server.id]["missing_required"] = _missing_required(server, values)
     elif (
         needing_secrets
         and len(needing_secrets) <= FULL_HEALTH_MAX_SERVERS
@@ -114,6 +131,7 @@ def _compute_server_health(servers):
                     health_by_id[server.id]["missing_credentials"] = vaultwarden.missing_credential_keys(
                         server, vault_values
                     )
+                    health_by_id[server.id]["missing_required"] = _missing_required(server, vault_values)
         except vaultwarden.VaultwardenError:
             pass
 
@@ -169,12 +187,37 @@ def server_edit(server_id):
         flash(f"Server '{server.name}' updated.", "success")
         return redirect(url_for("admin.servers_list"))
 
-    env_rows = [{"key": k, "value": v, "sensitive": False} for k, v in (server.env_config or {}).items()]
+    required_keys = set(server.required_env_keys)
+    env_rows = [
+        {"key": k, "value": v, "sensitive": False, "required": k in required_keys}
+        for k, v in (server.env_config or {}).items()
+    ]
     try:
         secret_values = secret_store.load_server_secrets(server)
-        env_rows += [{"key": k, "value": v, "sensitive": True} for k, v in secret_values.items()]
+        env_rows += [
+            {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
+            for k, v in secret_values.items()
+        ]
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         flash(f"Could not load current secret values: {exc}", "error")
+
+    # Detected-but-not-yet-configured suggestions get folded in as
+    # additional, pre-filled-but-empty rows so the admin sees them directly
+    # in the editable list — never applied/saved unless the admin actually
+    # submits the form. Only registry/manifest sources ever carry
+    # required=True (see env_detection.py); a heuristic source-scan/
+    # docker-inspect guess is still shown, just not pre-checked required.
+    configured_keys = set(server.env_config or {}) | set(server.env_var_names)
+    for suggestion in server.detected_env_vars:
+        if suggestion.get("name") not in configured_keys:
+            env_rows.append(
+                {
+                    "key": suggestion["name"],
+                    "value": "",
+                    "sensitive": bool(suggestion.get("secret")),
+                    "required": bool(suggestion.get("required")),
+                }
+            )
 
     icon_path = appstream_icons.resolve_server_icon_path(server)
     icon_url = None
@@ -191,24 +234,28 @@ def server_edit(server_id):
 
 
 def _parse_env_rows(form):
-    """Parse the Key/Value/Sensitive row editor, submitted as
-    env_key__<id>, env_value__<id>, env_sensitive__<id> — <id> is an
-    opaque client-assigned token, not necessarily contiguous, so rows can
-    be added/removed freely in the browser without renumbering."""
+    """Parse the Key/Value/Sensitive/Required row editor, submitted as
+    env_key__<id>, env_value__<id>, env_sensitive__<id>, env_required__<id>
+    — <id> is an opaque client-assigned token, not necessarily contiguous,
+    so rows can be added/removed freely in the browser without renumbering.
+    Returns (non_secret, secret, required_keys)."""
     row_ids = {name[len("env_key__"):] for name in form if name.startswith("env_key__")}
 
-    non_secret, secret = {}, {}
+    non_secret, secret, required_keys = {}, {}, set()
     for row_id in row_ids:
         key = form.get(f"env_key__{row_id}", "").strip()
         if not key:
             continue
         value = form.get(f"env_value__{row_id}", "")
         is_sensitive = form.get(f"env_sensitive__{row_id}") is not None
+        is_required = form.get(f"env_required__{row_id}") is not None
         if is_sensitive:
             secret[key] = value
         else:
             non_secret[key] = value
-    return non_secret, secret
+        if is_required:
+            required_keys.add(key)
+    return non_secret, secret, required_keys
 
 
 def _apply_server_fields(server, data):
@@ -243,7 +290,7 @@ def _apply_server_fields(server, data):
     server.auth_env_key = _nullable_text(data.get("auth_env_key", ""))
 
 
-def _apply_server_secrets(server, non_secret, secret):
+def _apply_server_secrets(server, non_secret, secret, required_keys=None):
     """Persists non-secret env config directly and secret values via
     secret_store, shared by the HTML form and the JSON API. Returns an error
     message string on failure (caller decides how to surface it), or None
@@ -259,6 +306,7 @@ def _apply_server_secrets(server, non_secret, secret):
 
     server.env_config = non_secret
     server.env_var_names = list(secret_values.keys())
+    server.required_env_keys = list(required_keys or [])
     if not server.vaultwarden_item_name:
         server.vaultwarden_item_name = f"MCP-{server.name}"
 
@@ -295,8 +343,8 @@ def _apply_server_form(server, form):
         },
     )
 
-    non_secret, secret_values = _parse_env_rows(form)
-    error_message = _apply_server_secrets(server, non_secret, secret_values)
+    non_secret, secret_values, required_keys = _parse_env_rows(form)
+    error_message = _apply_server_secrets(server, non_secret, secret_values, required_keys)
     if error_message:
         flash(error_message, "error")
 
@@ -451,9 +499,10 @@ def _create_install_server(form, install_method):
     server.install_method = install_method
     server.install_status = "queued"
 
-    non_secret, secret_values = _parse_env_rows(form)
+    non_secret, secret_values, required_keys = _parse_env_rows(form)
     server.env_config = non_secret
     server.env_var_names = list(secret_values.keys())
+    server.required_env_keys = list(required_keys)
 
     db.session.add(server)
     db.session.commit()
@@ -626,6 +675,7 @@ def install_status(server_id):
                     server.install_method, server.install_path, server.package_spec
                 )
                 server.installed_at = datetime.now(timezone.utc)
+                server.detected_env_vars = env_detection.detect_env_vars(server)
             else:
                 server.install_status = "failed"
                 server.install_error = (

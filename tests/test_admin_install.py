@@ -127,6 +127,35 @@ def test_install_status_finalizes_success_and_sets_command(app, client):
         assert server.installed_version == "1.0"
 
 
+def test_install_status_runs_env_detection_once_on_success(app, client):
+    _login_admin(client)
+    with app.app_context():
+        server = McpServer(
+            name="foo", label="Foo", transport="stdio",
+            install_method="pip", install_status="queued",
+            install_path="/tmp/does-not-matter", expected_binary="foo-mcp",
+            package_spec="foo-mcp==1.0",
+        )
+        db.session.add(server)
+        db.session.commit()
+        server_id = server.id
+
+    detected = [{"name": "API_KEY", "required": True, "secret": True, "description": None, "source": "registry"}]
+    with patch("mcprack.installer.get_install_status", return_value={"status": "success", "log_tail": "", "error": None}), \
+         patch("mcprack.installer.verify_pip_binary", return_value="/tmp/does-not-matter/bin/foo-mcp"), \
+         patch("mcprack.installer.resolve_installed_version", return_value="1.0"), \
+         patch("mcprack.admin.env_detection.detect_env_vars", return_value=detected) as mock_detect:
+        resp1 = client.get(f"/admin/install/{server_id}/status")
+        resp2 = client.get(f"/admin/install/{server_id}/status")
+
+    assert resp1.status_code == 200 and resp2.status_code == 200
+    mock_detect.assert_called_once()
+
+    with app.app_context():
+        server = db.session.get(McpServer, server_id)
+        assert server.detected_env_vars == detected
+
+
 def test_install_status_finalizes_failed_when_binary_missing(app, client):
     _login_admin(client)
     with app.app_context():

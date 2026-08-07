@@ -95,7 +95,7 @@
         {{ _("Mark a row <strong>sensitive</strong> if it's a secret — those go to Vaultwarden (or an encrypted local fallback if Vaultwarden isn't configured). Everything else is stored directly in mcprack's own database.") }}
       </p>
 
-      <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}"></div>
+      <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
 
       <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
         ➕ {{ _('Add row') }}

@@ -153,6 +153,21 @@ class McpServer(db.Model):
     installed_version = db.Column(db.String(100), nullable=True)
     installed_at = db.Column(db.DateTime(timezone=True), nullable=True)
 
+    # Best-effort suggestions from env_detection.py, JSON list of
+    # {"name","required","secret","description","source"}. Advisory only —
+    # never applied to env_config/env_var_names/required_env_keys
+    # automatically; only rendered as pre-filled-but-empty rows for the
+    # admin to review.
+    detected_env_vars_json = db.Column(db.Text, nullable=True)
+
+    # Authoritative, persisted set of env-var names that must have a
+    # resolved value before this server's proxy is allowed to start.
+    # Populated either by the admin accepting a detected "required"
+    # suggestion or by manually ticking the per-row "required" checkbox —
+    # once saved, this is the single source of truth regardless of where
+    # the flag first came from.
+    required_env_keys_json = db.Column(db.Text, nullable=True)
+
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
@@ -192,6 +207,24 @@ class McpServer(db.Model):
     @env_config.setter
     def env_config(self, value):
         self.env_config_json = json.dumps(dict(value or {}))
+
+    @property
+    def detected_env_vars(self):
+        value = _safe_json_loads(self.detected_env_vars_json, [])
+        return value if isinstance(value, list) else []
+
+    @detected_env_vars.setter
+    def detected_env_vars(self, value):
+        self.detected_env_vars_json = json.dumps(list(value or []))
+
+    @property
+    def required_env_keys(self):
+        value = _safe_json_loads(self.required_env_keys_json, [])
+        return value if isinstance(value, list) else []
+
+    @required_env_keys.setter
+    def required_env_keys(self, value):
+        self.required_env_keys_json = json.dumps(list(value or []))
 
     @property
     def vault_item(self):

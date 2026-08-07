@@ -211,6 +211,15 @@ def user_proxy_mcp(token, server_id):
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return _jsonrpc_error_response(request_id, f"Could not resolve credentials: {exc}")
 
+    missing_required = [key for key in server.required_env_keys if not env.get(key)]
+    if missing_required:
+        return _jsonrpc_error_response(
+            request_id,
+            f"Server '{server.name}' is missing required configuration: "
+            f"{', '.join(missing_required)}. Ask an admin to set it "
+            "(Admin → Servers → edit), or set your own override if allowed.",
+        )
+
     try:
         port = user_proxy.ensure_user_server_proxy(
             user_id=user.id,

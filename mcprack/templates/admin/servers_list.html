@@ -37,7 +37,7 @@
       <tbody>
         {% for server in servers %}
         {% set h = server_health.get(server.id, {}) %}
-        <tr class="{% if h.get('missing_credentials') or not h.get('reachable', True) %}row-warn{% endif %}">
+        <tr class="{% if h.get('missing_credentials') or h.get('missing_required') or not h.get('reachable', True) %}row-warn{% endif %}">
           <td>
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24">
@@ -62,7 +62,12 @@
                 &#128273; {{ _('missing: %(keys)s', keys=h['missing_credentials'] | join(', ')) }}
               </span>
             {% endif %}
-            {% if h.get('reachable', True) and not h.get('missing_credentials') %}
+            {% if h.get('missing_required') %}
+              <span class="badge badge-warning" title="{{ _('No admin default value set — a user can only use this server if allow_user_override lets them supply their own.') }}">
+                &#9888; {{ _('%(n)d required value(s) missing', n=h['missing_required'] | length) }}
+              </span>
+            {% endif %}
+            {% if h.get('reachable', True) and not h.get('missing_credentials') and not h.get('missing_required') %}
               <span class="badge badge-success">✓ {{ _('ok') }}</span>
             {% endif %}
           </td>
