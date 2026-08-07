@@ -100,6 +100,10 @@
       <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
         ➕ {{ _('Add row') }}
       </button>
+      <label class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; margin-bottom: 0;">
+        📥 {{ _('Import .env file') }}
+        <input type="file" data-env-import-input data-target="env-rows" accept=".env,text/plain" style="display: none;">
+      </label>
     </fieldset>
 
     <div class="form-group">

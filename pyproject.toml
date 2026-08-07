@@ -34,6 +34,7 @@ dependencies = [
     "fastmcp>=4.0.0a2",
     "flask-babel",
     "PyYAML",
+    "python-dotenv",
 ]
 
 [project.urls]

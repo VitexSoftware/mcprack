@@ -10,11 +10,18 @@ unchanged.
 """
 
 import click
+from dotenv import dotenv_values
 from flask.cli import AppGroup
 
 from . import secret_store
+from .env_detection import SENSITIVE_NAME_HINTS
 from .extensions import db
 from .models import McpServer, User
+
+
+def _looks_sensitive_name(name):
+    upper = name.upper()
+    return any(hint in upper for hint in SENSITIVE_NAME_HINTS)
 
 
 user_cli = AppGroup("user", help="Manage mcprack user accounts.")
@@ -200,6 +207,68 @@ def server_delete(name):
     db.session.delete(s)
     db.session.commit()
     click.echo(f"Server '{name}' deleted.")
+
+
+@server_cli.command("import-env")
+@click.argument("server_name")
+@click.argument("dotenv_path", type=click.Path(exists=True, dir_okay=False))
+@click.option(
+    "--overwrite/--no-overwrite",
+    default=True,
+    help="Overwrite keys that already have a value (default: overwrite).",
+)
+def server_import_env(server_name, dotenv_path, overwrite):
+    """Import KEY=VALUE pairs from a .env file into a server's config.
+
+    Keys matching common credential-name patterns (KEY, SECRET, TOKEN,
+    PASSWORD, PASSWD, CREDENTIAL, APIKEY) are stored as secrets via the
+    configured secret store; everything else is stored as plain config.
+    Review the result with `server show` / `secret list` and fix
+    misclassifications with `secret set`/`secret unset`.
+    """
+    s = _get_server_or_fail(server_name)
+    parsed = {k: v for k, v in dotenv_values(dotenv_path).items() if v is not None}
+    if not parsed:
+        click.echo("No KEY=VALUE pairs found in the file.")
+        return
+
+    non_secret = dict(s.env_config or {})
+    secret_values = secret_store.load_server_secrets(s) if s.env_var_names else {}
+    secret_keys = set(s.env_var_names or [])
+
+    added_plain, added_secret, skipped = [], [], []
+    for key, value in parsed.items():
+        already_set = key in non_secret or key in secret_keys
+        if already_set and not overwrite:
+            skipped.append(key)
+            continue
+        if _looks_sensitive_name(key):
+            secret_values[key] = value
+            secret_keys.add(key)
+            non_secret.pop(key, None)
+            added_secret.append(key)
+        else:
+            non_secret[key] = value
+            secret_keys.discard(key)
+            secret_values.pop(key, None)
+            added_plain.append(key)
+
+    s.env_config = non_secret
+    s.env_var_names = sorted(secret_keys)
+    if not s.vaultwarden_item_name:
+        s.vaultwarden_item_name = f"MCP-{s.name}"
+    if secret_values or secret_keys:
+        secret_store.save_server_secrets(s, secret_values)
+    db.session.commit()
+
+    if added_plain:
+        click.echo(f"Plain:  {', '.join(sorted(added_plain))}")
+    if added_secret:
+        click.echo(f"Secret: {', '.join(sorted(added_secret))}")
+    if skipped:
+        click.echo(f"Skipped (already set, use --overwrite): {', '.join(sorted(skipped))}")
+    if not added_plain and not added_secret:
+        click.echo("Nothing imported.")
 
 
 @secret_cli.command("backend")

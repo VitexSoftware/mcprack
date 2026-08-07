@@ -178,3 +178,71 @@ def test_secret_backend_reports_local_when_not_configured(app):
         runner = app.test_cli_runner()
         result = runner.invoke(args=["secret", "backend"])
         assert "Local encrypted fallback" in result.output
+
+
+def test_server_import_env_splits_plain_and_secret(app, tmp_path):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        _make_server("jenkins")
+        dotenv_file = tmp_path / "sample.env"
+        dotenv_file.write_text('JENKINS_URL=https://ci.example.com\nAPI_TOKEN="s3cr3t"\n# comment\n\n')
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["server", "import-env", "jenkins", str(dotenv_file)])
+        assert result.exit_code == 0, result.output
+        assert "Plain:  JENKINS_URL" in result.output
+        assert "Secret: API_TOKEN" in result.output
+
+        server = McpServer.query.filter_by(name="jenkins").first()
+        assert server.env_config == {"JENKINS_URL": "https://ci.example.com"}
+        assert server.env_var_names == ["API_TOKEN"]
+        assert secret_store.load_server_secrets(server) == {"API_TOKEN": "s3cr3t"}
+
+
+def test_server_import_env_no_overwrite_skips_existing(app, tmp_path):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins")
+        server.env_config = {"JENKINS_URL": "https://old.example.com"}
+        db.session.commit()
+
+        dotenv_file = tmp_path / "sample.env"
+        dotenv_file.write_text("JENKINS_URL=https://new.example.com\n")
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(
+            args=["server", "import-env", "jenkins", str(dotenv_file), "--no-overwrite"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Skipped" in result.output
+        assert "JENKINS_URL" in result.output
+
+        server = McpServer.query.filter_by(name="jenkins").first()
+        assert server.env_config == {"JENKINS_URL": "https://old.example.com"}
+
+
+def test_server_import_env_reclassifies_existing_key(app, tmp_path):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins")
+        server.env_config = {"API_TOKEN": "plain-oops"}
+        db.session.commit()
+
+        dotenv_file = tmp_path / "sample.env"
+        dotenv_file.write_text("API_TOKEN=now-a-secret\n")
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["server", "import-env", "jenkins", str(dotenv_file)])
+        assert result.exit_code == 0, result.output
+
+        server = McpServer.query.filter_by(name="jenkins").first()
+        assert server.env_config == {}
+        assert server.env_var_names == ["API_TOKEN"]
+        assert secret_store.load_server_secrets(server) == {"API_TOKEN": "now-a-secret"}
+
+
+def test_server_import_env_unknown_server_fails(app, tmp_path):
+    with app.app_context():
+        dotenv_file = tmp_path / "sample.env"
+        dotenv_file.write_text("X=1\n")
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["server", "import-env", "ghost", str(dotenv_file)])
+        assert result.exit_code != 0
+        assert "No such MCP server" in result.output
