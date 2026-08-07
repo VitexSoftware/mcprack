@@ -77,7 +77,7 @@
             </form>
             {% endif %}
             <form class="inline" method="post" action="{{ url_for('admin.server_delete', server_id=server.id) }}"
-                  onsubmit="return confirm('{{ _('Delete &quot;%(name)s&quot;?', name=server.name) }}');">
+                  data-confirm="{{ _('Delete \"%(name)s\"?', name=server.name) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-danger">{{ _('Delete') }}</button>
             </form>

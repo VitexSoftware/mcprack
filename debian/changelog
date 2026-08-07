@@ -1,3 +1,22 @@
+mcprack (1.2.2) unstable; urgency=medium
+
+  * Add self-service "Change Password" for logged-in local accounts, and a
+    "Forgot your password?" email-reset flow (needs SMTP_HOST configured
+    in /etc/mcprack/env; otherwise it explains that an admin must reset
+    the password instead). LDAP accounts are excluded from both, since
+    their password is managed by the directory.
+  * Fix the Content-Security-Policy header (script-src 'self', no
+    'unsafe-inline') silently blocking every inline <script> block and
+    onclick/onsubmit="..." handler in the app: the theme toggle, the user
+    menu dropdown, the "Copy to clipboard" button, the admin "Add row"
+    env-var editor, the install-wizard's auto-refresh polling, and the
+    delete/uninstall/stop-proxy confirmation dialogs all silently did
+    nothing (or, for the confirmation dialogs, skipped the confirmation
+    entirely and just proceeded). All of that JS moved to external
+    /static/*.js files with proper addEventListener wiring.
+
+ -- CyberVitexus <info@vitexsoftware.cz>  Fri, 07 Aug 2026 19:45:51 +0200
+
 mcprack (1.2.1) unstable; urgency=medium
 
   * Fix the /usr/bin/mcprack launcher not loading /etc/mcprack/env, so

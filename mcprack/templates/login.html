@@ -25,6 +25,9 @@
         🔓 {{ _('Log In') }}
       </button>
     </form>
+    <p style="text-align: center; margin: var(--space-md) 0 0;">
+      <a href="{{ url_for('auth.forgot_password') }}">{{ _('Forgot your password?') }}</a>
+    </p>
   </div>
 
   <div style="margin-top: var(--space-lg); padding: var(--space-md); background-color: var(--color-bg-tertiary); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm);">

@@ -100,3 +100,16 @@ class Config:
     # URL template for the "View trace" link on the audit log detail page,
     # e.g. Grafana Explore/Tempo: "https://grafana.example/explore?traceID={request_id}"
     OTEL_TRACE_UI_URL_TEMPLATE = os.environ.get("OTEL_TRACE_UI_URL_TEMPLATE", "")
+
+    # --- Outbound mail (forgot-password reset links only) ---
+    # SMTP_HOST empty (default) means "not configured" — the forgot-password
+    # page then explains that a real password reset must be requested from
+    # an admin instead of pretending to send an email nothing delivers.
+    SMTP_HOST = os.environ.get("SMTP_HOST", "")
+    SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
+    SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
+    SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
+    SMTP_USE_TLS = os.environ.get("SMTP_USE_TLS", "true").lower() in ("true", "1", "yes")
+    SMTP_FROM = os.environ.get("SMTP_FROM", "mcprack <noreply@localhost>")
+    # How long a password-reset link stays valid.
+    PASSWORD_RESET_MAX_AGE = int(os.environ.get("PASSWORD_RESET_MAX_AGE_SECONDS", str(3600)))

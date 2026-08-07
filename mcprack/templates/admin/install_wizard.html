@@ -63,8 +63,8 @@
         </div>
         <fieldset>
           <legend>{{ _('Environment variables') }}</legend>
-          <div id="env-rows-pip"></div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('pip', '', '', false)">➕ {{ _('Add row') }}</button>
+          <div id="env-rows-pip" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}"></div>
+          <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-pip">➕ {{ _('Add row') }}</button>
         </fieldset>
         <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.pip else "" }}>🐍 Install</button>
       </form>
@@ -100,8 +100,8 @@
         </div>
         <fieldset>
           <legend>{{ _('Environment variables') }}</legend>
-          <div id="env-rows-npm"></div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('npm', '', '', false)">➕ {{ _('Add row') }}</button>
+          <div id="env-rows-npm" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}"></div>
+          <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-npm">➕ {{ _('Add row') }}</button>
         </fieldset>
         <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.npm else "" }}>📦 Install</button>
       </form>
@@ -134,8 +134,8 @@
         </div>
         <fieldset>
           <legend>{{ _('Environment variables') }}</legend>
-          <div id="env-rows-docker"></div>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('docker', '', '', false)">➕ {{ _('Add row') }}</button>
+          <div id="env-rows-docker" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}"></div>
+          <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-docker">➕ {{ _('Add row') }}</button>
         </fieldset>
         <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.docker else "" }}>🐳 Pull &amp; register</button>
       </form>
@@ -175,7 +175,7 @@
           <td style="white-space: nowrap;">
             <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">Edit</a>
             <form class="inline" method="post" action="{{ url_for('admin.install_uninstall', server_id=server.id) }}"
-                  onsubmit="return confirm('Uninstall &quot;{{ server.name }}&quot;? This removes its venv/npm directory from disk.');">
+                  data-confirm='Uninstall "{{ server.name }}"? This removes its venv/npm directory from disk.'>
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-danger" {{ "disabled" if demo_mode else "" }}>Uninstall</button>
             </form>
@@ -193,73 +193,7 @@
   </div>
 </section>
 
-<script>
-  const envRowCounters = { pip: 0, npm: 0, docker: 0 };
-
-  function addEnvRow(form, key, value, sensitive) {
-    envRowCounters[form] += 1;
-    const id = envRowCounters[form];
-
-    const row = document.createElement("div");
-    row.className = "env-row";
-    row.style.cssText = "display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);";
-
-    const keyInput = document.createElement("input");
-    keyInput.type = "text";
-    keyInput.name = `env_key__${id}`;
-    keyInput.value = key || "";
-    keyInput.placeholder = "KEY";
-    keyInput.style.flex = "1";
-
-    const valueInput = document.createElement("input");
-    valueInput.type = "text";
-    valueInput.name = `env_value__${id}`;
-    valueInput.value = value || "";
-    valueInput.placeholder = "value";
-    valueInput.style.flex = "2";
-
-    const label = document.createElement("label");
-    label.style.cssText = "display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;";
-    const sensitiveInput = document.createElement("input");
-    sensitiveInput.type = "checkbox";
-    sensitiveInput.name = `env_sensitive__${id}`;
-    sensitiveInput.checked = !!sensitive;
-    label.appendChild(sensitiveInput);
-    label.appendChild(document.createTextNode(" " + {{ _('sensitive') | tojson }}));
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "btn btn-sm btn-danger";
-    removeButton.textContent = "✕";
-    removeButton.addEventListener("click", function () {
-      row.remove();
-    });
-
-    row.append(keyInput, valueInput, label, removeButton);
-    document.getElementById(`env-rows-${form}`).appendChild(row);
-  }
-
-  // Poll status for any row still in a non-terminal state, replacing its
-  // status cell text in place — same minimal-JS style as the env-row editor
-  // above, no framework or build step involved.
-  function pollInstallStatus() {
-    document.querySelectorAll("tr[data-status]").forEach(function (row) {
-      const status = row.dataset.status;
-      if (status === "success" || status === "failed") return;
-
-      const serverId = row.dataset.serverId;
-      fetch(`/admin/install/${serverId}/status`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (data.status && data.status !== status) {
-            window.location.reload();
-          }
-        })
-        .catch(() => {});
-    });
-  }
-
-  setInterval(pollInstallStatus, 3000);
-</script>
+<script src="{{ url_for('static', filename='env-rows.js') }}"></script>
+<script src="{{ url_for('static', filename='install-status-poll.js') }}"></script>
 
 {% endblock %}

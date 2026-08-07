@@ -95,9 +95,9 @@
         {{ _("Mark a row <strong>sensitive</strong> if it's a secret — those go to Vaultwarden (or an encrypted local fallback if Vaultwarden isn't configured). Everything else is stored directly in mcprack's own database.") }}
       </p>
 
-      <div id="env-rows"></div>
+      <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}"></div>
 
-      <button type="button" class="btn btn-secondary btn-sm" onclick="addEnvRow('', '', false)">
+      <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
         ➕ {{ _('Add row') }}
       </button>
     </fieldset>
@@ -121,57 +121,6 @@
   </form>
 </section>
 
-<script>
-  const ENV_ROWS_INITIAL = {{ env_rows | tojson }};
-  let envRowCounter = 0;
-
-  function addEnvRow(key, value, sensitive) {
-    envRowCounter += 1;
-    const id = envRowCounter;
-
-    const row = document.createElement("div");
-    row.className = "env-row";
-    row.dataset.rowId = id;
-    row.style.cssText = "display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);";
-
-    const keyInput = document.createElement("input");
-    keyInput.type = "text";
-    keyInput.name = `env_key__${id}`;
-    keyInput.value = key || "";
-    keyInput.placeholder = "KEY";
-    keyInput.style.flex = "1";
-
-    const valueInput = document.createElement("input");
-    valueInput.type = "text";
-    valueInput.name = `env_value__${id}`;
-    valueInput.value = value || "";
-    valueInput.placeholder = "value";
-    valueInput.style.flex = "2";
-
-    const label = document.createElement("label");
-    label.style.cssText = "display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;";
-    const sensitiveInput = document.createElement("input");
-    sensitiveInput.type = "checkbox";
-    sensitiveInput.name = `env_sensitive__${id}`;
-    sensitiveInput.checked = !!sensitive;
-    label.appendChild(sensitiveInput);
-    label.appendChild(document.createTextNode(" " + {{ _('sensitive') | tojson }}));
-
-    const removeButton = document.createElement("button");
-    removeButton.type = "button";
-    removeButton.className = "btn btn-sm btn-danger";
-    removeButton.textContent = "✕";
-    removeButton.addEventListener("click", function () {
-      row.remove();
-    });
-
-    row.append(keyInput, valueInput, label, removeButton);
-    document.getElementById("env-rows").appendChild(row);
-  }
-
-  ENV_ROWS_INITIAL.forEach(function (row) {
-    addEnvRow(row.key, row.value, row.sensitive);
-  });
-</script>
+<script src="{{ url_for('static', filename='env-rows.js') }}"></script>
 
 {% endblock %}

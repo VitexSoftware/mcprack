@@ -1,6 +1,7 @@
 import html
 import json
 import os
+import re
 from unittest.mock import patch
 
 from mcprack.extensions import db
@@ -105,8 +106,10 @@ def test_view_unknown_client_404s(app, client):
 
 
 def _extract_textarea_text(html_body):
-    marker = '<textarea id="config-json" rows="20" readonly onclick="this.select()">'
-    raw = html_body.split(marker)[1].split("</textarea>")[0]
+    match = re.search(
+        r'<textarea id="config-json"[^>]*>(.*?)</textarea>', html_body, re.DOTALL
+    )
+    raw = match.group(1)
     # Jinja HTML-escapes the JSON by default (no |safe) — browsers decode
     # entities back to literal characters for a textarea's content, so this
     # mirrors what actually ends up in the user's clipboard.

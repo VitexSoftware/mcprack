@@ -10,14 +10,7 @@
   <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
-  <script>
-    (function () {
-      var saved = localStorage.getItem('mcprack-theme');
-      if (saved === 'light' || saved === 'dark') {
-        document.documentElement.setAttribute('data-theme', saved);
-      }
-    })();
-  </script>
+  <script src="{{ url_for('static', filename='theme.js') }}"></script>
 </head>
 <body>
   <header>
@@ -49,12 +42,12 @@
             <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'cs' else '0.5' }}">🇨🇿</a>
             <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'sk' else '0.5' }}">🇸🇰</a>
           </div>
-          <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+          <button type="button" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
             <span class="icon-light" aria-hidden="true">🌙</span>
             <span class="icon-dark" aria-hidden="true">☀️</span>
           </button>
           <div class="header-user-menu">
-            <button class="header-user-menu-button" onclick="toggleUserMenu(event)" aria-haspopup="true" aria-expanded="false" aria-controls="userMenuDropdown">
+            <button class="header-user-menu-button" aria-haspopup="true" aria-expanded="false" aria-controls="userMenuDropdown">
               <div class="header-user-avatar">{{ current_user.display_name[0].upper() }}</div>
               <span>{{ current_user.display_name }}</span>
             </button>
@@ -70,6 +63,10 @@
                 <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">{{ _('Vaultwarden Setup') }}</a>
                 <a href="{{ url_for('admin.otel_wizard') }}" class="header-user-menu-item">{{ _('OTEL Diagnostics') }}</a>
               {% endif %}
+              {% if current_user.auth_type == 'local' %}
+                <div class="header-user-menu-divider"></div>
+                <a href="{{ url_for('auth.account_password') }}" class="header-user-menu-item">{{ _('Change Password') }}</a>
+              {% endif %}
               <div class="header-user-menu-divider"></div>
               <a href="{{ url_for('auth.logout') }}" class="header-user-menu-item danger">{{ _('Log out') }}</a>
             </div>
@@ -82,7 +79,7 @@
             <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'cs' else '0.5' }}">🇨🇿</a>
             <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" style="text-decoration: none; opacity: {{ '1.0' if session.get('locale') == 'sk' else '0.5' }}">🇸🇰</a>
           </div>
-          <button type="button" class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
+          <button type="button" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
             <span class="icon-light" aria-hidden="true">🌙</span>
             <span class="icon-dark" aria-hidden="true">☀️</span>
           </button>
@@ -112,32 +109,6 @@
     </div>
   </footer>
 
-  <script>
-    function toggleTheme() {
-      var root = document.documentElement;
-      var current = root.getAttribute('data-theme');
-      if (!current) {
-        var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-        current = prefersDark ? 'dark' : 'light';
-      }
-      var next = current === 'dark' ? 'light' : 'dark';
-      root.setAttribute('data-theme', next);
-      localStorage.setItem('mcprack-theme', next);
-    }
-
-    function toggleUserMenu(event) {
-      event.preventDefault();
-      const dropdown = document.getElementById('userMenuDropdown');
-      dropdown.classList.toggle('show');
-      
-      // Close menu if clicked outside
-      document.addEventListener('click', function closeMenu(e) {
-        if (!e.target.closest('.header-user-menu')) {
-          dropdown.classList.remove('show');
-          document.removeEventListener('click', closeMenu);
-        }
-      });
-    }
-  </script>
+  <script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
 </body>
 </html>

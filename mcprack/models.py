@@ -248,6 +248,7 @@ class AuditLogEntry(db.Model):
         "admin_change",
         "login",
         "login_failed",
+        "password_change",
     )
     RESULTS = ("success", "error")
 

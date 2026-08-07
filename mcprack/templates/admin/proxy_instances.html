@@ -80,7 +80,7 @@
           <td><small class="text-muted">{{ row.log_path }}</small></td>
           <td>
             <form class="inline" method="post" action="{{ url_for('admin.proxy_instance_stop', user_id=row.user_id, server_id=row.server_id) }}"
-                  onsubmit="return confirm('{{ _('Stop proxy for %(username)s / %(server_name)s?', username=row.username, server_name=row.server_name) }}');">
+                  data-confirm="{{ _('Stop proxy for %(username)s / %(server_name)s?', username=row.username, server_name=row.server_name) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-sm btn-danger">{{ _('Stop') }}</button>
             </form>

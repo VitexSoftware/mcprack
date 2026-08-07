@@ -7,11 +7,11 @@
   <p class="text-muted">{{ _("Copy the configuration below into your client's config file, or download it directly.") }}</p>
 
   <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); margin: var(--space-lg) 0;">
-    <textarea id="config-json" rows="20" readonly onclick="this.select()">{{ config_json }}</textarea>
+    <textarea id="config-json" rows="20" readonly data-copy-fail-message="{{ _('Copy failed — select the text manually.') }}">{{ config_json }}</textarea>
   </div>
 
   <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin: var(--space-lg) 0;">
-    <button type="button" id="copy-button" class="btn btn-primary" onclick="copyConfig()">
+    <button type="button" id="copy-button" class="btn btn-primary">
       📋 {{ _('Copy to clipboard') }}
     </button>
     <a href="{{ url_for('catalog.download', client=client) }}" class="btn btn-secondary" download>
@@ -27,38 +27,6 @@
   </div>
 </section>
 
-<script>
-  function copyConfig() {
-    const textarea = document.getElementById("config-json");
-    const status = document.getElementById("copy-status");
-
-    function showCopied() {
-      status.style.display = "block";
-      setTimeout(function () {
-        status.style.display = "none";
-      }, 3000);
-    }
-
-    if (navigator.clipboard && window.isSecureContext) {
-      navigator.clipboard.writeText(textarea.value).then(showCopied, function () {
-        fallbackCopy();
-      });
-    } else {
-      fallbackCopy();
-    }
-
-    function fallbackCopy() {
-      textarea.select();
-      textarea.setSelectionRange(0, textarea.value.length);
-      try {
-        document.execCommand("copy");
-        showCopied();
-      } catch (err) {
-        status.textContent = {{ _('Copy failed — select the text manually.') | tojson }};
-        status.style.display = "block";
-      }
-    }
-  }
-</script>
+<script src="{{ url_for('static', filename='copy-config.js') }}"></script>
 
 {% endblock %}

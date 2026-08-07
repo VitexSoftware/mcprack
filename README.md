@@ -65,6 +65,30 @@ Credentials are never exposed to the user or stored insecurely — they come fro
 
 **Local accounts** are always available. **LDAP/Active Directory** is optional and disabled by default — enable it during installation if you want users to authenticate with AD credentials instead.
 
+A logged-in local user can change their own password from the user menu
+("Change Password"). LDAP-authenticated users can't — their password is
+managed by the directory, not mcprack.
+
+### Forgot-password email
+
+The "Forgot your password?" link on the login page only works if outbound
+SMTP is configured in `/etc/mcprack/env` — otherwise it just tells the user
+to ask an admin. To enable it:
+
+```
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USERNAME=notifications@example.com
+SMTP_PASSWORD=...
+SMTP_USE_TLS=true
+SMTP_FROM=mcprack <noreply@example.com>
+```
+
+Reset links are signed (`SECRET_KEY`) and expire after `PASSWORD_RESET_MAX_AGE_SECONDS`
+(default 3600). Only local accounts with an email on file get a reset link;
+the response is identical either way so the endpoint can't be used to
+enumerate which usernames/emails exist.
+
 ## Demo mode
 
 Set `DEMO_MODE=true` in `/etc/mcprack/env` for a public-facing instance (like the

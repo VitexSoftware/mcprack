@@ -4,14 +4,44 @@ import ldap3
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from flask_babel import _
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import audit
+from . import audit, mailer
 from .extensions import db, limiter, login_manager
 from .models import User
 
 bp = Blueprint("auth", __name__)
+
+_RESET_TOKEN_SALT = "password-reset"
+
+# Applied to both self-service change and email-reset completion — a
+# password this short isn't worth generating a reset link for.
+MIN_PASSWORD_LENGTH = 8
+
+
+def _reset_serializer():
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=_RESET_TOKEN_SALT)
+
+
+def _generate_reset_token(user):
+    return _reset_serializer().dumps({"user_id": user.id, "password_hash": user.password_hash})
+
+
+def _verify_reset_token(token, max_age):
+    """Returns the User the token was issued for, or None if the token is
+    invalid/expired/for a since-changed password. Embedding the current
+    password_hash in the token means it stops working the moment the
+    password actually changes, so a link can't be replayed after use."""
+    try:
+        data = _reset_serializer().loads(token, max_age=max_age)
+    except (BadSignature, SignatureExpired):
+        return None
+    user = db.session.get(User, data.get("user_id"))
+    if user is None or user.password_hash != data.get("password_hash"):
+        return None
+    return user
 
 
 @login_manager.user_loader
@@ -152,6 +182,105 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for("auth.login"))
+
+
+@bp.route("/account/password", methods=["GET", "POST"])
+@login_required
+def account_password():
+    if current_user.auth_type != "local":
+        flash(_("Your account is managed externally (LDAP) — its password can't be changed here."), "error")
+        return redirect(url_for("catalog.index"))
+
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "")
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not current_user.check_password(current_password):
+            flash(_("Current password is incorrect."), "error")
+        elif len(new_password) < MIN_PASSWORD_LENGTH:
+            flash(_("New password must be at least %(n)d characters.", n=MIN_PASSWORD_LENGTH), "error")
+        elif new_password != confirm_password:
+            flash(_("New password and confirmation don't match."), "error")
+        else:
+            current_user.set_password(new_password)
+            db.session.commit()
+            audit.log_audit_event(
+                "password_change", "success", user=current_user, error_message="self-service change"
+            )
+            flash(_("Password changed."), "success")
+            return redirect(url_for("catalog.index"))
+
+    return render_template("account_password.html")
+
+
+@bp.route("/forgot-password", methods=["GET", "POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+def forgot_password():
+    smtp_configured = mailer.smtp_configured()
+
+    if request.method == "POST" and smtp_configured:
+        identifier = request.form.get("identifier", "").strip()
+        user = User.query.filter(
+            (User.username == identifier) | (User.email == identifier)
+        ).first()
+
+        # Always show the same message regardless of whether the account
+        # exists, has an email, or is local — telling a caller which of
+        # those is false would let them enumerate accounts/emails.
+        if user is not None and user.auth_type == "local" and user.email:
+            token = _generate_reset_token(user)
+            reset_url = url_for("auth.reset_password", token=token, _external=True)
+            max_age_minutes = current_app.config["PASSWORD_RESET_MAX_AGE"] // 60
+            mailer.send_email(
+                user.email,
+                _("mcprack password reset"),
+                _(
+                    "Someone (hopefully you) requested a password reset for the "
+                    "mcprack account '%(username)s'.\n\n"
+                    "Reset it here (valid for %(minutes)d minutes):\n%(url)s\n\n"
+                    "If you didn't request this, ignore this email — your "
+                    "password hasn't been changed.",
+                    username=user.username,
+                    minutes=max_age_minutes,
+                    url=reset_url,
+                ),
+            )
+
+        flash(
+            _("If that account exists and has an email on file, a reset link has been sent."),
+            "success",
+        )
+        return redirect(url_for("auth.login"))
+
+    return render_template("forgot_password.html", smtp_configured=smtp_configured)
+
+
+@bp.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    user = _verify_reset_token(token, current_app.config["PASSWORD_RESET_MAX_AGE"])
+    if user is None:
+        flash(_("This password reset link is invalid or has expired."), "error")
+        return redirect(url_for("auth.forgot_password"))
+
+    if request.method == "POST":
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if len(new_password) < MIN_PASSWORD_LENGTH:
+            flash(_("New password must be at least %(n)d characters.", n=MIN_PASSWORD_LENGTH), "error")
+        elif new_password != confirm_password:
+            flash(_("New password and confirmation don't match."), "error")
+        else:
+            user.set_password(new_password)
+            db.session.commit()
+            audit.log_audit_event(
+                "password_change", "success", user=user, error_message="reset via emailed link"
+            )
+            flash(_("Password reset. You can now log in."), "success")
+            return redirect(url_for("auth.login"))
+
+    return render_template("reset_password.html", token=token)
 
 
 @bp.route("/set-locale/<locale>")
