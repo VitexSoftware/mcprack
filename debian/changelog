@@ -3,6 +3,9 @@ mcprack (1.2.0) unstable; urgency=medium
   * Add support for mounting mcprack under a URL sub-path (e.g. behind a
     shared Apache vhost at /mcprack) via X-Forwarded-Prefix; ProxyFix
     now trusts that header and rewrites SCRIPT_NAME accordingly.
+  * Fix Alembic's env.py silently disabling every already-instantiated
+    app logger (e.g. mcprack.telemetry) process-wide on first migration
+    run, by passing disable_existing_loggers=False to fileConfig().
 
  -- CyberVitexus <info@vitexsoftware.cz>  Fri, 07 Aug 2026 04:18:35 +0200
 
