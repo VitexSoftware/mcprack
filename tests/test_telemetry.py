@@ -109,9 +109,16 @@ def test_enabled_sends_spans_and_metrics(monkeypatch):
     telemetry._state["tracer_provider"].force_flush(timeout_millis=5000)
     telemetry._state["meter_provider"].force_flush(timeout_millis=5000)
 
-    assert len(fake_span_exporter.exported_spans) == 1
-    assert fake_span_exporter.exported_spans[0].name == "mcp.server.call"
-    assert fake_span_exporter.exported_spans[0].attributes["server_name"] == "jenkins"
+    # Filter for our own span by name rather than asserting an exact total:
+    # if this happens to be the first OTEL-enabled test in the process,
+    # SQLAlchemyInstrumentor's one-shot global instrument() call (see
+    # telemetry.py's _instrument_sqlalchemy) also captures the schema-
+    # bootstrap queries create_app() issues right after telemetry.init_app(),
+    # adding incidental spans that have nothing to do with what this test
+    # actually exercises.
+    mcp_spans = [s for s in fake_span_exporter.exported_spans if s.name == "mcp.server.call"]
+    assert len(mcp_spans) == 1
+    assert mcp_spans[0].attributes["server_name"] == "jenkins"
     assert len(fake_metric_exporter.exported_batches) >= 1
 
 
@@ -124,7 +131,7 @@ def test_http_json_protocol_falls_back_with_warning(monkeypatch, caplog):
     class OtelJsonConfig(OtelEnabledConfig):
         OTEL_EXPORTER_OTLP_PROTOCOL = "http/json"
 
-    with caplog.at_level(logging.WARNING, logger="telemetry"):
+    with caplog.at_level(logging.WARNING, logger="mcprack.telemetry"):
         create_app(OtelJsonConfig)
 
     assert telemetry.status()["effective_protocol"] == "http/protobuf"
@@ -184,8 +191,13 @@ def test_request_id_appears_as_span_attribute(monkeypatch):
 
     telemetry._state["tracer_provider"].force_flush(timeout_millis=5000)
 
-    assert len(fake_span_exporter.exported_spans) == 1
-    recorded = fake_span_exporter.exported_spans[0]
+    # See test_enabled_sends_spans_and_metrics for why this filters by name
+    # rather than asserting an exact total.
+    catalog_spans = [
+        s for s in fake_span_exporter.exported_spans if s.name == "catalog.generate_config"
+    ]
+    assert len(catalog_spans) == 1
+    recorded = catalog_spans[0]
     assert recorded.attributes["audit.request_id"] == request_id
 
 

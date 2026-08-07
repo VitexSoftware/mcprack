@@ -10,8 +10,14 @@ from alembic import context
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
-fileConfig(config.config_file_name)
+# This line sets up loggers basically. disable_existing_loggers=False is
+# required here: fileConfig()'s default (True) silently disables every
+# logger already instantiated at this point (e.g. mcprack.telemetry) for
+# the rest of the process, since alembic.ini's [loggers] section only lists
+# alembic's own loggers - without this, any app logger created before the
+# first migration/stamp runs (which happens on every create_app() call, not
+# just `flask db upgrade`) goes dead silently.
+fileConfig(config.config_file_name, disable_existing_loggers=False)
 logger = logging.getLogger('alembic.env')
 
 
