@@ -1,5 +1,7 @@
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for, Response
 from datetime import datetime, timezone
+import logging
+import time
 
 from . import audit
 from . import catalog
@@ -17,6 +19,7 @@ from flask_login import current_user
 from .models import AuditLogEntry, McpServer, User, UserServerPermission, UserServerSelection
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
+logger = logging.getLogger(__name__)
 
 # Cache for server health checks (expires after 5 minutes)
 _health_cache = {}
@@ -172,6 +175,7 @@ def server_new():
 @bp.route("/servers/<int:server_id>/edit", methods=["GET", "POST"])
 @admin_required
 def server_edit(server_id):
+    t_start = time.time()
     server = db.get_or_404(McpServer, server_id)
 
     if request.method == "POST":
@@ -187,18 +191,25 @@ def server_edit(server_id):
         flash(f"Server '{server.name}' updated.", "success")
         return redirect(url_for("admin.servers_list"))
 
+    t_db = time.time()
     required_keys = set(server.required_env_keys)
     env_rows = [
         {"key": k, "value": v, "sensitive": False, "required": k in required_keys}
         for k, v in (server.env_config or {}).items()
     ]
+    
+    t_secrets_start = time.time()
     try:
         secret_values = secret_store.load_server_secrets(server)
+        t_secrets_end = time.time()
+        logger.info(f"load_server_secrets({server.name}): {t_secrets_end - t_secrets_start:.2f}s")
+        
         env_rows += [
             {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
             for k, v in secret_values.items()
         ]
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        logger.warning(f"Failed to load secrets for {server.name}: {exc}")
         flash(f"Could not load current secret values: {exc}", "error")
 
     # Detected-but-not-yet-configured suggestions get folded in as
@@ -224,6 +235,9 @@ def server_edit(server_id):
     if appstream_icons.is_safe_icon_path(icon_path):
         icon_url = url_for("catalog.server_icon", server_id=server.id)
 
+    t_render = time.time()
+    logger.info(f"server_edit({server.name}): total {t_render - t_start:.2f}s (db {t_db - t_start:.2f}s, secrets {t_secrets_end - t_secrets_start:.2f}s if fetched)")
+    
     return render_template(
         "admin/server_form.html",
         server=server,
