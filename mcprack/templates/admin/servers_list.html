@@ -81,6 +81,9 @@
               </button>
             </form>
             {% endif %}
+            <button class="btn btn-sm btn-secondary" data-capabilities-btn data-server-id="{{ server.id }}" data-server-name="{{ server.name }}" title="Query the server for its available tools and resources">
+              🔍 {{ _('Tools') }}
+            </button>
             <form class="inline" method="post" action="{{ url_for('admin.server_delete', server_id=server.id) }}"
                   data-confirm="{{ _('Delete \"%(name)s\"?', name=server.name) }}">
               <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -99,5 +102,81 @@
     </table>
   </div>
 </section>
+
+<dialog id="capabilities-modal" style="max-width: 700px; border-radius: var(--border-radius-lg); padding: var(--space-lg);">
+  <h2 id="modal-title">🔍 Tools &amp; Resources</h2>
+  <div id="modal-content" style="max-height: 60vh; overflow-y: auto;"></div>
+  <div style="margin-top: var(--space-lg); display: flex; gap: var(--space-md); justify-content: flex-end;">
+    <button type="button" onclick="document.getElementById('capabilities-modal').close()" class="btn btn-secondary">Close</button>
+  </div>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const modal = document.getElementById('capabilities-modal');
+  const modalTitle = document.getElementById('modal-title');
+  const modalContent = document.getElementById('modal-content');
+  
+  document.querySelectorAll('[data-capabilities-btn]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const serverId = btn.dataset.serverId;
+      const serverName = btn.dataset.serverName;
+      
+      modalTitle.textContent = `🔍 ${serverName} — Tools & Resources`;
+      modalContent.innerHTML = '<p style="color: var(--color-text-muted);">Loading capabilities…</p>';
+      modal.showModal();
+      
+      try {
+        const response = await fetch(`/admin/servers/${serverId}/capabilities`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+          modalContent.innerHTML = `<div class="alert alert-error" style="margin: 0;"><strong>Error:</strong> ${data.error || 'Unknown error'}</div>`;
+          return;
+        }
+        
+        const html = renderCapabilities(data);
+        modalContent.innerHTML = html;
+      } catch (err) {
+        modalContent.innerHTML = `<div class="alert alert-error" style="margin: 0;"><strong>Connection failed:</strong> ${err.message}</div>`;
+      }
+    });
+  });
+});
+
+function renderCapabilities(data) {
+  const tools = data.tools || [];
+  const resources = data.resources || [];
+  
+  if (tools.length === 0 && resources.length === 0) {
+    return '<p style="color: var(--color-text-muted);">No tools or resources found.</p>';
+  }
+  
+  let html = '';
+  
+  if (tools.length > 0) {
+    html += '<h3>Tools</h3><ul style="margin: 0;">';
+    tools.forEach(tool => {
+      const name = tool.name || tool;
+      const desc = tool.description ? `: ${tool.description}` : '';
+      html += `<li><code>${name}</code>${desc}</li>`;
+    });
+    html += '</ul>';
+  }
+  
+  if (resources.length > 0) {
+    html += '<h3>Resources</h3><ul style="margin: 0;">';
+    resources.forEach(res => {
+      const uri = res.uri || res;
+      const desc = res.description ? `: ${res.description}` : '';
+      html += `<li><code>${uri}</code>${desc}</li>`;
+    });
+    html += '</ul>';
+  }
+  
+  return html;
+}
+</script>
 
 {% endblock %}

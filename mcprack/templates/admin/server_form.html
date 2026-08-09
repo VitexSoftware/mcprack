@@ -36,125 +36,199 @@
 </script>
 
 <section class="section">
-  <h1>🔧 {{ "Edit" if server else "Register" }} MCP server</h1>
+  <div class="form-header">
+    <h1>🔧 {{ "Edit" if server else "Register" }} MCP server</h1>
+    {% if icon_url %}
+    <div class="server-icon-container">
+      <img src="{{ icon_url }}" alt="" class="server-icon" width="48" height="48">
+      <small class="text-muted">Detected from AppStream metadata</small>
+    </div>
+    {% endif %}
+  </div>
+
   {% if demo_mode %}
   <div class="flash-error" style="margin-bottom: var(--space-lg);">
     Read-only on this public demo instance — you can see how this server is configured, but changes can't be saved.
   </div>
   {% endif %}
-  {% if icon_url %}
-  <p style="display: flex; align-items: center; gap: var(--space-sm);">
-    <img src="{{ icon_url }}" alt="" class="server-icon" width="32" height="32">
-    <small class="text-muted">Detected from AppStream metadata</small>
-  </p>
-  {% endif %}
 
   <form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <fieldset {{ "disabled" if demo_mode else "" }} style="border: none; padding: 0; margin: 0;">
-    <div class="form-group">
-      <label for="name">Name (unique slug)</label>
-      <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
-             {{ 'readonly' if server else '' }} required>
-    </div>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <fieldset {{ "disabled" if demo_mode else "" }} class="form-container">
+      
+      <!-- Basic Information Card -->
+      <div class="form-card">
+        <h2 class="form-card-title">📋 Basic Information</h2>
+        
+        <div class="form-group">
+          <label for="name">
+            <span class="label-text">Name (unique slug)</span>
+            {% if server %}<span class="label-badge">read-only</span>{% endif %}
+          </label>
+          <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
+                 {{ 'readonly' if server else '' }} required class="form-control">
+          <small class="form-hint">Used in URLs and API endpoints. Cannot be changed after creation.</small>
+        </div>
 
-    <div class="form-group">
-      <label for="label">Label</label>
-      <input type="text" id="label" name="label" value="{{ server.label if server else '' }}" required>
-    </div>
+        <div class="form-group">
+          <label for="label">
+            <span class="label-text">Label</span>
+            <span class="label-badge required" title="Required field">*</span>
+          </label>
+          <input type="text" id="label" name="label" value="{{ server.label if server else '' }}" required class="form-control">
+          <small class="form-hint">User-friendly name displayed in the catalog.</small>
+        </div>
 
-    <div class="form-group">
-      <label for="description">Description</label>
-      <textarea id="description" name="description" rows="2">{{ server.description if server else '' }}</textarea>
-    </div>
+        <div class="form-group">
+          <label for="description">
+            <span class="label-text">Description</span>
+          </label>
+          <textarea id="description" name="description" rows="3" class="form-control">{{ server.description if server else '' }}</textarea>
+          <small class="form-hint">Brief description of what this server does. Supports Markdown.</small>
+        </div>
 
-    <div class="form-group">
-      <label for="category">Category</label>
-      <input type="text" id="category" name="category" value="{{ server.category if server else '' }}">
-    </div>
-
-    <div class="form-group">
-      <label for="transport">Transport (how the server itself communicates)</label>
-      <select id="transport" name="transport">
-        {% for t in ["stdio", "http", "sse"] %}
-        <option value="{{ t }}" {{ "selected" if server and server.transport == t else "" }}>{{ t }}</option>
-        {% endfor %}
-      </select>
-      <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">
-        This only records the server's own implementation. Users always connect remotely — a
-        stdio server is spawned on demand by mcprack itself, one instance per user, and never
-        needs a network endpoint configured below unless it's a genuinely external HTTP/SSE service.
-      </p>
-    </div>
-
-    <fieldset>
-      <legend>Local stdio command (spawned by mcprack itself, one instance per user)</legend>
-      <div class="form-group">
-        <label for="command">Command</label>
-        <input type="text" id="command" name="command" value="{{ server.command if server else '' }}">
+        <div class="form-group">
+          <label for="category">
+            <span class="label-text">Category</span>
+          </label>
+          <input type="text" id="category" name="category" value="{{ server.category if server else '' }}" class="form-control" placeholder="e.g., DevTools, Utilities, Data">
+          <small class="form-hint">Used to organize servers in the catalog.</small>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="args">Args (space-separated)</label>
-        <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server else '' }}">
-      </div>
-    </fieldset>
 
-    <fieldset>
-      <legend>Network endpoint (for servers that are already running elsewhere)</legend>
-      <div class="form-group">
-        <label for="url">URL</label>
-        <input type="text" id="url" name="url" value="{{ server.url if server else '' }}"
-               placeholder="http://mcphost.spojenet.cz:3100/mcp/">
+      <!-- Transport Configuration Card -->
+      <div class="form-card">
+        <h2 class="form-card-title">🔌 Transport Configuration</h2>
+        
+        <div class="form-group">
+          <label for="transport">
+            <span class="label-text">Transport Protocol</span>
+            <span class="label-badge required" title="Required field">*</span>
+          </label>
+          <select id="transport" name="transport" class="form-control" required>
+            {% for t in ["stdio", "http", "sse"] %}
+            <option value="{{ t }}" {{ "selected" if server and server.transport == t else "" }}>
+              {{ t | upper }}
+            </option>
+            {% endfor %}
+          </select>
+          <small class="form-hint">
+            <strong>stdio:</strong> Local process spawned per user (recommended for most servers)<br>
+            <strong>http/sse:</strong> External service with network endpoint
+          </small>
+        </div>
       </div>
-      <div class="form-group">
-        <label for="auth_header_name">Auth header name</label>
-        <input type="text" id="auth_header_name" name="auth_header_name"
-               value="{{ server.auth_header_name if server else '' }}" placeholder="Authorization">
-      </div>
-      <div class="form-group">
-        <label for="auth_env_key">Auth token env key</label>
-        <input type="text" id="auth_env_key" name="auth_env_key"
-               value="{{ server.auth_env_key if server else '' }}" placeholder="AUTH_TOKEN">
-        <p class="text-muted" style="font-size: var(--font-size-xs); margin-top: var(--space-sm);">
-          Whichever row below has this key is always treated as citlivé/sensitive, regardless of
-          its checkbox — it carries a credential by definition.
+
+      <!-- Local Command Card -->
+      <div class="form-card">
+        <h2 class="form-card-title">💻 Local Command (stdio)</h2>
+        <p class="form-card-description">
+          Configure the command mcprack will spawn on demand, one instance per user. Users never directly access this process — mcprack manages it transparently.
         </p>
+        
+        <div class="form-group">
+          <label for="command">
+            <span class="label-text">Command</span>
+          </label>
+          <input type="text" id="command" name="command" value="{{ server.command if server else '' }}" class="form-control" placeholder="e.g., mcp-server-webdriver">
+          <small class="form-hint">Executable name or full path to the server binary.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="args">
+            <span class="label-text">Arguments</span>
+          </label>
+          <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server else '' }}" class="form-control" placeholder="space-separated arguments">
+          <small class="form-hint">Optional command-line arguments passed when spawning the server.</small>
+        </div>
       </div>
+
+      <!-- Network Endpoint Card -->
+      <div class="form-card">
+        <h2 class="form-card-title">🌐 Network Endpoint (http/sse)</h2>
+        <p class="form-card-description">
+          Only configure this section if your server is already running elsewhere and accessible via network. Leave empty for local stdio servers.
+        </p>
+        
+        <div class="form-group">
+          <label for="url">
+            <span class="label-text">URL</span>
+          </label>
+          <input type="text" id="url" name="url" value="{{ server.url if server else '' }}" class="form-control"
+                 placeholder="http://server.example.com:3100/mcp/">
+          <small class="form-hint">Full HTTP/SSE endpoint URL where mcprack can reach the server.</small>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="auth_header_name">
+              <span class="label-text">Auth Header Name</span>
+            </label>
+            <input type="text" id="auth_header_name" name="auth_header_name"
+                   value="{{ server.auth_header_name if server else '' }}" class="form-control" placeholder="Authorization">
+            <small class="form-hint">HTTP header name for authentication.</small>
+          </div>
+
+          <div class="form-group">
+            <label for="auth_env_key">
+              <span class="label-text">Auth Token Env Key</span>
+            </label>
+            <input type="text" id="auth_env_key" name="auth_env_key"
+                   value="{{ server.auth_env_key if server else '' }}" class="form-control" placeholder="AUTH_TOKEN">
+            <small class="form-hint">Environment variable key containing the auth token.</small>
+          </div>
+        </div>
+      </div>
+
+      <!-- Environment Variables Card -->
+      <div class="form-card">
+        <h2 class="form-card-title">🔐 Environment Variables</h2>
+        <p class="form-card-description">
+          Provide secrets and configuration for your server. <strong>Mark as sensitive</strong> if it's a secret — sensitive variables are stored in Vaultwarden or encrypted locally. Others are stored in the database.
+        </p>
+
+        <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}" class="env-rows-wrapper"></div>
+
+        <div class="env-rows-actions">
+          <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
+            ➕ {{ _('Add row') }}
+          </button>
+          <label class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; margin-bottom: 0;">
+            📥 {{ _('Import .env file') }}
+            <input type="file" data-env-import-input data-target="env-rows" accept=".env,text/plain" style="display: none;">
+          </label>
+        </div>
+      </div>
+
+      <!-- Options Card -->
+      <div class="form-card">
+        <h2 class="form-card-title">⚙️ Options</h2>
+        
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" name="allow_user_override" {{ "checked" if not server or server.allow_user_override else "" }}>
+            <span class="label-text">Allow users to override credentials</span>
+          </label>
+          <small class="form-hint">Let users provide their own secrets instead of the defaults configured here.</small>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" name="enabled" {{ "checked" if not server or server.enabled else "" }}>
+            <span class="label-text">Enabled (visible in catalog)</span>
+          </label>
+          <small class="form-hint">Uncheck to hide this server from the catalog temporarily.</small>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg">
+          {{ "🔒 Read-only" if demo_mode else "💾 Save server" }}
+        </button>
+      </div>
+
     </fieldset>
-
-    <fieldset>
-      <legend>{{ _('Environment variables') }}</legend>
-      <p class="text-muted" style="font-size: var(--font-size-sm);">
-        {{ _("Mark a row <strong>sensitive</strong> if it's a secret — those go to Vaultwarden (or an encrypted local fallback if Vaultwarden isn't configured). Everything else is stored directly in mcprack's own database.") }}
-      </p>
-
-      <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
-
-      <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
-        ➕ {{ _('Add row') }}
-      </button>
-      <label class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; margin-bottom: 0;">
-        📥 {{ _('Import .env file') }}
-        <input type="file" data-env-import-input data-target="env-rows" accept=".env,text/plain" style="display: none;">
-      </label>
-    </fieldset>
-
-    <div class="form-group">
-      <label>
-        <input type="checkbox" name="allow_user_override" {{ "checked" if not server or server.allow_user_override else "" }}>
-        Allow users to override credentials with their own
-      </label>
-    </div>
-
-    <div class="form-group">
-      <label>
-        <input type="checkbox" name="enabled" {{ "checked" if not server or server.enabled else "" }}>
-        Enabled (visible in catalog)
-      </label>
-    </div>
-
-    <button type="submit" class="btn btn-primary">{{ "🔒 Read-only" if demo_mode else "💾 Save" }}</button>
-  </fieldset>
   </form>
 </section>
 

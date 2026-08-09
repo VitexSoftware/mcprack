@@ -464,6 +464,62 @@ def server_test_stdio(server_id):
     return redirect(url_for("admin.servers_list"))
 
 
+@bp.route("/servers/<int:server_id>/capabilities", methods=["GET"])
+@admin_required
+def server_capabilities(server_id):
+    """Query a running MCP server for its tools and resources.
+    
+    This spawns/connects to the server and asks it what operations it provides.
+    Returns JSON with {tools: [], resources: []}.
+    """
+    import json
+    
+    server = db.get_or_404(McpServer, server_id)
+    
+    # For network servers, query the URL directly
+    if server.url:
+        from urllib.parse import urlsplit
+        parts = urlsplit(server.url)
+        host = parts.hostname or "127.0.0.1"
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    else:
+        # For stdio servers, spawn via user_proxy for admin user
+        from . import user_proxy as up
+        try:
+            env = secret_store.resolve_server_env(server)
+        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+            return jsonify(error=str(exc)), 500
+        
+        # Spawn the server via user_proxy if not already running
+        try:
+            # Use a reserved admin user for probing
+            admin_user_id = current_user.id
+            
+            # Ensure server is running (spawns if needed)
+            port = up.ensure_user_server_proxy(
+                admin_user_id,
+                server_id,
+                server.name,
+                server.command,
+                server.args or [],
+                env,
+                server=server,
+            )
+            host = "127.0.0.1"
+        except up.UserProxyError as exc:
+            return jsonify(error=str(exc)), 500
+    
+    # Query the capabilities
+    caps = health.get_server_capabilities(host, port, timeout=8.0)
+    if caps is None:
+        return jsonify(
+            error="Could not query server capabilities",
+            hint="The server may not be running, unreachable, or not respond to MCP queries"
+        ), 503
+    
+    return jsonify(caps)
+
+
 def _installable_name_taken(name):
     return McpServer.query.filter_by(name=name).first() is not None
 
