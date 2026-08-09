@@ -18,6 +18,21 @@
       overlay.classList.remove('active');
     }
   }, 100);
+  
+  // Disable submit button during form submission to prevent double-submit
+  document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    if (form) {
+      form.addEventListener('submit', function() {
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.style.opacity = '0.6';
+          submitBtn.style.cursor = 'not-allowed';
+        }
+      });
+    }
+  });
 </script>
 
 <section class="section">

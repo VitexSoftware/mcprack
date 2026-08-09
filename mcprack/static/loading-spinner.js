@@ -1,6 +1,6 @@
 /**
  * Loading Spinner - Show a loading indicator when navigating to pages that take time to load
- * (e.g., admin/servers which loads all servers, admin/servers/N/edit which loads secrets)
+ * or when submitting forms (especially when waiting for Vaultwarden responses)
  */
 
 const loadingOverlay = document.getElementById('loadingOverlay');
@@ -34,6 +34,35 @@ document.addEventListener('click', (event) => {
     loadingOverlay.classList.add('active');
     
     // Safety: hide spinner after 60 seconds (in case page fails to load)
+    setTimeout(() => {
+      loadingOverlay.classList.remove('active');
+    }, 60000);
+  }
+});
+
+// Show loading spinner when submitting forms (especially slow admin operations)
+document.addEventListener('submit', (event) => {
+  const form = event.target;
+  const action = form.getAttribute('action') || window.location.pathname;
+  
+  // Show spinner for admin operations that might be slow:
+  // - Save MCP server config (updates Vaultwarden secrets)
+  // - Test MCP server (spawns process and tests connectivity)
+  // - Autodetect servers
+  // - Update user permissions
+  const slowForms = [
+    /^\/admin\/servers(\/\d+)?(\?|$)/,  // POST to /admin/servers or /admin/servers/N
+    /^\/admin\/servers\/\d+\/test/,     // Test stdio server
+    /^\/admin\/servers\/autodetect/,    // Autodetect
+    /^\/admin\/users\/\d+(\?|$)/,       // User updates
+  ];
+
+  const isSlow = slowForms.some(pattern => pattern.test(action));
+  
+  if (isSlow) {
+    loadingOverlay.classList.add('active');
+    
+    // Safety: hide spinner after 60 seconds
     setTimeout(() => {
       loadingOverlay.classList.remove('active');
     }, 60000);
