@@ -2,6 +2,24 @@
 {% block title %}{{ "Edit" if server else "Register" }} MCP server — mcprack{% endblock %}
 {% block content %}
 
+<!-- Hide loading spinner once form is fully loaded -->
+<script>
+  // Remove loading spinner since the server edit form has loaded
+  window.addEventListener('DOMContentLoaded', function() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+    }
+  });
+  // Fallback: remove after 2 seconds if DOMContentLoaded already fired
+  setTimeout(function() {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+      overlay.classList.remove('active');
+    }
+  }, 100);
+</script>
+
 <section class="section">
   <h1>🔧 {{ "Edit" if server else "Register" }} MCP server</h1>
   {% if demo_mode %}

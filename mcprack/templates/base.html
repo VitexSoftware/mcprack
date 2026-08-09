@@ -97,6 +97,15 @@
     </div>
   </footer>
 
+  <!-- Loading spinner overlay -->
+  <div id="loadingOverlay" class="loading-overlay">
+    <div class="loading-spinner">
+      <div class="spinner"></div>
+      <div class="loading-text">{{ _('Loading...') }}</div>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
+  <script src="{{ url_for('static', filename='loading-spinner.js') }}"></script>
 </body>
 </html>
