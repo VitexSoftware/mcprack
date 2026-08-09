@@ -409,6 +409,11 @@ def _build_client_config_json(client, user=None):
                 server_id=server.id,
                 _external=True,
             )
+            # DEBUG: Log what Flask thinks
+            import sys
+            print(f"DEBUG: request.scheme={request.scheme}, request.is_secure={request.is_secure}", file=sys.stderr)
+            print(f"DEBUG: X-Forwarded-Proto={request.headers.get('X-Forwarded-Proto', 'NOT SET')}", file=sys.stderr)
+            print(f"DEBUG: relay_url={relay_url}", file=sys.stderr)
             entries[i]["url"] = relay_url
             entries[i]["transport"] = "http"
 
