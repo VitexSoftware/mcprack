@@ -28,12 +28,45 @@ def _enforce_secret_key(app):
         return
     key = app.config.get("SECRET_KEY", "")
     if not key or key == INSECURE_DEFAULT_SECRET_KEY:
-        raise RuntimeError(
-            "Refusing to start: SECRET_KEY is unset or still the insecure default "
-            "('dev-insecure-secret-change-me'). Set a real SECRET_KEY in "
-            "/etc/mcprack/env before starting mcprack - it signs sessions and "
-            "per-user proxy tokens, so treat it like a password."
+        error_msg = (
+            "\n"
+            "╔════════════════════════════════════════════════════════════════╗\n"
+            "║                     CONFIGURATION ERROR                        ║\n"
+            "╚════════════════════════════════════════════════════════════════╝\n"
+            "\n"
+            "❌ MCprack cannot start: SECRET_KEY is not configured\n"
+            "\n"
+            "REASON:\n"
+            "  SECRET_KEY is missing from /etc/mcprack/env. This key signs Flask sessions\n"
+            "  and per-user proxy tokens, so it must be a strong random value in production.\n"
+            "\n"
+            "SOLUTION:\n"
+            "  Run the initialization script as root:\n"
+            "\n"
+            "    sudo mcprack-init-config\n"
+            "\n"
+            "  This will:\n"
+            "    • Generate a secure SECRET_KEY\n"
+            "    • Write it to /etc/mcprack/env\n"
+            "    • Fix file permissions\n"
+            "    • Restart the mcprack service\n"
+            "\n"
+            "MANUAL FIX (if script is not available):\n"
+            "  1. Generate a secret key:\n"
+            "       python3 -c \"import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))\"\n"
+            "\n"
+            "  2. Add it to /etc/mcprack/env:\n"
+            "       echo 'SECRET_KEY=<value-from-step-1>' | sudo tee -a /etc/mcprack/env\n"
+            "\n"
+            "  3. Restart the service:\n"
+            "       sudo systemctl restart mcprack\n"
+            "\n"
+            "  4. Check status:\n"
+            "       sudo systemctl status mcprack\n"
+            "\n"
+            "For more help: https://github.com/VitexSoftware/mcprack#configuration\n"
         )
+        raise RuntimeError(error_msg)
 
 
 def get_locale():

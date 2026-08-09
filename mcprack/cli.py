@@ -322,7 +322,96 @@ def secret_unset(server_name, key):
     click.echo(f"'{key}' unset for server '{server_name}'.")
 
 
+@click.command("init-config")
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Regenerate SECRET_KEY even if one already exists.",
+)
+def init_config(force):
+    """Initialize or repair mcprack configuration (SECRET_KEY, permissions).
+    
+    This command:
+    • Generates a secure SECRET_KEY if missing
+    • Updates /etc/mcprack/env with proper permissions (0640)
+    • Ensures mcprack user can read the configuration
+    • Optionally restarts the mcprack service
+    
+    Use 'sudo mcprack-init-config' or 'sudo flask --app mcprack.app:create_app init-config'
+    """
+    import os
+    import secrets
+    import subprocess
+    from pathlib import Path
+    
+    ENV_FILE = Path("/etc/mcprack/env")
+    
+    # Check if we're running as root
+    if os.geteuid() != 0:
+        raise click.ClickException(
+            "This command must run as root. Use: sudo mcprack-init-config"
+        )
+    
+    # Read current env file
+    env_content = {}
+    if ENV_FILE.exists():
+        with open(ENV_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    env_content[key] = value
+    
+    # Check if SECRET_KEY needs generation
+    has_key = "SECRET_KEY" in env_content and env_content["SECRET_KEY"] != "dev-insecure-secret-change-me"
+    
+    if has_key and not force:
+        click.echo("✅ SECRET_KEY is already configured in /etc/mcprack/env")
+        return
+    
+    # Generate new SECRET_KEY
+    new_key = secrets.token_urlsafe(32)
+    env_content["SECRET_KEY"] = new_key
+    
+    # Write updated env file
+    ENV_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(ENV_FILE, "w") as f:
+        for key, value in env_content.items():
+            f.write(f"{key}={value}\n")
+    
+    # Set correct permissions
+    os.chmod(ENV_FILE, 0o640)
+    os.chown(ENV_FILE, 0, os.getgrp("mcprack").gr_gid)  # root:mcprack
+    
+    click.echo("✅ Configuration initialized:")
+    click.echo(f"   • SECRET_KEY generated and stored in {ENV_FILE}")
+    click.echo(f"   • File permissions set to 0640 (root:mcprack)")
+    click.echo("")
+    
+    # Try to restart service
+    try:
+        result = subprocess.run(
+            ["systemctl", "restart", "mcprack"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode == 0:
+            click.echo("✅ mcprack service restarted successfully")
+            click.echo("")
+            click.echo("Run 'systemctl status mcprack' to verify.")
+        else:
+            click.echo("⚠️  Failed to restart mcprack service:")
+            click.echo(result.stderr)
+            click.echo("   Run manually: systemctl restart mcprack")
+    except subprocess.TimeoutExpired:
+        click.echo("⚠️  Restart timed out. Run manually: systemctl restart mcprack")
+    except FileNotFoundError:
+        click.echo("⚠️  systemctl not found. Restart the service manually.")
+
+
 def register_management_cli(app):
     app.cli.add_command(user_cli)
     app.cli.add_command(server_cli)
     app.cli.add_command(secret_cli)
+    app.cli.add_command(init_config)

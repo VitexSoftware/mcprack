@@ -152,12 +152,28 @@ ENV_FILE
       systemctl daemon-reload || true
     fi
 
+    # Verify SECRET_KEY is present and valid
+    if ! grep -q "^SECRET_KEY=" /etc/mcprack/env 2>/dev/null || grep "^SECRET_KEY=dev-insecure" /etc/mcprack/env >/dev/null 2>&1; then
+      echo ""
+      echo "⚠️  WARNING: SECRET_KEY is not properly configured in /etc/mcprack/env" >&2
+      echo ""
+      echo "🔧 To fix this, run as root:" >&2
+      echo "     mcprack-init-config" >&2
+      echo ""
+      echo "   Or manually generate and set the key:" >&2
+      echo "     SECRET_KEY=\$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" >&2
+      echo "     echo \"SECRET_KEY=\$SECRET_KEY\" | sudo tee -a /etc/mcprack/env" >&2
+      echo ""
+    fi
+
     # Run Alembic migrations against whatever SQLALCHEMY_DATABASE_URI ends
     # up in /etc/mcprack/env (freshly written above, or left untouched on an
     # upgrade). db.create_all() at app startup remains a harmless additional
     # safety net, but this is what actually applies migrations/versions/.
-    if ! su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=mcprack.app:create_app python3 -m flask db upgrade"; then
-      echo "⚠️  Database migration failed — check /etc/mcprack/env and run 'flask db upgrade' manually" >&2
+    if ! su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=mcprack.app:create_app python3 -m flask db upgrade" 2>/dev/null; then
+      echo "⚠️  Database migration failed — check /etc/mcprack/env and run manually:" >&2
+      echo "     su - mcprack -s /bin/sh" >&2
+      echo "     cd /usr/lib/mcprack && source /etc/mcprack/env && flask db upgrade" >&2
     fi
 
     # Create the initial admin account if no admin exists yet (covers fresh
@@ -172,18 +188,26 @@ with app.app_context():
 
     if [ "$ADMIN_EXISTS" != "1" ]; then
       ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
-      if su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=mcprack.app:create_app python3 -m flask create-admin --username admin --password '$ADMIN_PASS' --email ''"; then
+      if su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=mcprack.app:create_app python3 -m flask create-admin --username admin --password '$ADMIN_PASS' --email ''" 2>/dev/null; then
         install -m 0600 -o root -g root /dev/null /etc/mcprack/admin-credentials
         printf 'username=admin\npassword=%s\n' "$ADMIN_PASS" > /etc/mcprack/admin-credentials
         echo "✅ Initial admin account created (username: admin). Credentials saved to /etc/mcprack/admin-credentials"
       else
-        echo "⚠️  Failed to create initial admin account — create one manually with 'flask create-admin'" >&2
+        echo "ℹ️  Admin account setup deferred (likely missing SECRET_KEY). Run after 'mcprack-init-config':" >&2
+        echo "     su - mcprack -s /bin/sh" >&2
+        echo "     cd /usr/lib/mcprack && source /etc/mcprack/env && flask create-admin" >&2
       fi
     fi
 
     if [ "$INTERACTIVE" = "false" ]; then
+      echo ""
       echo "ℹ️  mcprack installed with default configuration"
-      echo "⚠️  Update /etc/mcprack/env with your Vaultwarden credentials"
+      echo "🔧 Next steps:"
+      echo "   1. Initialize configuration: sudo mcprack-init-config"
+      echo "   2. Update /etc/mcprack/env with your credentials (if needed)"
+      echo "   3. Start service: sudo systemctl start mcprack"
+      echo "   4. Check status: sudo systemctl status mcprack"
+      echo ""
     fi
     ;;
 esac
