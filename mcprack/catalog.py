@@ -409,11 +409,17 @@ def _build_client_config_json(client, user=None):
                 server_id=server.id,
                 _external=True,
             )
-            # DEBUG: Log what Flask thinks
+            # DEBUG: Log what Flask thinks to stderr file
             import sys
-            print(f"DEBUG: request.scheme={request.scheme}, request.is_secure={request.is_secure}", file=sys.stderr)
-            print(f"DEBUG: X-Forwarded-Proto={request.headers.get('X-Forwarded-Proto', 'NOT SET')}", file=sys.stderr)
-            print(f"DEBUG: relay_url={relay_url}", file=sys.stderr)
+            debug_msg = (
+                f"DEBUG HEADERS: scheme={request.scheme}, is_secure={request.is_secure}, "
+                f"X-Forwarded-Proto={request.headers.get('X-Forwarded-Proto', 'NOT SET')}, "
+                f"relay_url={relay_url}\n"
+            )
+            sys.stderr.write(debug_msg)
+            sys.stderr.flush()
+            with open('/tmp/mcprack-debug.log', 'a') as f:
+                f.write(debug_msg)
             entries[i]["url"] = relay_url
             entries[i]["transport"] = "http"
 
