@@ -197,6 +197,28 @@ header {
   object-fit: contain;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.header-github-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--border-radius-full);
+  color: var(--color-text-secondary);
+  transition: color var(--transition-fast), background-color var(--transition-fast);
+}
+
+.header-github-link:hover {
+  color: var(--color-admin);
+  background-color: var(--color-bg-tertiary);
+}
+
 .header-nav {
   display: flex;
   align-items: center;
