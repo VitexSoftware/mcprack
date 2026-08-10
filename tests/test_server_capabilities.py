@@ -69,49 +69,55 @@ def test_capabilities_endpoint_404_for_missing_server(client, admin_user):
 
 def test_capabilities_returns_json(app, client, admin_user, test_server_stdio):
     """Capabilities endpoint should return valid JSON."""
-    with patch("mcprack.health.get_server_capabilities") as mock_caps:
-        mock_caps.return_value = {
-            "tools": [{"name": "tool1", "description": "Test tool"}],
-            "resources": [{"uri": "resource://test"}],
-        }
-        
-        response = client.get(f"/admin/servers/{test_server_stdio}/capabilities")
-        assert response.status_code == 200
-        assert response.content_type == "application/json"
-        
-        data = json.loads(response.data)
-        assert "tools" in data
-        assert "resources" in data
-        assert len(data["tools"]) == 1
-        assert len(data["resources"]) == 1
+    with patch("mcprack.admin.user_proxy.ensure_user_server_proxy") as mock_ensure:
+        with patch("mcprack.health.get_server_capabilities") as mock_caps:
+            mock_ensure.return_value = 35000  # Return port
+            mock_caps.return_value = {
+                "tools": [{"name": "tool1", "description": "Test tool"}],
+                "resources": [{"uri": "resource://test"}],
+            }
+            
+            response = client.get(f"/admin/servers/{test_server_stdio}/capabilities")
+            assert response.status_code == 200
+            assert response.content_type == "application/json"
+            
+            data = json.loads(response.data)
+            assert "tools" in data
+            assert "resources" in data
+            assert len(data["tools"]) == 1
+            assert len(data["resources"]) == 1
 
 
 def test_capabilities_handles_empty_results(app, client, admin_user, test_server_stdio):
     """Capabilities endpoint should handle servers with no tools/resources."""
-    with patch("mcprack.health.get_server_capabilities") as mock_caps:
-        mock_caps.return_value = {
-            "tools": [],
-            "resources": [],
-        }
-        
-        response = client.get(f"/admin/servers/{test_server_stdio}/capabilities")
-        assert response.status_code == 200
-        
-        data = json.loads(response.data)
-        assert data["tools"] == []
-        assert data["resources"] == []
+    with patch("mcprack.admin.user_proxy.ensure_user_server_proxy") as mock_ensure:
+        with patch("mcprack.health.get_server_capabilities") as mock_caps:
+            mock_ensure.return_value = 35000  # Return port
+            mock_caps.return_value = {
+                "tools": [],
+                "resources": [],
+            }
+            
+            response = client.get(f"/admin/servers/{test_server_stdio}/capabilities")
+            assert response.status_code == 200
+            
+            data = json.loads(response.data)
+            assert data["tools"] == []
+            assert data["resources"] == []
 
 
 def test_capabilities_handles_unreachable_server(app, client, admin_user, test_server_stdio):
     """Capabilities endpoint should return 503 if server is unreachable."""
-    with patch("mcprack.health.get_server_capabilities") as mock_caps:
-        mock_caps.return_value = None
-        
-        response = client.get(f"/admin/servers/{test_server_stdio}/capabilities")
-        assert response.status_code == 503
-        
-        data = json.loads(response.data)
-        assert "error" in data
+    with patch("mcprack.admin.user_proxy.ensure_user_server_proxy") as mock_ensure:
+        with patch("mcprack.health.get_server_capabilities") as mock_caps:
+            mock_ensure.return_value = 35000  # Return port
+            mock_caps.return_value = None
+            
+            response = client.get(f"/admin/servers/{test_server_stdio}/capabilities")
+            assert response.status_code == 503
+            
+            data = json.loads(response.data)
+            assert "error" in data
 
 
 def test_capabilities_handles_credential_errors(app, client, admin_user, test_server_stdio):
