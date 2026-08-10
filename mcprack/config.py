@@ -80,6 +80,14 @@ class Config:
     # something a public demo admin account should be able to change.
     DEMO_MODE = os.environ.get("DEMO_MODE", "false").lower() in ("true", "1", "yes")
 
+    # Shown on the login page whenever DEMO_MODE is on and the request has
+    # no username/password query string of its own — notably the common
+    # case of a bare "/" redirecting to "/login?next=%2F" with nothing to
+    # prefill from. An explicit query string (see the demo link below)
+    # still takes priority over these.
+    DEMO_USERNAME = os.environ.get("DEMO_USERNAME", "demo")
+    DEMO_PASSWORD = os.environ.get("DEMO_PASSWORD", "demo")
+
     # How many days of audit_log_entries to keep before `flask audit-archive`
     # exports and purges them. The audit log itself is always on — this only
     # controls the retention window, not whether logging happens.

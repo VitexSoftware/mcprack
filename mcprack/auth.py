@@ -168,12 +168,21 @@ def login():
     # The GET query-param prefill only exists for the public demo link
     # (README's "Demo mode" section) - honoring it outside DEMO_MODE would
     # mean a real password could end up in the URL, browser history, and
-    # server access logs.
+    # server access logs. Within DEMO_MODE, a query string still wins, but
+    # when there isn't one (e.g. a bare "/" redirecting here as
+    # "/login?next=%2F") DEMO_USERNAME/DEMO_PASSWORD fill in instead, so
+    # the demo is never just a blank login wall.
     demo_mode = current_app.config["DEMO_MODE"]
+    if demo_mode:
+        prefill_username = request.args.get("username") or current_app.config["DEMO_USERNAME"]
+        prefill_password = request.args.get("password") or current_app.config["DEMO_PASSWORD"]
+    else:
+        prefill_username = ""
+        prefill_password = ""
     return render_template(
         "login.html",
-        prefill_username=request.args.get("username", "") if demo_mode else "",
-        prefill_password=request.args.get("password", "") if demo_mode else "",
+        prefill_username=prefill_username,
+        prefill_password=prefill_password,
     )
 
 
