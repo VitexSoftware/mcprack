@@ -5,12 +5,19 @@
   <project_license>Apache-2.0</project_license>
   <name>mcprack</name>
   <summary>MCP Self-Service Server Catalog &amp; Config Generator</summary>
+  <summary xml:lang="cs">Samoobslužný katalog MCP serverů a generátor konfigurací</summary>
   <description>
     <p>
       mcprack is a centralized platform for managing and distributing Model Context Protocol (MCP) server configurations across your organization. It solves the problem of how to securely provision AI clients with access to multiple backend services without hardcoding secrets or requiring manual configuration on each machine.
     </p>
+    <p xml:lang="cs">
+      mcprack je centralizovaná platforma pro správu a distribuci konfigurací serverů Model Context Protocol (MCP) napříč vaší organizací. Řeší problém, jak bezpečně zajistit AI klientům přístup k více backendovým službám, aniž by bylo nutné natvrdo zapisovat přihlašovací údaje nebo je ručně nastavovat na každém počítači.
+    </p>
     <p>
       Key features:
+    </p>
+    <p xml:lang="cs">
+      Klíčové vlastnosti:
     </p>
     <ul>
       <li>Admin UI for registering MCP servers and managing credentials</li>
@@ -20,9 +27,19 @@
       <li>Per-user credential overrides for personalized access control</li>
       <li>Optional HTTP proxy (FastMCP) for exposing stdio servers to remote clients</li>
       <li>LDAP/Active Directory support for enterprise deployments</li>
+      <li xml:lang="cs">Administrační rozhraní pro registraci MCP serverů a správu přihlašovacích údajů</li>
+      <li xml:lang="cs">Samoobslužný katalog pro uživatele k procházení a výběru dostupných serverů</li>
+      <li xml:lang="cs">Automatické generování konfigurace pro Claude Desktop, GitHub Copilot a další klienty kompatibilní s MCP</li>
+      <li xml:lang="cs">Bezpečná správa přihlašovacích údajů přes Vaultwarden — tajemství se nikdy neukládají do databáze mcprack</li>
+      <li xml:lang="cs">Přepisy přihlašovacích údajů pro jednotlivé uživatele pro individuální řízení přístupu</li>
+      <li xml:lang="cs">Volitelná HTTP proxy (FastMCP) pro zpřístupnění stdio serverů vzdáleným klientům</li>
+      <li xml:lang="cs">Podpora LDAP/Active Directory pro firemní nasazení</li>
     </ul>
     <p>
       Users log in with local account or Active Directory credentials, select which servers they need, choose their target client, and download a ready-to-use configuration. Credentials are managed centrally in Vaultwarden using the same secure pattern as the mcp_rack Ansible role.
+    </p>
+    <p xml:lang="cs">
+      Uživatelé se přihlašují lokálním účtem nebo přes Active Directory, vyberou si potřebné servery, zvolí cílového klienta a stáhnou si připravenou konfiguraci. Přihlašovací údaje jsou centrálně spravovány ve Vaultwarden stejným bezpečným způsobem jako v Ansible roli mcp_rack.
     </p>
   </description>
   <launchable type="url">http://localhost:5000</launchable>
