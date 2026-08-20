@@ -655,6 +655,32 @@ don't fit your hardware:
 
 See `debian/README.Debian` for more detail.
 
+### Trying it out — mcp-server-filesystem
+
+To verify a fresh mcprack install actually spawns, proxies, and tears down
+stdio MCP servers correctly, register
+[mcp-server-filesystem](https://github.com/VitexSoftware/mcp-server-filesystem)
+as a test server. It has no external dependencies or credentials to wire
+up — just `python3-fastmcp` — and is read-only by default (`FS_READONLY=true`),
+so it's safe to point at any directory:
+
+```bash
+sudo apt install mcp-server-filesystem   # from repo.vitexsoftware.com
+```
+
+Register it with:
+
+- Command: `mcp-server-filesystem`
+- Env: `FS_ROOT=/path/to/sandbox` (optional; defaults to the spawned
+  process's cwd), `FS_READONLY=false` only if you also want to exercise
+  the write/delete/move/copy tools
+
+Once registered, download its config from the catalog and confirm your
+client can list its tools (`list_dir`, `read_file`, `stat`, `exists`,
+`glob_search`, plus the gated mutating ones) through the per-user proxy —
+this exercises the same cold-spawn/handshake/proxy path as any other
+stdio server, without needing a real backend to configure first.
+
 ## Installing new MCP servers (pip / npm / docker)
 
 Admin → Install (`/admin/install`) lets an admin install a new MCP server
