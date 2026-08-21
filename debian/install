@@ -11,3 +11,4 @@ mcprack/static/mcprack-app-icon.svg /usr/share/icons/hicolor/scalable/apps/
 mcprack/translations/cs/LC_MESSAGES/messages.mo /usr/share/locale/cs/LC_MESSAGES/
 mcprack/translations/sk/LC_MESSAGES/messages.mo /usr/share/locale/sk/LC_MESSAGES/
 bin/mcprack-init-config /usr/bin/
+bin/mcprack-mcp-probe /usr/bin/

@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""Probe an MCP Streamable-HTTP endpoint end to end.
+
+Answers the question that comes up whenever a client reports a broken
+server: is this URL actually usable, and if not, at which step does it
+break? A client like Claude or Copilot only surfaces something like
+"Transport creation error: Unexpected status code: 502 Bad Gateway",
+which hides the JSON-RPC error body mcprack sends with it.
+
+Point it at a per-user proxy URL from the catalog (Copilot/Claude config
+download, /view/<client>) or at any other MCP HTTP endpoint:
+
+  mcprack-mcp-probe https://host/proxy/mcp/<token>/7
+  mcprack-mcp-probe --tools https://host/proxy/mcp/<token>/7
+  mcprack-mcp-probe --call list_dir --args '{"path": "."}' URL
+  mcprack-mcp-probe --method resources/list URL
+
+Exit status is 0 only when every step succeeded, so this is safe to use
+from monitoring or a smoke test. Deliberately stdlib-only: it has to run
+on a plain mcprack host with no extra packages installed.
+
+Proxy URLs embed a signed access token in their path, so the token is
+redacted in all output - the whole point is to be able to paste probe
+output into a bug report or chat without leaking credentials.
+"""
+
+import argparse
+import json
+import re
+import sys
+import urllib.error
+import urllib.request
+
+# Matches the token segment of /proxy/mcp/<token>/<server_id> so it can be
+# masked before anything is printed.
+_TOKEN_RE = re.compile(r"(/proxy/mcp/)[^/]+(/\d+)")
+
+PROTOCOL_VERSION = "2024-11-05"
+CLIENT_NAME = "mcprack-mcp-probe"
+
+
+def redact(url):
+    return _TOKEN_RE.sub(r"\1<token>\2", url)
+
+
+def post(url, payload, timeout, session=None):
+    """Send one JSON-RPC message. Returns (status, parsed, session_id, raw).
+
+    `parsed` is the first JSON-RPC object found in the body, handling both
+    a plain JSON response and an SSE stream (FastMCP answers with
+    text/event-stream, where the payload arrives in a `data:` line).
+    """
+    request = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST")
+    request.add_header("Content-Type", "application/json")
+    # Both are required: a server may legitimately answer either way, and
+    # FastMCP rejects the request outright if the SSE type is not offered.
+    request.add_header("Accept", "application/json, text/event-stream")
+    if session:
+        request.add_header("mcp-session-id", session)
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            status = response.status
+            raw = response.read().decode("utf-8", "replace")
+            session_id = response.headers.get("mcp-session-id")
+    except urllib.error.HTTPError as exc:
+        # A non-2xx still carries the interesting part (mcprack returns a
+        # JSON-RPC error envelope with its 502s), so read it rather than
+        # discarding it as a bare transport failure.
+        status = exc.code
+        raw = exc.read().decode("utf-8", "replace")
+        session_id = exc.headers.get("mcp-session-id")
+    except urllib.error.URLError as exc:
+        return None, None, None, f"connection failed: {exc.reason}"
+
+    parsed = None
+    for line in raw.splitlines():
+        line = line.strip()
+        if line.startswith("data:"):
+            line = line[len("data:"):].strip()
+        if line.startswith("{"):
+            try:
+                parsed = json.loads(line)
+                break
+            except ValueError:
+                continue
+    return status, parsed, session_id, raw
+
+
+def fail(message, detail=None):
+    print(f"FAIL {message}")
+    if detail:
+        print(detail.strip()[:2000])
+    return 1
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Probe an MCP Streamable-HTTP endpoint (mcprack proxy URL or any MCP server).",
+    )
+    parser.add_argument("url", help="MCP endpoint URL")
+    parser.add_argument(
+        "--tools", action="store_true", help="list the server's tools"
+    )
+    parser.add_argument("--call", metavar="NAME", help="call a tool by name")
+    parser.add_argument(
+        "--args", metavar="JSON", default="{}", help="arguments for --call (JSON object)"
+    )
+    parser.add_argument("--method", metavar="METHOD", help="send a raw JSON-RPC method")
+    parser.add_argument(
+        "--params", metavar="JSON", help="params for --method (JSON)"
+    )
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=120.0,
+        help="per-request timeout in seconds (default: 120; a cold proxy start can take ~15s)",
+    )
+    parser.add_argument("--raw", action="store_true", help="print the raw response body")
+    args = parser.parse_args()
+
+    url = args.url
+    print(f"endpoint: {redact(url)}")
+
+    status, parsed, session, raw = post(
+        url,
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": {"name": CLIENT_NAME, "version": "1.0"},
+            },
+        },
+        args.timeout,
+    )
+    if status is None:
+        return fail("initialize: could not connect", raw)
+    if status != 200 or not parsed:
+        return fail(f"initialize: HTTP {status}", raw)
+    if "error" in parsed:
+        # This is the case worth naming explicitly: the transport works and
+        # the server answered, but the upstream MCP server behind the proxy
+        # could not be started. The message says why.
+        return fail(
+            f"initialize: server returned a JSON-RPC error (HTTP {status})",
+            json.dumps(parsed["error"], indent=2),
+        )
+
+    result = parsed.get("result", {})
+    info = result.get("serverInfo", {})
+    print(f"initialize: OK (HTTP {status})")
+    print(f"  server: {info.get('name', '?')} {info.get('version', '?')}")
+    print(f"  protocol: {result.get('protocolVersion', '?')}")
+    print(f"  capabilities: {', '.join(sorted(result.get('capabilities', {}))) or 'none'}")
+    print(f"  session: {'yes' if session else 'no'}")
+
+    # Required by the spec before any further request; some servers reject
+    # everything else until they have seen it.
+    post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, args.timeout, session)
+
+    if args.tools:
+        method, params = "tools/list", None
+    elif args.call:
+        try:
+            call_args = json.loads(args.args)
+        except ValueError as exc:
+            return fail(f"--args is not valid JSON: {exc}")
+        method, params = "tools/call", {"name": args.call, "arguments": call_args}
+    elif args.method:
+        method = args.method
+        try:
+            params = json.loads(args.params) if args.params else None
+        except ValueError as exc:
+            return fail(f"--params is not valid JSON: {exc}")
+    else:
+        print("OK")
+        return 0
+
+    payload = {"jsonrpc": "2.0", "id": 2, "method": method}
+    if params is not None:
+        payload["params"] = params
+
+    status, parsed, _, raw = post(url, payload, args.timeout, session)
+    if status is None:
+        return fail(f"{method}: could not connect", raw)
+    if not parsed:
+        return fail(f"{method}: no JSON-RPC response (HTTP {status})", raw)
+    if "error" in parsed:
+        return fail(
+            f"{method}: JSON-RPC error (HTTP {status})",
+            json.dumps(parsed["error"], indent=2),
+        )
+
+    print(f"{method}: OK (HTTP {status})")
+    if args.raw:
+        print(raw.strip())
+    elif args.tools:
+        tools = parsed.get("result", {}).get("tools", [])
+        print(f"  {len(tools)} tool(s)")
+        for tool in tools:
+            schema = tool.get("inputSchema") or {}
+            required = ", ".join(schema.get("required") or [])
+            suffix = f"  required: {required}" if required else ""
+            print(f"    - {tool.get('name')}{suffix}")
+    else:
+        print(json.dumps(parsed.get("result"), indent=2))
+
+    print("OK")
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except KeyboardInterrupt:
+        sys.exit(130)
