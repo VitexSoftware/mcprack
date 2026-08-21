@@ -275,6 +275,9 @@ This CLI does not cover the pip/npm/docker server installer subsystem
 below, which stays UI-only; `server show` only surfaces a server's
 `install_method`/`installed_version` read-only.
 
+For debugging a per-user proxy URL end to end — rather than administering
+the catalog — see `mcprack-mcp-probe` under "Diagnosing a proxy URL" below.
+
 ## REST API
 
 Besides the web UI and CLI, mcprack exposes a JSON REST API at `/api/v1`,
@@ -653,7 +656,72 @@ don't fit your hardware:
   under gunicorn's own 30s worker timeout (`--timeout 30` in
   `debian/mcprack.service`).
 
+Separately from those two, each *already-established* request forwarded to a
+running proxy instance has a fixed 10s ceiling (`_PROXY_REQUEST_TIMEOUT` in
+`mcprack/catalog.py`), so one slow backend can't tie up a gunicorn worker.
+It is not currently configurable, which is worth knowing when a backend does
+genuinely slow work per call (a large IMAP mailbox scan, say): the client
+sees `Upstream MCP server did not respond within 10s` even though the
+backend would have answered, which can mask the backend's own error.
+
 See `debian/README.Debian` for more detail.
+
+### Diagnosing a proxy URL — `mcprack-mcp-probe`
+
+When a client reports a broken server it usually says only something like
+`Transport creation error: Unexpected status code: 502 Bad Gateway`. That
+hides the useful part: mcprack sends a JSON-RPC error body along with its
+502s, naming the actual reason (a failed startup handshake, credentials that
+couldn't be resolved, missing required config) — and MCP clients discard it.
+
+`mcprack-mcp-probe` performs the same handshake a real client does
+(`initialize`, session negotiation, `notifications/initialized`) and reports
+which step failed and why:
+
+```bash
+# does this URL work at all?
+mcprack-mcp-probe 'https://mcprack.example.com/proxy/mcp/<token>/7'
+
+# what does the server actually expose?
+mcprack-mcp-probe --tools 'https://mcprack.example.com/proxy/mcp/<token>/7'
+
+# exercise a real tool call end to end
+mcprack-mcp-probe --call list_dir --args '{"path": "."}' URL
+
+# anything else in the protocol
+mcprack-mcp-probe --method resources/list URL
+```
+
+Take the URL straight from a downloaded client config (`/view/claude`,
+`/view/copilot`): it already carries that user's signed token, so the probe
+exercises exactly what that user's client would do, with their credentials
+and permissions.
+
+The token embedded in the URL is redacted from all output, so probe results
+can be pasted into a bug report as-is. Exit status is `0` only when every
+step succeeded, so it also works as a smoke test from monitoring or CI. It's
+stdlib-only, so it runs on any mcprack host with nothing extra installed.
+The default per-request timeout is 120s — deliberately well above
+`MCP_PROXY_HANDSHAKE_TIMEOUT`, so a slow cold spawn shows up as a real
+result instead of as a probe timeout; override it with `--timeout`.
+
+Reading the outcome:
+
+- `initialize: OK` but the tool call returns a JSON-RPC error or
+  `isError: true` — mcprack and the spawned backend are both fine; the
+  failure is inside that backend server's own logic.
+- `FAIL initialize: server returned a JSON-RPC error` — the transport works,
+  but mcprack could not start or reach the backend. The same message is in
+  Admin → Audit log as a `proxy_start` failure, and the backend's own output
+  is at `/var/lib/mcprack/user-proxies/u<user>-s<server>.log`.
+- `FAIL initialize: HTTP 403` — the token expired (they're valid 24h), or
+  the user no longer has that server selected or permitted. Download a fresh
+  config.
+- `FAIL initialize: HTTP 404` — the server was disabled, deleted, or is no
+  longer a stdio server (a server with its own URL isn't proxied).
+- `FAIL initialize: could not connect` — nothing answered at that host, so
+  the problem is DNS, TLS, or the reverse proxy in front of mcprack, not
+  mcprack itself.
 
 ### Trying it out — mcp-server-filesystem
 
