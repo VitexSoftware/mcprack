@@ -97,6 +97,31 @@ def fail(message, detail=None):
 def main():
     parser = argparse.ArgumentParser(
         description="Probe an MCP Streamable-HTTP endpoint (mcprack proxy URL or any MCP server).",
+        # Without this the examples below get re-wrapped into one blob.
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""examples:
+  # is this endpoint reachable and does the handshake complete?
+  mcprack-mcp-probe URL
+
+  # what does it expose?
+  mcprack-mcp-probe --tools URL
+
+  # exercise a real tool call end to end
+  mcprack-mcp-probe --call list_dir --args '{"path":"."}' URL
+
+  # any other protocol method
+  mcprack-mcp-probe --method resources/list URL
+
+  # slow backend, and show the untouched response body
+  mcprack-mcp-probe --tools --timeout 180 --raw URL
+
+URL is a per-user proxy URL from a downloaded client config
+(/view/claude, /view/copilot), e.g.
+https://mcprack.example.com/proxy/mcp/<token>/7 - it already carries that
+user's signed token, so the probe exercises their credentials and
+permissions. The token is redacted from all output. Exit status is 0 only
+if every step succeeded.
+""",
     )
     parser.add_argument("url", help="MCP endpoint URL")
     parser.add_argument(
