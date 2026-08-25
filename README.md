@@ -253,9 +253,17 @@ flask user delete alice --yes
 ```bash
 flask server list
 flask server show jenkins                    # non-secret config only
+flask server edit jenkins --label "Jenkins CI" --disabled
 flask server enable jenkins
 flask server disable jenkins
 flask server delete jenkins --yes             # also clears stored secrets
+
+# edit env/key metadata in one command
+flask server edit multiflexi \
+  --set-env MULTIFLEXI_HOST=https://flexibee-dev.spoje.net:5434/api/VitexSoftware/MultiFlexi/1.0.0 \
+  --set-env MULTIFLEXI_USERNAME=admin \
+  --add-secret-key MULTIFLEXI_PASSWORD \
+  --add-required-key MULTIFLEXI_HOST
 ```
 
 **`secret`** — manage a server's credential (secret env var) values:
