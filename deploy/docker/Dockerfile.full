@@ -20,6 +20,7 @@ RUN apt-get update \
         mastodon-mcp-server \
         mcp-email-server \
         mcp-server-datovka \
+        mcp-server-filesystem \
         multiflexi-mcp-server \
         netbox-mcp-server \
         redmine-mcp-server \

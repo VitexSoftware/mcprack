@@ -1087,6 +1087,42 @@ tr.row-warn {
 }
 
 /* ========================================
+   CONFIG FILE PATHS (download/view pages)
+   ======================================== */
+
+.config-paths {
+  margin-top: var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-md);
+  padding: var(--space-sm) var(--space-md);
+  background-color: var(--color-bg-secondary);
+}
+
+.config-paths summary {
+  cursor: pointer;
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+}
+
+.config-paths table {
+  margin: var(--space-sm) 0 var(--space-md) 0;
+}
+
+.config-paths table:last-child {
+  margin-bottom: 0;
+}
+
+.config-paths td {
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.config-paths td:first-child {
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+}
+
+/* ========================================
    BADGES
    ======================================== */
 

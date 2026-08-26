@@ -1,0 +1,36 @@
+{# Expects `client` ('claude' or 'copilot') in context. #}
+{% if client == 'claude' %}
+<details class="config-paths">
+  <summary>📁 {{ _('Where to put this file') }}</summary>
+
+  <p class="text-sm text-muted">{{ _('Claude Desktop app — replace the whole file at:') }}</p>
+  <table>
+    <tbody>
+      <tr><td>{{ _('Linux') }}</td><td><code>~/.config/Claude/claude_desktop_config.json</code></td></tr>
+      <tr><td>{{ _('macOS') }}</td><td><code>~/Library/Application Support/Claude/claude_desktop_config.json</code></td></tr>
+      <tr><td>{{ _('Windows') }}</td><td><code>%APPDATA%\Claude\claude_desktop_config.json</code></td></tr>
+    </tbody>
+  </table>
+
+  <p class="text-sm text-muted">{{ _('Claude Code (the CLI) — this file also holds other settings, so merge the "mcpServers" key into it instead of overwriting it:') }}</p>
+  <table>
+    <tbody>
+      <tr><td>{{ _('Linux / macOS') }}</td><td><code>~/.claude.json</code></td></tr>
+      <tr><td>{{ _('Windows') }}</td><td><code>%USERPROFILE%\.claude.json</code></td></tr>
+    </tbody>
+  </table>
+</details>
+{% elif client == 'copilot' %}
+<details class="config-paths">
+  <summary>📁 {{ _('Where to put this file') }}</summary>
+
+  <p class="text-sm text-muted">{{ _('VS Code (user profile — applies to every workspace). If the file already exists, merge the "servers" key into it instead of overwriting it:') }}</p>
+  <table>
+    <tbody>
+      <tr><td>{{ _('Linux') }}</td><td><code>~/.config/Code/User/mcp.json</code></td></tr>
+      <tr><td>{{ _('macOS') }}</td><td><code>~/Library/Application Support/Code/User/mcp.json</code></td></tr>
+      <tr><td>{{ _('Windows') }}</td><td><code>%APPDATA%\Code\User\mcp.json</code></td></tr>
+    </tbody>
+  </table>
+</details>
+{% endif %}

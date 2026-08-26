@@ -2,6 +2,7 @@ import json
 import http.client
 import socket
 import time
+from urllib.parse import urlsplit
 
 from flask import (
     Blueprint,
@@ -83,7 +84,16 @@ def _jsonrpc_error_response(request_id, message, status=502):
     return Response(payload, status=status, mimetype="application/json")
 
 
-def _forward_to_user_proxy(port, server_name=None):
+def _relay_request(conn, path, extra_headers=None, server_name=None, transport="http"):
+    """Forward the current Flask request onto an already-open http.client
+    connection at `path`, and translate the upstream response (or a
+    connection failure) back into a Flask Response. Shared by both proxy
+    styles below - a per-user spawned stdio backend (always local to this
+    mcprack host, 127.0.0.1:<ephemeral port>) and a fixed network backend
+    (mcp_rack's shared fastmcp proxy - which may run on an entirely
+    different host than mcprack itself - or a genuinely network-native MCP
+    server) - so both get the same timeout, header-stripping, and telemetry
+    handling."""
     body = request.get_data()
     headers = {}
     for key, value in request.headers.items():
@@ -97,14 +107,15 @@ def _forward_to_user_proxy(port, server_name=None):
         }:
             continue
         headers[key] = value
+    if extra_headers:
+        headers.update(extra_headers)
 
     start_time = time.monotonic()
     with telemetry.span(
-        "mcp.server.call", {"server_name": server_name, "transport": "stdio"}
+        "mcp.server.call", {"server_name": server_name, "transport": transport}
     ) as current_span:
-        conn = http.client.HTTPConnection("127.0.0.1", port, timeout=_PROXY_REQUEST_TIMEOUT)
         try:
-            conn.request(request.method, "/mcp", body=body, headers=headers)
+            conn.request(request.method, path, body=body, headers=headers)
             upstream = conn.getresponse()
             payload = upstream.read()
             response = Response(payload, status=upstream.status)
@@ -117,14 +128,14 @@ def _forward_to_user_proxy(port, server_name=None):
 
             result = "success" if upstream.status < 400 else "error"
             telemetry.record_mcp_server_call(
-                server_name, "stdio", result, time.monotonic() - start_time
+                server_name, transport, result, time.monotonic() - start_time
             )
             if current_span is not None:
                 current_span.set_attribute("mcp.result", result)
             return response
         except (socket.timeout, OSError, http.client.HTTPException) as exc:
             telemetry.record_mcp_server_call(
-                server_name, "stdio", "error", time.monotonic() - start_time
+                server_name, transport, "error", time.monotonic() - start_time
             )
             if current_span is not None:
                 current_span.set_attribute("mcp.result", "error")
@@ -134,6 +145,43 @@ def _forward_to_user_proxy(port, server_name=None):
             )
         finally:
             conn.close()
+
+
+def _forward_to_user_proxy(port, server_name=None):
+    conn = http.client.HTTPConnection("127.0.0.1", port, timeout=_PROXY_REQUEST_TIMEOUT)
+    return _relay_request(conn, "/mcp", server_name=server_name, transport="stdio")
+
+
+def _forward_to_backend_url(url, env, server):
+    """Relay to a server that already has a fixed network `url` of its own -
+    either a genuinely network-native MCP server, or one of mcp_rack's
+    shared fastmcp proxies (see spojeitisac/roles/mcp_rack), which is very
+    often NOT on this same host - mcprack only needs network reachability
+    to it, not colocation. Unlike the per-user spawn path above, there's no
+    per-user process to manage: we just open a connection to `url`'s own
+    host:port for each request. Any configured auth header is injected
+    here, server-side, from `env` - never handed to the end user, same
+    rationale as the per-user proxy path above (see
+    _build_client_config_json's docstring)."""
+    parts = urlsplit(url)
+    scheme = parts.scheme or "http"
+    host = parts.hostname
+    port = parts.port or (443 if scheme == "https" else 80)
+    path = parts.path or "/"
+    if parts.query:
+        path = f"{path}?{parts.query}"
+
+    extra_headers = {}
+    header_name = server.auth_header_name
+    auth_key = server.auth_env_key
+    if header_name and auth_key and env.get(auth_key):
+        extra_headers[header_name] = env[auth_key]
+
+    conn_cls = http.client.HTTPSConnection if scheme == "https" else http.client.HTTPConnection
+    conn = conn_cls(host, port, timeout=_PROXY_REQUEST_TIMEOUT)
+    return _relay_request(
+        conn, path, extra_headers=extra_headers, server_name=server.name, transport=server.transport
+    )
 
 
 def _allowed_enabled_server_ids(user_id):
@@ -194,7 +242,7 @@ def user_proxy_mcp(token, server_id):
 
     user = db.get_or_404(User, data.get("u"))
     server = db.get_or_404(McpServer, server_id)
-    if not server.enabled or not server.command or server.url:
+    if not server.enabled or not (server.command or server.url):
         abort(404)
 
     if server.id not in _allowed_enabled_server_ids(user.id):
@@ -220,20 +268,27 @@ def user_proxy_mcp(token, server_id):
             "(Admin → Servers → edit), or set your own override if allowed.",
         )
 
-    try:
-        port = user_proxy.ensure_user_server_proxy(
-            user_id=user.id,
-            server_id=server.id,
-            server_name=server.name,
-            command=server.command,
-            args=server.args,
-            env=env,
-            server=server,
-        )
-    except user_proxy.UserProxyError as exc:
-        return _jsonrpc_error_response(request_id, str(exc))
+    if server.command:
+        try:
+            port = user_proxy.ensure_user_server_proxy(
+                user_id=user.id,
+                server_id=server.id,
+                server_name=server.name,
+                command=server.command,
+                args=server.args,
+                env=env,
+                server=server,
+            )
+        except user_proxy.UserProxyError as exc:
+            return _jsonrpc_error_response(request_id, str(exc))
 
-    return _forward_to_user_proxy(port, server_name=server.name)
+        return _forward_to_user_proxy(port, server_name=server.name)
+
+    # No command to spawn - this server already has a fixed network `url`
+    # (a genuinely network-native MCP server, or one of mcp_rack's shared
+    # fastmcp proxies, possibly on a different host entirely). Relay
+    # straight to it instead of spawning anything.
+    return _forward_to_backend_url(server.url, env, server)
 
 
 # Bearer-token authenticated (the signed token in the URL path), not
@@ -341,13 +396,16 @@ def _build_client_config_json(client, user=None):
     since this function itself must stay presentation-agnostic to be usable
     from both.
 
-    Users always connect remotely: a stdio-implemented server (no network
-    url of its own) is never spawned by the client directly — it always
-    gets a per-user proxy URL instead (see user_proxy.py / user_proxy_mcp
-    below), and its credentials are resolved lazily at the moment that URL
-    is actually first connected to, not here. Only servers with a real
-    network url (already-running, externally reachable services) need their
-    auth header resolved eagerly, right here, to embed in the config.
+    Users always connect through mcprack itself, never straight to a
+    backend: every selected server — whether it's a stdio tool spawned
+    per-user, a genuinely network-native MCP server, or one of mcp_rack's
+    shared fastmcp proxies (which may live on an entirely different host
+    than mcprack, or behind a `127.0.0.1`/private address mcprack itself
+    can reach but the end user's own machine cannot) — gets a per-user
+    `/proxy/mcp/<token>/<id>` relay URL instead of its raw backend address.
+    Credentials are resolved lazily at the moment that URL is actually
+    first connected to (see user_proxy_mcp), never embedded in the
+    downloaded config.
     """
     if user is None:
         user = current_user
@@ -370,58 +428,31 @@ def _build_client_config_json(client, user=None):
         return None, filename, "You haven't selected any MCP servers yet."
 
     entries = []
-    try:
-        for server in selected:
-            raw_url = (server.url or "").strip() if server.url else ""
-            clean_url = None if raw_url.lower() in {"", "none", "null"} else raw_url
-
-            if clean_url:
-                env = secret_store.resolve_server_env(server, user=user)
-            else:
-                env = {}
-
-            entries.append(
-                {
-                    "name": server.name,
-                    "transport": server.transport,
-                    "command": server.command,
-                    "args": server.args,
-                    "url": clean_url,
-                    "auth_header_name": server.auth_header_name,
-                    "auth_env_key": server.auth_env_key,
-                    "env": env,
-                }
-            )
-    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return (
-            None,
-            filename,
-            f"Could not reach Vaultwarden to resolve credentials: {exc} "
-            "(ask an admin to check Admin → Vaultwarden diagnostics).",
+    for server in selected:
+        # Never log this URL: the signed token embedded in it is a bearer
+        # credential for user_proxy_mcp (see _make_proxy_token /
+        # _parse_proxy_token above) — writing it to a log file or stderr
+        # would leak a usable access credential outside the config the
+        # user actually asked for.
+        token = _make_proxy_token(user.id, server.id)
+        relay_url = url_for(
+            "catalog.user_proxy_mcp",
+            token=token,
+            server_id=server.id,
+            _external=True,
         )
-
-    for i, server in enumerate(selected):
-        if not entries[i].get("url") and server.command:
-            token = _make_proxy_token(user.id, server.id)
-            relay_url = url_for(
-                "catalog.user_proxy_mcp",
-                token=token,
-                server_id=server.id,
-                _external=True,
-            )
-            # DEBUG: Log what Flask thinks to stderr file
-            import sys
-            debug_msg = (
-                f"DEBUG HEADERS: scheme={request.scheme}, is_secure={request.is_secure}, "
-                f"X-Forwarded-Proto={request.headers.get('X-Forwarded-Proto', 'NOT SET')}, "
-                f"relay_url={relay_url}\n"
-            )
-            sys.stderr.write(debug_msg)
-            sys.stderr.flush()
-            with open('/tmp/mcprack-debug.log', 'a') as f:
-                f.write(debug_msg)
-            entries[i]["url"] = relay_url
-            entries[i]["transport"] = "http"
+        entries.append(
+            {
+                "name": server.name,
+                "transport": "http",
+                "command": server.command,
+                "args": server.args,
+                "url": relay_url,
+                "auth_header_name": server.auth_header_name,
+                "auth_env_key": server.auth_env_key,
+                "env": {},
+            }
+        )
 
     payload = render_fn(entries)
     return json.dumps(payload, indent=2), filename, None

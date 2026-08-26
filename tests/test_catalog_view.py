@@ -48,20 +48,25 @@ def _add_enabled_server(app, name="icon-test"):
 
 
 def test_view_renders_textarea_with_config_json(app, client):
+    """Every server — including one with a real network `url` of its own,
+    like Jenkins here — is rendered as a /proxy/mcp/ relay URL, never its
+    raw backend address or an embedded credential. See
+    test_view_always_uses_user_proxy_urls_for_stdio_servers for the stdio
+    equivalent."""
     user_id = _login(client)
     _add_selected_server(app, user_id)
 
-    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("mcprack.catalog.vaultwarden.lock"), \
-         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
-        resp = client.get("/view/claude")
+    # No Vaultwarden patches needed: config generation no longer resolves
+    # credentials eagerly (see _build_client_config_json).
+    resp = client.get("/view/claude")
 
     assert resp.status_code == 200
     body = resp.data.decode()
     assert "<textarea" in body
     assert "mcpServers" in body
     assert "jenkins" in body
-    assert "secret-value" in body
+    assert "/proxy/mcp/" in body
+    assert "secret-value" not in body
     assert "Copy to clipboard" in body
 
 
@@ -74,6 +79,10 @@ def test_view_redirects_with_flash_when_nothing_selected(app, client):
 
 
 def test_view_survives_vaultwarden_outage(app, client):
+    """Config generation never touches Vaultwarden at all any more (every
+    server renders as a /proxy/mcp/ relay URL; credentials are resolved
+    lazily when that URL is first connected to), so a Vaultwarden outage
+    must not affect /view."""
     from mcprack import vaultwarden
 
     user_id = _login(client)
@@ -83,10 +92,11 @@ def test_view_survives_vaultwarden_outage(app, client):
         resp = client.get("/view/claude", follow_redirects=True)
 
     assert resp.status_code == 200
-    assert b"Could not reach Vaultwarden" in resp.data
+    assert b"/proxy/mcp/" in resp.data
 
 
 def test_download_survives_vaultwarden_outage(app, client):
+    """Same as test_view_survives_vaultwarden_outage but for /download."""
     from mcprack import vaultwarden
 
     user_id = _login(client)
@@ -96,7 +106,29 @@ def test_download_survives_vaultwarden_outage(app, client):
         resp = client.get("/download/claude", follow_redirects=True)
 
     assert resp.status_code == 200
-    assert b"Could not reach Vaultwarden" in resp.data
+    assert b"/proxy/mcp/" in resp.data
+
+
+def test_proxy_connect_surfaces_vaultwarden_outage(app, client):
+    """The Vaultwarden-outage error now surfaces at proxy-connect time
+    instead of at config-generation time — this is the equivalent of the
+    old test_view_survives_vaultwarden_outage / test_download_..., moved to
+    where the failure actually happens now."""
+    from mcprack import vaultwarden
+
+    user_id = _login(client)
+    server_id = _add_selected_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    with patch("mcprack.catalog.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    assert resp.status_code == 502
+    payload = json.loads(resp.data)
+    assert "Could not resolve credentials" in payload["error"]["message"]
 
 
 def test_view_unknown_client_404s(app, client):
@@ -188,6 +220,70 @@ def test_server_icon_serves_appstream_file_when_available(app, client):
 
     assert resp.status_code == 200
     assert resp.mimetype in ("image/svg+xml", "image/png", "image/x-icon", "image/x-xpixmap")
+
+
+def test_user_proxy_route_relays_to_backend_url_for_network_server(app, client):
+    """A server registered with a fixed network `url` (e.g. mcp_rack's
+    shared fastmcp proxy, possibly on a different host than mcprack) is
+    relayed to directly by user_proxy_mcp - no per-user process spawn."""
+    from mcprack import catalog
+
+    user_id = _login(client)
+    with app.app_context():
+        server = McpServer(
+            name="mcp-rack-abraflexi",
+            label="AbraFlexi via mcp_rack",
+            transport="http",
+            url="http://10.11.25.175:3108/mcp",
+            enabled=True,
+        )
+        db.session.add(server)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=server.id))
+        db.session.commit()
+        server_id = server.id
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={}), \
+         patch.object(catalog, "_forward_to_backend_url", return_value=app.response_class("ok", status=200)) as mock_forward:
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    assert resp.status_code == 200
+    assert mock_forward.call_count == 1
+    called_url = mock_forward.call_args[0][0]
+    assert called_url == "http://10.11.25.175:3108/mcp"
+
+
+def test_forward_to_backend_url_connects_to_remote_host(app):
+    """_forward_to_backend_url must not assume the backend is on
+    127.0.0.1 - mcp_rack proxies (and genuinely network-native MCP
+    servers) are very often registered on a different host than mcprack
+    itself."""
+    from mcprack import catalog
+    from mcprack.models import McpServer
+
+    server = McpServer(
+        name="remote-svc", label="Remote", transport="http",
+        url="http://10.11.25.175:3108/mcp", enabled=True,
+    )
+
+    with app.test_request_context("/", method="POST", data=b"{}"), \
+         patch("mcprack.catalog.http.client.HTTPConnection") as mock_conn_cls:
+        mock_conn = mock_conn_cls.return_value
+        mock_conn.getresponse.return_value.status = 200
+        mock_conn.getresponse.return_value.read.return_value = b"ok"
+        mock_conn.getresponse.return_value.getheaders.return_value = []
+
+        catalog._forward_to_backend_url("http://10.11.25.175:3108/mcp", {}, server)
+
+    mock_conn_cls.assert_called_once_with("10.11.25.175", 3108, timeout=catalog._PROXY_REQUEST_TIMEOUT)
+    mock_conn.request.assert_called_once()
+    assert mock_conn.request.call_args[0][1] == "/mcp"
 
 
 def test_user_proxy_route_requires_valid_token_and_selection(app, client):

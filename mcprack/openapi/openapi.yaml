@@ -3,9 +3,12 @@ info:
   title: mcprack API
   description: >
     Self-service MCP (Model Context Protocol) server catalog and client
-    config generator. This API lets an admin manage the server catalog and
-    users, and lets any user manage their own server selections, personal
-    credential overrides, API tokens, and generated client configs.
+    config generator. This API lets an admin manage the server catalog,
+    users, configuration templates, and any user's server selections and
+    credentials, and lets any user manage their own server selections,
+    personal credential overrides, API tokens, and generated client
+    configs. Every admin-scoped write mirrors the equivalent web UI/CLI
+    action and is fully scriptable for third-party integrations.
   version: "0.0.0"
   contact:
     name: VitexSoftware
@@ -26,12 +29,17 @@ tags:
   - name: config
   - name: admin-servers
   - name: admin-users
+  - name: admin-selections
+  - name: admin-overrides
+  - name: admin-config
+  - name: admin-templates
   - name: audit-log
   - name: meta
 
 paths:
   /me:
     get:
+      operationId: getMe
       tags: [profile]
       summary: Current user's profile
       responses:
@@ -49,6 +57,7 @@ paths:
 
   /tokens:
     get:
+      operationId: listTokens
       tags: [tokens]
       summary: List the current user's API tokens
       responses:
@@ -66,6 +75,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     post:
+      operationId: createToken
       tags: [tokens]
       summary: Create a new API token for the current user
       description: >
@@ -105,6 +115,7 @@ paths:
 
   /tokens/{tokenId}:
     delete:
+      operationId: deleteToken
       tags: [tokens]
       summary: Revoke one of the current user's API tokens
       parameters:
@@ -119,6 +130,7 @@ paths:
 
   /servers:
     get:
+      operationId: listServers
       tags: [servers]
       summary: List servers visible to the current user
       description: Enabled servers the current user is permitted to use.
@@ -139,6 +151,7 @@ paths:
 
   /me/selections:
     get:
+      operationId: listMySelections
       tags: [selections]
       summary: List the current user's selected servers
       responses:
@@ -156,6 +169,7 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
     put:
+      operationId: setMySelections
       tags: [selections]
       summary: Replace the current user's selected servers
       requestBody:
@@ -163,13 +177,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [server_ids]
-              properties:
-                server_ids:
-                  type: array
-                  items:
-                    type: integer
+              $ref: "#/components/schemas/SelectionSet"
       responses:
         "200":
           description: OK
@@ -179,12 +187,7 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      server_ids:
-                        type: array
-                        items:
-                          type: integer
+                    $ref: "#/components/schemas/SelectionSetResult"
         "400":
           $ref: "#/components/responses/BadRequest"
         "401":
@@ -192,16 +195,12 @@ paths:
 
   /me/overrides/{serverId}:
     get:
+      operationId: getMyOverride
       tags: [overrides]
       summary: Get the current user's override status for a server
       parameters:
         - $ref: "#/components/parameters/ServerId"
-        - name: reveal
-          in: query
-          description: Set to "1" to include decrypted override values.
-          schema:
-            type: string
-            enum: ["1"]
+        - $ref: "#/components/parameters/Reveal"
       responses:
         "200":
           description: OK
@@ -221,6 +220,7 @@ paths:
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
     put:
+      operationId: setMyOverride
       tags: [overrides]
       summary: Set the current user's credential override for a server
       parameters:
@@ -230,13 +230,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [env]
-              properties:
-                env:
-                  type: object
-                  additionalProperties:
-                    type: string
+              $ref: "#/components/schemas/OverrideSet"
       responses:
         "200":
           description: OK
@@ -249,6 +243,7 @@ paths:
         "502":
           $ref: "#/components/responses/UpstreamUnavailable"
     delete:
+      operationId: deleteMyOverride
       tags: [overrides]
       summary: Reset a server override back to its default credentials
       parameters:
@@ -265,15 +260,11 @@ paths:
 
   /me/config/{client}:
     get:
+      operationId: getMyConfig
       tags: [config]
       summary: Generate the current user's client config
       parameters:
-        - name: client
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [claude, copilot]
+        - $ref: "#/components/parameters/Client"
       responses:
         "200":
           description: OK
@@ -283,12 +274,7 @@ paths:
                 type: object
                 properties:
                   data:
-                    type: object
-                    properties:
-                      filename:
-                        type: string
-                      config:
-                        type: object
+                    $ref: "#/components/schemas/GeneratedConfig"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "404":
@@ -302,6 +288,7 @@ paths:
 
   /admin/servers:
     get:
+      operationId: listAdminServers
       tags: [admin-servers]
       summary: List all registered servers (admin)
       parameters:
@@ -332,6 +319,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
     post:
+      operationId: createAdminServer
       tags: [admin-servers]
       summary: Register a new server (admin)
       requestBody:
@@ -361,6 +349,7 @@ paths:
 
   /admin/servers/{serverId}:
     get:
+      operationId: getAdminServer
       tags: [admin-servers]
       summary: Get a server's full detail (admin)
       parameters:
@@ -388,6 +377,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     put:
+      operationId: updateAdminServer
       tags: [admin-servers]
       summary: Update a server (admin, partial update)
       parameters:
@@ -415,6 +405,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      operationId: deleteAdminServer
       tags: [admin-servers]
       summary: Delete a server (admin)
       parameters:
@@ -431,6 +422,7 @@ paths:
 
   /admin/users:
     get:
+      operationId: listAdminUsers
       tags: [admin-users]
       summary: List all users (admin)
       parameters:
@@ -455,6 +447,7 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
     post:
+      operationId: createAdminUser
       tags: [admin-users]
       summary: Create a local user (admin)
       requestBody:
@@ -484,6 +477,7 @@ paths:
 
   /admin/users/{userId}:
     get:
+      operationId: getAdminUser
       tags: [admin-users]
       summary: Get a user's detail + server permissions (admin)
       parameters:
@@ -505,6 +499,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     put:
+      operationId: updateAdminUser
       tags: [admin-users]
       summary: Update a user's flags, password, or server permissions (admin)
       parameters:
@@ -534,6 +529,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
     delete:
+      operationId: deleteAdminUser
       tags: [admin-users]
       summary: Delete a user (admin)
       parameters:
@@ -554,8 +550,353 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /admin/users/{userId}/selections:
+    get:
+      operationId: listAdminUserSelections
+      tags: [admin-selections]
+      summary: List a user's selected servers (admin)
+      description: Same shape as /me/selections, but for any user.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Selection"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: setAdminUserSelections
+      tags: [admin-selections]
+      summary: Replace a user's selected servers (admin)
+      description: >
+        Which of the user's *allowed* servers should actually be included
+        in their generated config. Restricted server ids in the request
+        are silently dropped, exactly like the web UI's Included-in-config
+        checkboxes.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SelectionSet"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/SelectionSetResult"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/users/{userId}/overrides/{serverId}:
+    get:
+      operationId: getAdminUserOverride
+      tags: [admin-overrides]
+      summary: Get a user's override status for a server (admin)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ServerId"
+        - $ref: "#/components/parameters/Reveal"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/Override"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/UpstreamUnavailable"
+    put:
+      operationId: setAdminUserOverride
+      tags: [admin-overrides]
+      summary: Set a user's individual credential override for a server (admin)
+      description: >
+        Unlike PUT /me/overrides/{serverId}, this always succeeds
+        regardless of the server's allow_user_override flag or the user's
+        server ACL — an admin preparing a non-technical user's config from
+        scratch can set this even when the user could never do it
+        themselves.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ServerId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OverrideSet"
+      responses:
+        "200":
+          description: OK
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/UpstreamUnavailable"
+    delete:
+      operationId: deleteAdminUserOverride
+      tags: [admin-overrides]
+      summary: Reset a user's server override to its default credentials (admin)
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "204":
+          description: Reset
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502":
+          $ref: "#/components/responses/UpstreamUnavailable"
+
+  /admin/users/{userId}/config/{client}:
+    get:
+      operationId: getAdminUserConfig
+      tags: [admin-config]
+      summary: Generate a user's client config (admin)
+      description: >
+        Same shape as GET /me/config/{client}, generated on behalf of any
+        user — for handing a finished config to a user who never logs in
+        themselves.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/Client"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/GeneratedConfig"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: >
+            Unknown client, unknown user, or nothing to generate (e.g. no
+            servers selected, or credentials unavailable).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /admin/users/{userId}/apply-template:
+    post:
+      operationId: applyAdminTemplateToUser
+      tags: [admin-templates]
+      summary: Apply a configuration template to a user (admin)
+      description: >
+        Replaces the user's server ACL and selection with the template's.
+        Never touches the user's individual credential overrides — those
+        survive untouched and can still be fine-tuned afterwards.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [template_id]
+              properties:
+                template_id:
+                  type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /admin/templates:
+    get:
+      operationId: listAdminTemplates
+      tags: [admin-templates]
+      summary: List configuration templates (admin)
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Template"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      operationId: createAdminTemplate
+      tags: [admin-templates]
+      summary: Create a configuration template (admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TemplateDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /admin/templates/{templateId}:
+    get:
+      operationId: getAdminTemplate
+      tags: [admin-templates]
+      summary: Get a template's full detail (admin)
+      parameters:
+        - $ref: "#/components/parameters/TemplateId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TemplateDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      operationId: updateAdminTemplate
+      tags: [admin-templates]
+      summary: Update a template (admin)
+      description: >
+        label/description/servers are replaced wholesale when provided;
+        omitted fields keep their current value. Never affects users the
+        template was previously applied to.
+      parameters:
+        - $ref: "#/components/parameters/TemplateId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TemplateUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/TemplateDetail"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      operationId: deleteAdminTemplate
+      tags: [admin-templates]
+      summary: Delete a template (admin)
+      description: Users the template was previously applied to are unaffected.
+      parameters:
+        - $ref: "#/components/parameters/TemplateId"
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /audit-log:
     get:
+      operationId: listAuditLog
       tags: [audit-log]
       summary: List audit trail entries (admin)
       parameters:
@@ -605,6 +946,7 @@ paths:
 
   /openapi.json:
     get:
+      operationId: getOpenApiSpec
       tags: [meta]
       summary: This OpenAPI 3 document
       security: []
@@ -643,6 +985,26 @@ components:
       required: true
       schema:
         type: integer
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    Client:
+      name: client
+      in: path
+      required: true
+      schema:
+        type: string
+        enum: [claude, copilot]
+    Reveal:
+      name: reveal
+      in: query
+      description: Set to "1" to include decrypted override values.
+      schema:
+        type: string
+        enum: ["1"]
     Page:
       name: page
       in: query
@@ -769,6 +1131,13 @@ components:
         created_at:
           type: string
           format: date-time
+        config_template_id:
+          type: integer
+          nullable: true
+          description: >
+            The ConfigTemplate (if any) this user was last based on. Purely
+            informational — not a live link; editing or deleting that
+            template later never retroactively changes this user.
 
     UserDetail:
       allOf:
@@ -966,6 +1335,27 @@ components:
           type: string
           format: date-time
 
+    SelectionSet:
+      type: object
+      required: [server_ids]
+      properties:
+        server_ids:
+          type: array
+          items:
+            type: integer
+          description: >
+            Replaces the entire selection. Ids the user/target isn't
+            allowed to use are silently dropped.
+
+    SelectionSetResult:
+      type: object
+      properties:
+        server_ids:
+          type: array
+          items:
+            type: integer
+          description: The selection actually saved, after dropping disallowed ids.
+
     Override:
       type: object
       properties:
@@ -983,6 +1373,105 @@ components:
           description: Present when the override exists and ?reveal=1 was passed.
           additionalProperties:
             type: string
+
+    OverrideSet:
+      type: object
+      required: [env]
+      properties:
+        env:
+          type: object
+          additionalProperties:
+            type: string
+
+    GeneratedConfig:
+      type: object
+      properties:
+        filename:
+          type: string
+          example: claude_desktop_config.json
+        config:
+          type: object
+          description: The generated client config document itself (e.g. an mcpServers/servers map).
+
+    Template:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: Stable identifier, also used by the `mcprack template` CLI.
+        label:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TemplateServerEntry:
+      type: object
+      required: [server_id]
+      properties:
+        server_id:
+          type: integer
+        is_allowed:
+          type: boolean
+          default: true
+          description: Whether users given this template may use this server at all.
+        is_selected:
+          type: boolean
+          default: false
+          description: >
+            Whether this server should be pre-selected (included in the
+            generated config) for users given this template. Forced false
+            whenever is_allowed is false.
+
+    TemplateDetail:
+      allOf:
+        - $ref: "#/components/schemas/Template"
+        - type: object
+          properties:
+            servers:
+              type: array
+              items:
+                $ref: "#/components/schemas/TemplateServerEntry"
+
+    TemplateCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+          description: Defaults to name if omitted.
+        description:
+          type: string
+        servers:
+          type: array
+          items:
+            $ref: "#/components/schemas/TemplateServerEntry"
+
+    TemplateUpdate:
+      type: object
+      properties:
+        label:
+          type: string
+        description:
+          type: string
+        servers:
+          type: array
+          description: >
+            When present, replaces the template's entire server list
+            (omitted servers become "not configured", i.e. behave as
+            allowed-but-not-pre-selected if later referenced again).
+          items:
+            $ref: "#/components/schemas/TemplateServerEntry"
 
     AuditLogEntry:
       type: object

@@ -37,6 +37,16 @@ class User(UserMixin, db.Model):
     is_active_flag = db.Column("is_active", db.Boolean, nullable=False, default=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
+    # Which ConfigTemplate (if any) was last applied to this user — purely
+    # informational bookkeeping so the admin UI/CLI can show "based on
+    # template X". Applying a template copies its ACL/selection rows onto
+    # this user; it is never re-applied automatically, so this FK is not a
+    # live link — editing a template later has no retroactive effect on
+    # users it was previously applied to.
+    config_template_id = db.Column(
+        db.Integer, db.ForeignKey("config_templates.id", ondelete="SET NULL"), nullable=True
+    )
+
     selections = db.relationship(
         "UserServerSelection", back_populates="user", cascade="all, delete-orphan"
     )
@@ -46,6 +56,7 @@ class User(UserMixin, db.Model):
     permissions = db.relationship(
         "UserServerPermission", back_populates="user", cascade="all, delete-orphan"
     )
+    config_template = db.relationship("ConfigTemplate", back_populates="users")
 
     @property
     def is_active(self):
@@ -335,3 +346,45 @@ class UserServerPermission(db.Model):
 
     user = db.relationship("User", back_populates="permissions")
     server = db.relationship("McpServer", back_populates="permissions")
+
+
+class ConfigTemplate(db.Model):
+    """A reusable, admin-defined preset of server ACL + selection state,
+    meant to be applied to one or more non-technical users so the admin
+    doesn't have to configure each of them by hand from scratch. Templates
+    never carry secret values — only which servers are allowed/denied and
+    which of the allowed ones are pre-selected for the generated config;
+    per-user credentials always go through secret_store/UserServerOverride
+    exactly as if the admin had set them by hand after applying the
+    template."""
+
+    __tablename__ = "config_templates"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), unique=True, nullable=False, index=True)
+    label = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
+    updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+    entries = db.relationship(
+        "ConfigTemplateServer", back_populates="template", cascade="all, delete-orphan"
+    )
+    users = db.relationship("User", back_populates="config_template")
+
+
+class ConfigTemplateServer(db.Model):
+    """One row per server referenced by a ConfigTemplate: whether the
+    server is allowed at all for users given this template, and — only
+    meaningful when allowed — whether it should also be pre-selected
+    (included in the generated config) for them."""
+
+    __tablename__ = "config_template_servers"
+
+    template_id = db.Column(db.Integer, db.ForeignKey("config_templates.id"), primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
+    is_allowed = db.Column(db.Boolean, nullable=False, default=True)
+    is_selected = db.Column(db.Boolean, nullable=False, default=False)
+
+    template = db.relationship("ConfigTemplate", back_populates="entries")
+    server = db.relationship("McpServer")

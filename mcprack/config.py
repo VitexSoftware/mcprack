@@ -53,6 +53,14 @@ class Config:
     )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
+    # Base URL mcprack is actually reachable at (e.g. "https://mcprack.example.com"),
+    # used only by `mcprack user config show/download` (see cli.py) to build
+    # proxy URLs for stdio-implemented servers when generating a config outside
+    # of a real web request — a normal browser download always has a real
+    # request to infer this from, a CLI invocation does not. Leave empty if
+    # you only ever generate configs for such servers from the web UI.
+    PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL", "")
+
     LDAP_ENABLED = os.environ.get("LDAP_ENABLED", "false").lower() in ("true", "1", "yes")
     LDAP_SERVER = os.environ.get("LDAP_SERVER", "ldap://10.11.25.3:389")
     LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN", "dc=spojent,dc=cz")

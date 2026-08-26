@@ -16,7 +16,16 @@ from . import vaultwarden
 from .auth import admin_required
 from .extensions import db
 from flask_login import current_user
-from .models import AuditLogEntry, McpServer, User, UserServerPermission, UserServerSelection
+from .models import (
+    AuditLogEntry,
+    ConfigTemplate,
+    ConfigTemplateServer,
+    McpServer,
+    User,
+    UserServerOverride,
+    UserServerPermission,
+    UserServerSelection,
+)
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 logger = logging.getLogger(__name__)
@@ -955,6 +964,15 @@ def user_new():
     return render_template("admin/user_form.html", user=None)
 
 
+def get_permission_map(user):
+    """user_id's explicit per-server ACL as {server_id: is_allowed}. Shared
+    by the user_edit view and the `mcprack user server allow/deny` CLI
+    commands so both mutate a single-server entry without clobbering the
+    rest of the user's ACL."""
+    rows = UserServerPermission.query.filter_by(user_id=user.id).all()
+    return {row.server_id: bool(row.is_allowed) for row in rows}
+
+
 def set_user_server_permissions(user, available_servers, permission_overrides):
     """Replace user's explicit per-server ACL for available_servers.
     permission_overrides maps server_id -> is_allowed (bool); servers not
@@ -971,13 +989,32 @@ def set_user_server_permissions(user, available_servers, permission_overrides):
         )
 
 
+def apply_template_to_user(user, template):
+    """Replace user's server ACL + selection with what `template` defines.
+    Never touches UserServerOverride rows — any per-user credentials the
+    admin already set survive template application untouched, and can
+    still be edited/reset afterwards. Caller commits. Shared by the
+    Admin → Users "Apply template" action and the `mcprack template apply`
+    CLI command."""
+    available_servers = McpServer.query.filter_by(enabled=True).all()
+    entries = {e.server_id: e for e in template.entries}
+
+    permission_overrides = {server_id: e.is_allowed for server_id, e in entries.items()}
+    set_user_server_permissions(user, available_servers, permission_overrides)
+
+    selected_ids = {
+        server_id for server_id, e in entries.items() if e.is_allowed and e.is_selected
+    }
+    catalog.set_user_selection(user.id, selected_ids)
+    user.config_template_id = template.id
+
+
 @bp.route("/users/<int:user_id>/edit", methods=["GET", "POST"])
 @admin_required
 def user_edit(user_id):
     user = db.get_or_404(User, user_id)
     available_servers = McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
-    permission_rows = UserServerPermission.query.filter_by(user_id=user.id).all()
-    permission_map = {row.server_id: bool(row.is_allowed) for row in permission_rows}
+    permission_map = get_permission_map(user)
 
     if request.method == "POST":
         user.is_admin = request.form.get("is_admin") == "on"
@@ -993,6 +1030,16 @@ def user_edit(user_id):
         }
         set_user_server_permissions(user, available_servers, permission_overrides)
 
+        # Which servers should actually be included in this user's
+        # generated config — catalog.set_user_selection restricts this to
+        # servers allowed by the ACL just written above, so a
+        # simultaneously-denied-and-checked server is silently dropped
+        # rather than saved inconsistently.
+        submitted_selected_ids = {
+            int(sid) for sid in request.form.getlist("selected_server_id")
+        }
+        catalog.set_user_selection(user.id, submitted_selected_ids)
+
         db.session.commit()
         audit.log_audit_event(
             "admin_change",
@@ -1003,13 +1050,238 @@ def user_edit(user_id):
         flash(f"User '{user.username}' updated.", "success")
         return redirect(url_for("admin.users_list"))
 
+    selected_ids = {
+        row.server_id for row in UserServerSelection.query.filter_by(user_id=user.id).all()
+    }
+    override_ids = {
+        row.server_id for row in UserServerOverride.query.filter_by(user_id=user.id).all()
+    }
+    templates = ConfigTemplate.query.order_by(ConfigTemplate.name).all()
+
     return render_template(
         "admin/user_form.html",
         user=user,
         available_servers=available_servers,
         permission_map=permission_map,
+        selected_ids=selected_ids,
+        override_ids=override_ids,
+        templates=templates,
         clients=list(catalog.RENDERERS.keys()),
     )
+
+
+@bp.route("/users/<int:user_id>/apply-template", methods=["POST"])
+@admin_required
+def user_apply_template(user_id):
+    user = db.get_or_404(User, user_id)
+    template_id = request.form.get("template_id", type=int)
+    template = db.get_or_404(ConfigTemplate, template_id) if template_id else None
+    if template is None:
+        flash("Choose a template to apply first.", "error")
+        return redirect(url_for("admin.user_edit", user_id=user_id))
+
+    apply_template_to_user(user, template)
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        error_message=f"template '{template.name}' applied to user '{user.username}'",
+    )
+    flash(f"Applied template '{template.label}' to '{user.username}'.", "success")
+    return redirect(url_for("admin.user_edit", user_id=user_id))
+
+
+@bp.route("/users/<int:user_id>/override/<int:server_id>", methods=["GET", "POST"])
+@admin_required
+def user_override(user_id, server_id):
+    """Admin-facing equivalent of catalog.override: set/reset this user's
+    personal credentials for one server. Unlike the self-service version,
+    this works even when server.allow_user_override is False — an admin
+    preparing a non-technical user's config from scratch must be able to
+    set individual values regardless of whether that user could ever do it
+    themselves."""
+    target_user = db.get_or_404(User, user_id)
+    server = db.get_or_404(McpServer, server_id)
+
+    override_row = UserServerOverride.query.filter_by(
+        user_id=target_user.id, server_id=server.id
+    ).first()
+
+    if request.method == "POST":
+        if request.form.get("action") == "reset":
+            try:
+                secret_store.delete_user_override_secrets(server, target_user)
+            except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+                flash(f"Could not reach Vaultwarden: {exc}", "error")
+                return redirect(url_for("admin.user_edit", user_id=user_id))
+            db.session.commit()
+            audit.log_audit_event(
+                "admin_change",
+                "success",
+                user=current_user,
+                server=server,
+                error_message=f"reverted '{target_user.username}' override to default",
+            )
+            flash(f"Reverted '{target_user.username}' to the default credentials for '{server.label}'.", "success")
+            return redirect(url_for("admin.user_edit", user_id=user_id))
+
+        values = {}
+        for line in request.form.get("env_text", "").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            if key:
+                values[key] = val.strip()
+
+        try:
+            secret_store.save_user_override_secrets(server, target_user, values)
+        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+            flash(f"Could not save credentials: {exc}", "error")
+            return redirect(url_for("admin.user_edit", user_id=user_id))
+
+        db.session.commit()
+        audit.log_audit_event(
+            "admin_change",
+            "success",
+            user=current_user,
+            server=server,
+            error_message=f"set individual credentials for '{target_user.username}'",
+        )
+        flash(f"Saved individual credentials for '{target_user.username}' on '{server.label}'.", "success")
+        return redirect(url_for("admin.user_edit", user_id=user_id))
+
+    env_text = ""
+    if override_row:
+        try:
+            values = secret_store.load_user_override_secrets(server, target_user)
+        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+            flash(f"Could not reach Vaultwarden to load current values: {exc}", "error")
+            values = {}
+        env_text = "\n".join(f"{k}={v}" for k, v in values.items())
+
+    return render_template(
+        "admin/user_override_form.html",
+        target_user=target_user,
+        server=server,
+        env_text=env_text,
+        has_override=bool(override_row),
+    )
+
+
+@bp.route("/templates")
+@admin_required
+def templates_list():
+    templates = ConfigTemplate.query.order_by(ConfigTemplate.name).all()
+    return render_template("admin/templates_list.html", templates=templates)
+
+
+def set_template_servers(template, entries):
+    """Replace template's full server list. `entries` is an iterable of
+    dicts/mappings with at least 'server_id', and optionally 'is_allowed'
+    (default True) and 'is_selected' (default False, forced False whenever
+    is_allowed is False). Shared by the admin web form and the JSON API's
+    template create/update endpoints so both stay consistent. Caller
+    commits. Raises KeyError if an entry is missing 'server_id'."""
+    ConfigTemplateServer.query.filter_by(template_id=template.id).delete()
+    for entry in entries:
+        server_id = entry["server_id"]
+        is_allowed = bool(entry.get("is_allowed", True))
+        is_selected = is_allowed and bool(entry.get("is_selected", False))
+        db.session.add(
+            ConfigTemplateServer(
+                template_id=template.id,
+                server_id=server_id,
+                is_allowed=is_allowed,
+                is_selected=is_selected,
+            )
+        )
+
+
+def _apply_template_form(template, form, available_servers):
+    """HTML form entry point: builds a plain entries list from the
+    Werkzeug form and delegates to set_template_servers."""
+    template.label = form.get("label") or template.name
+    template.description = form.get("description", "") or ""
+
+    entries = [
+        {
+            "server_id": server.id,
+            "is_allowed": form.get(f"template_allow_{server.id}") is not None,
+            "is_selected": form.get(f"template_select_{server.id}") is not None,
+        }
+        for server in available_servers
+    ]
+    set_template_servers(template, entries)
+
+
+@bp.route("/templates/new", methods=["GET", "POST"])
+@admin_required
+def template_new():
+    available_servers = McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        if not name:
+            flash("Template name is required.", "error")
+            return render_template("admin/template_form.html", template=None, available_servers=available_servers, entry_map={})
+        if ConfigTemplate.query.filter_by(name=name).first():
+            flash(f"A template named '{name}' already exists.", "error")
+            return render_template("admin/template_form.html", template=None, available_servers=available_servers, entry_map={})
+
+        template = ConfigTemplate(name=name, label=request.form.get("label") or name)
+        db.session.add(template)
+        db.session.flush()
+        _apply_template_form(template, request.form, available_servers)
+        db.session.commit()
+        audit.log_audit_event(
+            "admin_change", "success", user=current_user, error_message=f"template '{name}' created"
+        )
+        flash(f"Template '{template.label}' created.", "success")
+        return redirect(url_for("admin.templates_list"))
+
+    return render_template(
+        "admin/template_form.html", template=None, available_servers=available_servers, entry_map={}
+    )
+
+
+@bp.route("/templates/<int:template_id>/edit", methods=["GET", "POST"])
+@admin_required
+def template_edit(template_id):
+    template = db.get_or_404(ConfigTemplate, template_id)
+    available_servers = McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
+
+    if request.method == "POST":
+        _apply_template_form(template, request.form, available_servers)
+        db.session.commit()
+        audit.log_audit_event(
+            "admin_change", "success", user=current_user, error_message=f"template '{template.name}' updated"
+        )
+        flash(f"Template '{template.label}' updated.", "success")
+        return redirect(url_for("admin.templates_list"))
+
+    entry_map = {e.server_id: e for e in template.entries}
+    return render_template(
+        "admin/template_form.html",
+        template=template,
+        available_servers=available_servers,
+        entry_map=entry_map,
+    )
+
+
+@bp.route("/templates/<int:template_id>/delete", methods=["POST"])
+@admin_required
+def template_delete(template_id):
+    template = db.get_or_404(ConfigTemplate, template_id)
+    name = template.name
+    db.session.delete(template)
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"template '{name}' deleted"
+    )
+    flash(f"Template '{name}' deleted.", "success")
+    return redirect(url_for("admin.templates_list"))
 
 
 @bp.route("/users/<int:user_id>/config/<client>")

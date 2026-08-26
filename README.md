@@ -59,6 +59,12 @@ mcprack provides:
 
 Credentials are never exposed to the user or stored insecurely — they come from Vaultwarden at runtime.
 
+**Non-technical users don't have to do any of this themselves.** An admin
+can configure a user's entire server access, config selection, and
+individual credentials on their behalf — from the web UI or scripted via
+the CLI — so the user never has to log in or make a single choice. See
+[`doc/ADMIN-USER-CONFIG.md`](doc/ADMIN-USER-CONFIG.md).
+
 ---
 
 ## Authentication
@@ -280,6 +286,13 @@ Every command and option has `--help` (e.g. `mcprack user create --help`),
 generated automatically, so it's not duplicated here in full — on a
 Debian install, `man mcprack` also covers the full command reference.
 
+**`user server`**, **`user override`**, **`user config`**, and
+**`template`** — let an admin fully configure a non-technical user's
+server access, config selection, individual credentials, and generated
+config without that user ever logging in; see
+[`doc/ADMIN-USER-CONFIG.md`](doc/ADMIN-USER-CONFIG.md) for the full guide
+(web UI and CLI side by side).
+
 This CLI does not cover the pip/npm/docker server installer subsystem
 below, which stays UI-only; `server show` only surfaces a server's
 `install_method`/`installed_version` read-only.
@@ -317,9 +330,23 @@ so it can't be recovered later. Revoke a token with
 envelope — `{"data": ...}` on success, `{"error": {"code", "message"}}` on
 failure — and list endpoints are paginated (`?page=`, `?per_page=`).
 
+**Admin-managed user configuration:** everything an admin can do for a
+non-technical user from Admin → Users or the `mcprack` CLI (see
+[`doc/ADMIN-USER-CONFIG.md`](doc/ADMIN-USER-CONFIG.md)) is also available
+as JSON API calls, so third-party applications can drive mcprack directly:
+`/admin/users/{userId}/selections`,
+`/admin/users/{userId}/overrides/{serverId}`,
+`/admin/users/{userId}/config/{client}`, `/admin/templates` (+
+`/admin/templates/{templateId}`), and
+`/admin/users/{userId}/apply-template`.
+
 **OpenAPI 3 spec:** served live at `/api/v1/openapi.json` (source in
 `openapi/openapi.yaml`), so it can be imported into Postman, fed to a
-codegen tool, or validated with `openapi-spec-validator`.
+codegen tool (e.g. `openapi-generator-cli generate -i
+http://localhost:5000/api/v1/openapi.json -g <language>-client` to build a
+client SDK), or validated with `openapi-spec-validator`. Every operation
+declares a stable `operationId` specifically so codegen tools produce
+clean method names.
 
 ## Database
 

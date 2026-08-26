@@ -32,6 +32,7 @@ from .extensions import db, limiter
 from .models import (
     ApiToken,
     AuditLogEntry,
+    ConfigTemplate,
     McpServer,
     User,
     UserServerOverride,
@@ -123,6 +124,7 @@ def _user_summary(user):
         "is_admin": user.is_admin,
         "is_active": user.is_active,
         "created_at": _iso(user.created_at),
+        "config_template_id": user.config_template_id,
     }
 
 
@@ -185,6 +187,52 @@ def _token_summary(token):
         "last_used_at": _iso(token.last_used_at),
         "revoked_at": _iso(token.revoked_at),
     }
+
+
+def _selection_entry(row, names):
+    return {
+        "server_id": row.server_id,
+        "server_name": names.get(row.server_id),
+        "selected_at": _iso(row.selected_at),
+    }
+
+
+def _override_response(server, target_user, reveal):
+    """Shared by /me/overrides and /admin/users/{id}/overrides. Returns
+    (data, None) on success, or (None, error_response) on a Vaultwarden
+    failure — caller returns error_response directly in that case."""
+    override_row = UserServerOverride.query.filter_by(user_id=target_user.id, server_id=server.id).first()
+    data = {"server_id": server.id, "has_override": bool(override_row)}
+    if override_row:
+        try:
+            values = secret_store.load_user_override_secrets(server, target_user)
+        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+            return None, api_error(502, "vaultwarden_unreachable", str(exc))
+        if reveal:
+            data["env"] = values
+        else:
+            data["env_keys"] = list(values.keys())
+    return data, None
+
+
+def _template_summary(template):
+    return {
+        "id": template.id,
+        "name": template.name,
+        "label": template.label,
+        "description": template.description,
+        "created_at": _iso(template.created_at),
+        "updated_at": _iso(template.updated_at),
+    }
+
+
+def _template_detail(template):
+    data = _template_summary(template)
+    data["servers"] = [
+        {"server_id": e.server_id, "is_allowed": e.is_allowed, "is_selected": e.is_selected}
+        for e in template.entries
+    ]
+    return data
 
 
 def _audit_entry_summary(entry):
@@ -392,12 +440,7 @@ def me_selections_list():
     rows = UserServerSelection.query.filter_by(user_id=current_user.id).all()
     server_ids = [row.server_id for row in rows]
     names = {s.id: s.name for s in McpServer.query.filter(McpServer.id.in_(server_ids)).all()} if server_ids else {}
-    return api_ok(
-        [
-            {"server_id": row.server_id, "server_name": names.get(row.server_id), "selected_at": _iso(row.selected_at)}
-            for row in rows
-        ]
-    )
+    return api_ok([_selection_entry(row, names) for row in rows])
 
 
 @bp.route("/me/selections", methods=["PUT"])
@@ -411,6 +454,39 @@ def me_selections_set():
 
     final_ids = catalog.set_user_selection(current_user.id, submitted_ids)
     db.session.commit()
+    return api_ok({"server_ids": sorted(final_ids)})
+
+
+# --- admin: a user's selections ----------------------------------------------
+
+@bp.route("/admin/users/<int:user_id>/selections", methods=["GET"])
+@api_admin_required
+def admin_user_selections_list(user_id):
+    user = db.get_or_404(User, user_id)
+    rows = UserServerSelection.query.filter_by(user_id=user.id).all()
+    server_ids = [row.server_id for row in rows]
+    names = {s.id: s.name for s in McpServer.query.filter(McpServer.id.in_(server_ids)).all()} if server_ids else {}
+    return api_ok([_selection_entry(row, names) for row in rows])
+
+
+@bp.route("/admin/users/<int:user_id>/selections", methods=["PUT"])
+@api_admin_required
+def admin_user_selections_set(user_id):
+    user = db.get_or_404(User, user_id)
+    data = request.get_json(silent=True) or {}
+    try:
+        submitted_ids = {int(sid) for sid in data.get("server_ids", [])}
+    except (TypeError, ValueError):
+        return api_error(400, "invalid_request", "server_ids must be a list of integers")
+
+    final_ids = catalog.set_user_selection(user.id, submitted_ids)
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        error_message=f"selection for '{user.username}' updated via API",
+    )
     return api_ok({"server_ids": sorted(final_ids)})
 
 
@@ -429,17 +505,10 @@ def _override_target_server(server_id):
 @api_login_required
 def me_override_get(server_id):
     server = _override_target_server(server_id)
-    override_row = UserServerOverride.query.filter_by(user_id=current_user.id, server_id=server.id).first()
-    data = {"server_id": server.id, "has_override": bool(override_row)}
-    if override_row:
-        try:
-            values = secret_store.load_user_override_secrets(server, current_user)
-        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            return api_error(502, "vaultwarden_unreachable", str(exc))
-        if request.args.get("reveal") == "1":
-            data["env"] = values
-        else:
-            data["env_keys"] = list(values.keys())
+    reveal = request.args.get("reveal") == "1"
+    data, error = _override_response(server, current_user, reveal)
+    if error:
+        return error
     return api_ok(data)
 
 
@@ -474,6 +543,72 @@ def me_override_delete(server_id):
     return "", 204
 
 
+# --- admin: a user's per-server overrides ------------------------------------
+
+@bp.route("/admin/users/<int:user_id>/overrides/<int:server_id>", methods=["GET"])
+@api_admin_required
+def admin_user_override_get(user_id, server_id):
+    target_user = db.get_or_404(User, user_id)
+    server = db.get_or_404(McpServer, server_id)
+    reveal = request.args.get("reveal") == "1"
+    data, error = _override_response(server, target_user, reveal)
+    if error:
+        return error
+    return api_ok(data)
+
+
+@bp.route("/admin/users/<int:user_id>/overrides/<int:server_id>", methods=["PUT"])
+@api_admin_required
+def admin_user_override_set(user_id, server_id):
+    """Unlike /me/overrides, this never checks allow_user_override or the
+    user's server ACL — an admin preparing a non-technical user's config
+    from scratch must be able to set individual values regardless of
+    whether that user could ever do it themselves (matches admin.py's HTML
+    user_override route)."""
+    target_user = db.get_or_404(User, user_id)
+    server = db.get_or_404(McpServer, server_id)
+    data = request.get_json(silent=True) or {}
+    values = data.get("env")
+    if not isinstance(values, dict):
+        return api_error(400, "invalid_request", "env must be an object of key/value pairs")
+
+    try:
+        secret_store.save_user_override_secrets(server, target_user, values)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        return api_error(502, "vaultwarden_unreachable", str(exc))
+
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server=server,
+        error_message=f"set individual credentials for '{target_user.username}' via API",
+    )
+    return api_ok({"server_id": server.id, "env_keys": list(values.keys())})
+
+
+@bp.route("/admin/users/<int:user_id>/overrides/<int:server_id>", methods=["DELETE"])
+@api_admin_required
+def admin_user_override_delete(user_id, server_id):
+    target_user = db.get_or_404(User, user_id)
+    server = db.get_or_404(McpServer, server_id)
+    try:
+        secret_store.delete_user_override_secrets(server, target_user)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        return api_error(502, "vaultwarden_unreachable", str(exc))
+
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server=server,
+        error_message=f"reverted '{target_user.username}' override to default via API",
+    )
+    return "", 204
+
+
 # --- current user's client config -------------------------------------------
 
 @bp.route("/me/config/<client>", methods=["GET"])
@@ -490,6 +625,34 @@ def me_config(client):
         return api_error(404, "no_config", error_message)
 
     audit.log_audit_event("config_download", "success", user=current_user)
+    return api_ok({"filename": filename, "config": json.loads(config_json)})
+
+
+# --- admin: a user's client config -------------------------------------------
+
+@bp.route("/admin/users/<int:user_id>/config/<client>", methods=["GET"])
+@api_admin_required
+def admin_user_config(user_id, client):
+    target_user = db.get_or_404(User, user_id)
+    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user)
+    if config_json is None:
+        audit.log_audit_event(
+            "config_download",
+            "error",
+            user=target_user,
+            error_message=(
+                f"no config produced for client '{client}' "
+                f"(API, requested by admin '{current_user.username}')"
+            ),
+        )
+        return api_error(404, "no_config", error_message)
+
+    audit.log_audit_event(
+        "config_download",
+        "success",
+        user=target_user,
+        error_message=f"downloaded via API by admin '{current_user.username}'",
+    )
     return api_ok({"filename": filename, "config": json.loads(config_json)})
 
 
@@ -573,6 +736,110 @@ def admin_user_delete(user_id):
         "admin_change", "success", user_id=current_user.id, error_message=f"user '{username}' deleted via API"
     )
     return "", 204
+
+
+# --- admin: configuration templates ------------------------------------------
+
+@bp.route("/admin/templates", methods=["GET", "POST"])
+@api_admin_required
+def admin_templates():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        name = (data.get("name") or "").strip()
+        if not name:
+            return api_error(400, "invalid_request", "name is required")
+        if ConfigTemplate.query.filter_by(name=name).first():
+            return api_error(409, "conflict", f"template '{name}' already exists")
+
+        template = ConfigTemplate(
+            name=name, label=data.get("label") or name, description=data.get("description")
+        )
+        db.session.add(template)
+        db.session.flush()
+        try:
+            admin.set_template_servers(template, data.get("servers") or [])
+        except (KeyError, TypeError):
+            db.session.rollback()
+            return api_error(
+                400,
+                "invalid_request",
+                "servers must be a list of {server_id, is_allowed, is_selected}",
+            )
+
+        db.session.commit()
+        audit.log_audit_event(
+            "admin_change", "success", user=current_user, error_message=f"template '{name}' created via API"
+        )
+        return api_ok(_template_detail(template), status=201)
+
+    items, pagination = paginate(ConfigTemplate.query.order_by(ConfigTemplate.name))
+    return api_ok([_template_summary(t) for t in items], pagination=pagination)
+
+
+@bp.route("/admin/templates/<int:template_id>", methods=["GET"])
+@api_admin_required
+def admin_template_detail(template_id):
+    template = db.get_or_404(ConfigTemplate, template_id)
+    return api_ok(_template_detail(template))
+
+
+@bp.route("/admin/templates/<int:template_id>", methods=["PUT"])
+@api_admin_required
+def admin_template_update(template_id):
+    template = db.get_or_404(ConfigTemplate, template_id)
+    data = request.get_json(silent=True) or {}
+
+    template.label = data.get("label", template.label) or template.name
+    template.description = data.get("description", template.description)
+    if "servers" in data:
+        try:
+            admin.set_template_servers(template, data.get("servers") or [])
+        except (KeyError, TypeError):
+            return api_error(
+                400,
+                "invalid_request",
+                "servers must be a list of {server_id, is_allowed, is_selected}",
+            )
+
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"template '{template.name}' updated via API"
+    )
+    return api_ok(_template_detail(template))
+
+
+@bp.route("/admin/templates/<int:template_id>", methods=["DELETE"])
+@api_admin_required
+def admin_template_delete(template_id):
+    template = db.get_or_404(ConfigTemplate, template_id)
+    name = template.name
+    db.session.delete(template)
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"template '{name}' deleted via API"
+    )
+    return "", 204
+
+
+@bp.route("/admin/users/<int:user_id>/apply-template", methods=["POST"])
+@api_admin_required
+def admin_user_apply_template(user_id):
+    user = db.get_or_404(User, user_id)
+    data = request.get_json(silent=True) or {}
+    template_id = data.get("template_id")
+    template = db.get_or_404(ConfigTemplate, template_id) if template_id else None
+    if template is None:
+        return api_error(400, "invalid_request", "template_id is required")
+
+    admin.apply_template_to_user(user, template)
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        error_message=f"template '{template.name}' applied to user '{user.username}' via API",
+    )
+    return api_ok(_user_detail(user))
 
 
 # --- admin: audit log --------------------------------------------------------

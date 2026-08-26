@@ -6,6 +6,8 @@
   <h1>{{ filename }}</h1>
   <p class="text-muted">{{ _('Config for <strong>%(name)s</strong> (%(username)s). Copy the configuration below or download it directly, then send it to the user.', name=target_user.display_name, username=target_user.username) }}</p>
 
+  {% include "_config_paths.html" %}
+
   <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); margin: var(--space-lg) 0;">
     <textarea id="config-json" rows="20" readonly data-copy-fail-message="{{ _('Copy failed — select the text manually.') }}">{{ config_json }}</textarea>
   </div>

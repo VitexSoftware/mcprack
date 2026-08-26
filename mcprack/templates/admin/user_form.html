@@ -31,12 +31,21 @@
   </label>
 
   {% if user %}
-  <h2>{{ _('Server access') }}</h2>
-  <p>{{ _('Explicitly allow or deny each currently available MCP server for this user.') }}</p>
+  {% if user.config_template %}
+  <p class="text-muted">{{ _('Last based on template: %(label)s', label=user.config_template.label) }}</p>
+  {% endif %}
+
+  <h2>{{ _('Server access &amp; config selection') }}</h2>
+  <p>{{ _('Allow or deny each server for this user, and tick which allowed servers should actually be included in their generated config — the admin decides this on their behalf, no login required.') }}</p>
   {% if available_servers %}
   <table>
     <thead>
-      <tr><th>{{ _('Server') }}</th><th>{{ _('Access') }}</th></tr>
+      <tr>
+        <th>{{ _('Server') }}</th>
+        <th>{{ _('Access') }}</th>
+        <th>{{ _('Included in config') }}</th>
+        <th>{{ _('Individual credentials') }}</th>
+      </tr>
     </thead>
     <tbody>
       {% for server in available_servers %}
@@ -52,6 +61,20 @@
             <input type="radio" name="server_access_{{ server.id }}" value="deny" {{ "checked" if not allowed else "" }}>
             {{ _('Deny') }}
           </label>
+        </td>
+        <td>
+          <label>
+            <input type="checkbox" name="selected_server_id" value="{{ server.id }}" {{ "checked" if server.id in selected_ids else "" }}>
+            {{ _('Included') }}
+          </label>
+        </td>
+        <td>
+          <a href="{{ url_for('admin.user_override', user_id=user.id, server_id=server.id) }}">
+            {{ _('Edit values') }}{% if server.id in override_ids %} ({{ _('set') }}){% endif %}
+          </a>
+          {% if not server.allow_user_override %}
+          <br><small class="text-muted">{{ _('self-service override disabled — admin only') }}</small>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -72,4 +95,20 @@
 
   <button type="submit">{{ _('Save') }}</button>
 </form>
+
+{% if user and templates %}
+<h2>{{ _('Apply a configuration template') }}</h2>
+<p class="text-muted">{{ _('Replaces this user\'s access and selection with the template\'s. Individual credentials already set for this user are kept.') }}</p>
+<form method="post" action="{{ url_for('admin.user_apply_template', user_id=user.id) }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <select name="template_id" required>
+    <option value="" disabled selected>{{ _('Choose a template…') }}</option>
+    {% for template in templates %}
+    <option value="{{ template.id }}">{{ template.label }} ({{ template.name }})</option>
+    {% endfor %}
+  </select>
+  <button type="submit">{{ _('Apply template') }}</button>
+</form>
+<p><a href="{{ url_for('admin.templates_list') }}">{{ _('Manage templates') }}</a></p>
+{% endif %}
 {% endblock %}

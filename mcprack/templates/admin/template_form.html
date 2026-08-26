@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Edit template') if template else _('New template') }} — {{ _('Admin') }} — mcprack{% endblock %}
+{% block content %}
+<h1>{{ _('Edit template') if template else _('New template') }}</h1>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  {% if not template %}
+  <label for="name">{{ _('Name (stable identifier, used by the CLI)') }}</label>
+  <input type="text" id="name" name="name" required autofocus>
+  {% else %}
+  <p><strong>{{ template.name }}</strong></p>
+  {% endif %}
+
+  <label for="label">{{ _('Label') }}</label>
+  <input type="text" id="label" name="label" value="{{ template.label if template else '' }}">
+
+  <label for="description">{{ _('Description') }}</label>
+  <textarea id="description" name="description" rows="3">{{ template.description if template else '' }}</textarea>
+
+  <h2>{{ _('Servers') }}</h2>
+  <p class="text-muted">{{ _('Tick \"Allowed\" for every server users of this template may use, and \"Pre-selected\" for the subset that should already be included in their generated config.') }}</p>
+  {% if available_servers %}
+  <table>
+    <thead>
+      <tr><th>{{ _('Server') }}</th><th>{{ _('Allowed') }}</th><th>{{ _('Pre-selected') }}</th></tr>
+    </thead>
+    <tbody>
+      {% for server in available_servers %}
+      {% set entry = entry_map.get(server.id) %}
+      <tr>
+        <td>{{ server.label }} <small>({{ server.name }})</small></td>
+        <td><input type="checkbox" name="template_allow_{{ server.id }}" {{ "checked" if entry is none or entry.is_allowed else "" }}></td>
+        <td><input type="checkbox" name="template_select_{{ server.id }}" {{ "checked" if entry and entry.is_selected else "" }}></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>{{ _('No enabled servers available.') }}</p>
+  {% endif %}
+
+  <button type="submit">{{ _('Save') }}</button>
+  <a href="{{ url_for('admin.templates_list') }}" class="btn btn-secondary">{{ _('Cancel') }}</a>
+</form>
+{% endblock %}

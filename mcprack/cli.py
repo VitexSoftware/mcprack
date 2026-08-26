@@ -9,14 +9,20 @@ scripts (debian/postinst) already call by name and must keep working
 unchanged.
 """
 
+from pathlib import Path
+
 import click
 from dotenv import dotenv_values
+from flask import current_app
 from flask.cli import AppGroup
 
+from . import admin
+from . import catalog
 from . import secret_store
+from . import vaultwarden
 from .env_detection import SENSITIVE_NAME_HINTS
 from .extensions import db
-from .models import McpServer, User
+from .models import ConfigTemplate, ConfigTemplateServer, McpServer, User, UserServerSelection
 
 
 def _looks_sensitive_name(name):
@@ -38,6 +44,20 @@ user_cli = AppGroup("user", help="Manage mcprack user accounts.")
 server_cli = AppGroup("server", help="Manage MCP catalog servers.")
 secret_cli = AppGroup("secret", help="Manage a server's credential (secret env var) values.")
 
+# Subgroups of `user`: everything an admin needs to fully configure a
+# non-technical user's MCP config without that user ever logging in — the
+# CLI equivalent of Admin → Users → edit, sharing the same underlying
+# helpers (admin.py, catalog.py, secret_store.py) as the web UI so both
+# stay consistent.
+user_server_cli = AppGroup("server", help="Manage which MCP servers a user may use / has selected.")
+user_override_cli = AppGroup("override", help="Manage a user's individual (per-user) credential values.")
+user_config_cli = AppGroup("config", help="Show or export a user's generated MCP client config.")
+user_cli.add_command(user_server_cli, name="server")
+user_cli.add_command(user_override_cli, name="override")
+user_cli.add_command(user_config_cli, name="config")
+
+template_cli = AppGroup("template", help="Manage reusable server ACL/selection presets for users.")
+
 
 def _get_user_or_fail(username):
     user = User.query.filter_by(username=username).first()
@@ -51,6 +71,34 @@ def _get_server_or_fail(name):
     if not server:
         raise click.ClickException(f"No such MCP server: '{name}'.")
     return server
+
+
+def _get_template_or_fail(name):
+    template = ConfigTemplate.query.filter_by(name=name).first()
+    if not template:
+        raise click.ClickException(f"No such template: '{name}'.")
+    return template
+
+
+def _build_user_config_or_fail(user, client):
+    """catalog._build_client_config_json needs an active request context to
+    build absolute proxy URLs for stdio-implemented servers with no url of
+    their own (see catalog.py) — which a CLI invocation never has. If
+    PUBLIC_BASE_URL is configured, fake one with that as the host; a plain
+    RuntimeError from Flask otherwise becomes a clear, actionable error
+    instead of a raw traceback."""
+    base_url = current_app.config.get("PUBLIC_BASE_URL")
+    try:
+        if base_url:
+            with current_app.test_request_context(base_url=base_url):
+                return catalog._build_client_config_json(client, user=user)
+        return catalog._build_client_config_json(client, user=user)
+    except RuntimeError as exc:
+        raise click.ClickException(
+            f"Could not build a config URL outside a web request ({exc}). Set "
+            "PUBLIC_BASE_URL (e.g. https://mcprack.example.com) in /etc/mcprack/env "
+            "so the CLI can build proxy URLs for stdio-implemented servers."
+        )
 
 
 @user_cli.command("list")
@@ -150,6 +198,280 @@ def user_demote(username):
     user.is_admin = False
     db.session.commit()
     click.echo(f"User '{username}' is no longer an admin.")
+
+
+@user_server_cli.command("list")
+@click.argument("username")
+def user_server_list(username):
+    """Show each enabled server's allow/deny and config-selection state for a user."""
+    user = _get_user_or_fail(username)
+    servers = McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
+    if not servers:
+        click.echo("No enabled servers.")
+        return
+    permission_map = admin.get_permission_map(user)
+    selected_ids = {
+        row.server_id for row in UserServerSelection.query.filter_by(user_id=user.id).all()
+    }
+    for s in servers:
+        access = "allow" if permission_map.get(s.id, True) else "deny"
+        included = "selected" if s.id in selected_ids else "-"
+        click.echo(f"{s.name}\t{access}\t{included}")
+
+
+@user_server_cli.command("allow")
+@click.argument("username")
+@click.argument("server_name")
+def user_server_allow(username, server_name):
+    """Allow a user to use one server, leaving their other server access unchanged."""
+    user = _get_user_or_fail(username)
+    server = _get_server_or_fail(server_name)
+    available_servers = McpServer.query.filter_by(enabled=True).all()
+    permission_map = admin.get_permission_map(user)
+    permission_map[server.id] = True
+    admin.set_user_server_permissions(user, available_servers, permission_map)
+    db.session.commit()
+    click.echo(f"'{server_name}' allowed for user '{username}'.")
+
+
+@user_server_cli.command("deny")
+@click.argument("username")
+@click.argument("server_name")
+def user_server_deny(username, server_name):
+    """Deny a user access to one server, leaving their other server access unchanged.
+    Also drops it from their config selection, if present."""
+    user = _get_user_or_fail(username)
+    server = _get_server_or_fail(server_name)
+    available_servers = McpServer.query.filter_by(enabled=True).all()
+    permission_map = admin.get_permission_map(user)
+    permission_map[server.id] = False
+    admin.set_user_server_permissions(user, available_servers, permission_map)
+    UserServerSelection.query.filter_by(user_id=user.id, server_id=server.id).delete()
+    db.session.commit()
+    click.echo(f"'{server_name}' denied for user '{username}'.")
+
+
+@user_server_cli.command("select")
+@click.argument("username")
+@click.option(
+    "--server",
+    "server_names",
+    multiple=True,
+    metavar="NAME",
+    help="Server to include in the generated config (repeatable). Replaces the "
+    "entire current selection; omit to clear it. Servers the user isn't "
+    "allowed to use are silently skipped.",
+)
+def user_server_select(username, server_names):
+    """Replace which servers are included in a user's generated config."""
+    user = _get_user_or_fail(username)
+    requested_ids = [_get_server_or_fail(name).id for name in server_names]
+    final_ids = catalog.set_user_selection(user.id, requested_ids)
+    db.session.commit()
+    if not final_ids:
+        click.echo(f"Selection for '{username}' cleared.")
+        return
+    names = sorted(
+        s.name for s in McpServer.query.filter(McpServer.id.in_(final_ids)).all()
+    )
+    click.echo(f"Selection for '{username}': {', '.join(names)}")
+
+
+@user_override_cli.command("set")
+@click.argument("username")
+@click.argument("server_name")
+@click.argument("pairs", nargs=-1, required=True, metavar="KEY=VALUE...")
+def user_override_set(username, server_name, pairs):
+    """Set one or more individual credential values for a user on a server,
+    on top of any already saved (use 'override list' to check first)."""
+    user = _get_user_or_fail(username)
+    server = _get_server_or_fail(server_name)
+    try:
+        values = secret_store.load_user_override_secrets(server, user)
+        for raw_pair in pairs:
+            key, value = _parse_key_value_pair(raw_pair, "KEY=VALUE")
+            values[key] = value
+        secret_store.save_user_override_secrets(server, user, values)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        raise click.ClickException(str(exc))
+    db.session.commit()
+    click.echo(f"Set {len(pairs)} individual value(s) for '{username}' on '{server_name}'.")
+
+
+@user_override_cli.command("list")
+@click.argument("username")
+@click.argument("server_name")
+def user_override_list(username, server_name):
+    """List which keys have an individual value set for a user on a server."""
+    user = _get_user_or_fail(username)
+    server = _get_server_or_fail(server_name)
+    try:
+        values = secret_store.load_user_override_secrets(server, user)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        raise click.ClickException(str(exc))
+    if not values:
+        click.echo(f"No individual credentials set for '{username}' on '{server_name}'.")
+        return
+    for key in sorted(values):
+        click.echo(f"{key}\tset")
+
+
+@user_override_cli.command("reset")
+@click.argument("username")
+@click.argument("server_name")
+def user_override_reset(username, server_name):
+    """Revert a user to the server's default credentials."""
+    user = _get_user_or_fail(username)
+    server = _get_server_or_fail(server_name)
+    try:
+        secret_store.delete_user_override_secrets(server, user)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        raise click.ClickException(str(exc))
+    db.session.commit()
+    click.echo(f"Reverted '{username}' to the default credentials on '{server_name}'.")
+
+
+@user_config_cli.command("show")
+@click.argument("username")
+@click.argument("client")
+def user_config_show(username, client):
+    """Print a user's generated MCP client config (claude/copilot) to stdout."""
+    user = _get_user_or_fail(username)
+    config_json, _filename, error_message = _build_user_config_or_fail(user, client)
+    if config_json is None:
+        raise click.ClickException(error_message)
+    click.echo(config_json)
+
+
+@user_config_cli.command("download")
+@click.argument("username")
+@click.argument("client")
+@click.option(
+    "--out",
+    "out_path",
+    type=click.Path(dir_okay=False),
+    help="Write to this path instead of the client's default filename in the current directory.",
+)
+def user_config_download(username, client, out_path):
+    """Write a user's generated MCP client config (claude/copilot) to a file."""
+    user = _get_user_or_fail(username)
+    config_json, filename, error_message = _build_user_config_or_fail(user, client)
+    if config_json is None:
+        raise click.ClickException(error_message)
+    target = Path(out_path) if out_path else Path(filename)
+    target.write_text(config_json)
+    click.echo(f"Wrote {target}")
+
+
+@template_cli.command("create")
+@click.argument("name")
+@click.option("--label", help="Display label (defaults to name).")
+@click.option("--description", default="")
+def template_create(name, label, description):
+    """Create an empty template (use 'template set-servers' to configure it)."""
+    if ConfigTemplate.query.filter_by(name=name).first():
+        raise click.ClickException(f"A template named '{name}' already exists.")
+    template = ConfigTemplate(name=name, label=label or name, description=description or None)
+    db.session.add(template)
+    db.session.commit()
+    click.echo(f"Template '{name}' created.")
+
+
+@template_cli.command("list")
+def template_list():
+    """List all configuration templates."""
+    templates = ConfigTemplate.query.order_by(ConfigTemplate.name).all()
+    if not templates:
+        click.echo("No templates.")
+        return
+    for t in templates:
+        allowed = sum(1 for e in t.entries if e.is_allowed)
+        selected = sum(1 for e in t.entries if e.is_selected)
+        click.echo(f"{t.id}\t{t.name}\t{t.label}\t{allowed} allowed, {selected} pre-selected")
+
+
+@template_cli.command("show")
+@click.argument("name")
+def template_show(name):
+    """Show a template's label/description and per-server allow/pre-select state."""
+    t = _get_template_or_fail(name)
+    click.echo(f"name:        {t.name}")
+    click.echo(f"label:       {t.label}")
+    click.echo(f"description: {t.description or '-'}")
+    if not t.entries:
+        click.echo("servers:     (none configured — use 'template set-servers')")
+        return
+    click.echo("servers:")
+    for e in sorted(t.entries, key=lambda e: e.server.name if e.server else ""):
+        server_name = e.server.name if e.server else f"server#{e.server_id}"
+        access = "allow" if e.is_allowed else "deny"
+        selected = "selected" if e.is_selected else "-"
+        click.echo(f"  {server_name}\t{access}\t{selected}")
+
+
+@template_cli.command("set-servers")
+@click.argument("name")
+@click.option("--allow", "allow_names", multiple=True, metavar="NAME", help="Server to mark allowed (repeatable).")
+@click.option("--deny", "deny_names", multiple=True, metavar="NAME", help="Server to mark denied and un-select (repeatable).")
+@click.option("--select", "select_names", multiple=True, metavar="NAME", help="Server to pre-select; implies --allow (repeatable).")
+@click.option("--deselect", "deselect_names", multiple=True, metavar="NAME", help="Server to stop pre-selecting, without denying it (repeatable).")
+def template_set_servers(name, allow_names, deny_names, select_names, deselect_names):
+    """Incrementally edit which servers a template allows/pre-selects.
+    Servers not mentioned keep their current state (new servers default to
+    allowed, not pre-selected)."""
+    template = _get_template_or_fail(name)
+    entries = {e.server_id: e for e in template.entries}
+
+    def _entry_for(server_name):
+        server = _get_server_or_fail(server_name)
+        entry = entries.get(server.id)
+        if entry is None:
+            entry = ConfigTemplateServer(
+                template_id=template.id, server_id=server.id, is_allowed=True, is_selected=False
+            )
+            db.session.add(entry)
+            entries[server.id] = entry
+        return entry
+
+    for n in allow_names:
+        _entry_for(n).is_allowed = True
+    for n in select_names:
+        entry = _entry_for(n)
+        entry.is_allowed = True
+        entry.is_selected = True
+    for n in deselect_names:
+        _entry_for(n).is_selected = False
+    for n in deny_names:
+        entry = _entry_for(n)
+        entry.is_allowed = False
+        entry.is_selected = False
+
+    db.session.commit()
+    click.echo(f"Template '{name}' updated.")
+
+
+@template_cli.command("delete")
+@click.argument("name")
+@click.confirmation_option(prompt="This permanently deletes the template. Continue?")
+def template_delete_cmd(name):
+    """Delete a template. Users it was previously applied to are unaffected."""
+    template = _get_template_or_fail(name)
+    db.session.delete(template)
+    db.session.commit()
+    click.echo(f"Template '{name}' deleted.")
+
+
+@template_cli.command("apply")
+@click.argument("name")
+@click.argument("username")
+def template_apply(name, username):
+    """Apply a template's server ACL + selection to a user. Individual
+    credentials the user already has keep working unchanged."""
+    template = _get_template_or_fail(name)
+    user = _get_user_or_fail(username)
+    admin.apply_template_to_user(user, template)
+    db.session.commit()
+    click.echo(f"Applied template '{name}' to user '{username}'.")
 
 
 @server_cli.command("list")
@@ -652,4 +974,5 @@ def register_management_cli(app):
     app.cli.add_command(user_cli)
     app.cli.add_command(server_cli)
     app.cli.add_command(secret_cli)
+    app.cli.add_command(template_cli)
     app.cli.add_command(init_config)

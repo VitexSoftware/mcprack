@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Configuration templates') }} — {{ _('Admin') }} — mcprack{% endblock %}
+{% block content %}
+
+<section class="section">
+  <h1>🧩 {{ _('Configuration templates') }}</h1>
+  <p class="text-muted">{{ _('A template is a reusable preset of allowed/denied servers and which of them are pre-selected. Apply it to a user from their edit page to configure them in one step, then fine-tune individually if needed.') }}</p>
+
+  <p><a href="{{ url_for('admin.template_new') }}" class="btn btn-primary">➕ {{ _('New template') }}</a></p>
+
+  <table>
+    <thead>
+      <tr>
+        <th>{{ _('Name') }}</th>
+        <th>{{ _('Label') }}</th>
+        <th>{{ _('Description') }}</th>
+        <th>{{ _('Servers') }}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for template in templates %}
+      <tr>
+        <td><code>{{ template.name }}</code></td>
+        <td>{{ template.label }}</td>
+        <td>{{ template.description or '—' }}</td>
+        <td>{{ template.entries | selectattr('is_allowed') | list | length }} {{ _('allowed') }}, {{ template.entries | selectattr('is_selected') | list | length }} {{ _('pre-selected') }}</td>
+        <td style="white-space: nowrap;">
+          <a href="{{ url_for('admin.template_edit', template_id=template.id) }}" class="btn btn-sm btn-secondary">{{ _('Edit') }}</a>
+          <form class="inline" method="post" action="{{ url_for('admin.template_delete', template_id=template.id) }}"
+                data-confirm="{{ _('Delete template \"%(name)s\"?', name=template.name) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm btn-danger">{{ _('Delete') }}</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="5" style="text-align: center; padding: var(--space-lg);">
+          <p class="text-muted">{{ _('No templates yet.') }}</p>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% endblock %}

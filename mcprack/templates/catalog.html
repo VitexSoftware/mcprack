@@ -23,6 +23,8 @@
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
+      {% set client = 'claude' %}
+      {% include "_config_paths.html" %}
     </div>
 
     <div class="client-card">
@@ -36,6 +38,8 @@
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
+      {% set client = 'copilot' %}
+      {% include "_config_paths.html" %}
     </div>
   </div>
 </section>
