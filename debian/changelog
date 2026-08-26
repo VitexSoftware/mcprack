@@ -1,4 +1,33 @@
-mcprack (1.3.0-1) UNRELEASED; urgency=medium
+mcprack (1.5.0-1) unstable; urgency=medium
+
+  * Add 'mcprack server create' CLI command: idempotent create-or-update
+    of a catalog server row, so companion Debian packages can self-
+    register an MCP server on install (and 'server delete --yes' on
+    removal) without talking to the ORM directly.
+
+ -- vitex <info@vitexsoftware.cz>  Wed, 26 Aug 2026 22:57:59 +0200
+
+mcprack (1.4.0-1) unstable; urgency=medium
+
+  * Add admin-managed per-user MCP configuration: server access + config
+    selection, individual credentials (works even when self-service
+    override is disabled), and reusable configuration templates under
+    Admin -> Config Templates.
+  * Add full CLI parity for the above (`mcprack user server|override|
+    config`, `mcprack template`) and matching JSON API endpoints
+    (/admin/users/{id}/selections, /overrides/{id}, /config/{client},
+    /admin/templates, /apply-template), so third-party apps can drive
+    mcprack the same way the web UI/CLI do.
+  * Add operationId to every OpenAPI operation and document the new
+    endpoints, so client SDKs can be generated cleanly from the spec.
+  * Show the actual config file destination paths (Claude Desktop, Claude
+    Code, VS Code; Linux/macOS/Windows) on the download/view pages.
+  * Fix: stop logging signed per-user proxy URLs (a usable access
+    credential) to /tmp/mcprack-debug.log and stderr.
+
+ -- vitex <info@vitexsoftware.cz>  Wed, 26 Aug 2026 20:24:57 +0200
+
+mcprack (1.3.0-1) unstable; urgency=medium
 
   * Release 1.3.0: Improved MCP server configuration form styling
   * Add mcprack-mcp-probe(1)-style diagnostic tool /usr/bin/mcprack-mcp-probe:
