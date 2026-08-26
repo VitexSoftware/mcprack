@@ -1,3 +1,11 @@
+mcprack (1.5.1-1) unstable; urgency=medium
+
+  * Actually commit the 'mcprack server create' implementation promised
+    by the 1.5.0-1 changelog entry (that release was cut by a concurrent
+    process before the code landed).
+
+ -- vitex <info@vitexsoftware.cz>  Wed, 26 Aug 2026 23:50:07 +0200
+
 mcprack (1.5.0-1) unstable; urgency=medium
 
   * Add 'mcprack server create' CLI command: idempotent create-or-update

@@ -508,6 +508,41 @@ def server_show(name):
         click.echo(f"installed:   {s.install_method} ({s.installed_version or 'unknown version'})")
 
 
+@server_cli.command("create")
+@click.argument("name")
+@click.option("--label", required=True, help="Display label.")
+@click.option("--transport", type=click.Choice(["stdio", "http", "sse"]), required=True)
+@click.option("--command", help="Stdio command (stdio transport).")
+@click.option("--arg", "args_values", multiple=True, help="Stdio arg (repeatable).")
+@click.option("--url", help="URL (http/sse transport).")
+@click.option("--category", help="Catalog category.")
+@click.option("--enabled/--disabled", default=True, help="Initial enabled state.")
+def server_create(name, label, transport, command, args_values, url, category, enabled):
+    """Create an MCP server, or update it in place if it already exists (idempotent)."""
+    s = McpServer.query.filter_by(name=name).first()
+    created = s is None
+    if created:
+        s = McpServer(name=name, transport=transport)
+        db.session.add(s)
+    else:
+        s.transport = transport
+
+    s.label = label
+    s.enabled = enabled
+    if category is not None:
+        s.category = category
+    if transport == "stdio":
+        if command is not None:
+            s.command = command
+        if args_values:
+            s.args = list(args_values)
+    elif url is not None:
+        s.url = url
+
+    db.session.commit()
+    click.echo(f"Server '{name}' {'created' if created else 'updated'}.")
+
+
 @server_cli.command("edit")
 @click.argument("name")
 @click.option("--label", help="Set display label.")
