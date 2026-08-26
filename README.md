@@ -225,9 +225,10 @@ systemd hardening, and dbconfig-common, none of which pip installs for you.
 
 Besides the web UI, users, MCP catalog servers, and per-server credentials
 can all be managed from the command line via `cli.py`, registered onto
-mcprack's Flask CLI. In development, invoke it with `flask <command>`
-(e.g. `flask user list`); on a Debian install, the `mcprack` launcher
-script forwards any non-flag first argument the same way, so
+mcprack's Flask CLI. Use the `mcprack` launcher (e.g. `mcprack user list`);
+in development, invoking the same commands via `flask <command>` still works.
+On a Debian install, the `mcprack` launcher script forwards any non-flag
+first argument the same way, so
 `mcprack user list` works too (see "Installation (Debian/Ubuntu package)"
 below) — run it as root (e.g. `sudo mcprack user list`), since it needs to
 read the real `SECRET_KEY` out of `/etc/mcprack/env`, which is `0640
@@ -238,36 +239,44 @@ the dev server instead (`mcprack --host 0.0.0.0 --port 8913`).
 **`user`** — manage mcprack accounts:
 
 ```bash
-flask user list
-flask user create --username alice --admin   # prompts for password if omitted
-flask user passwd alice
-flask user enable alice
-flask user disable alice                     # blocks login without deleting
-flask user promote alice
-flask user demote alice
-flask user delete alice --yes
+mcprack user list
+mcprack user create --username alice --admin   # prompts for password if omitted
+mcprack user passwd alice
+mcprack user enable alice
+mcprack user disable alice                     # blocks login without deleting
+mcprack user promote alice
+mcprack user demote alice
+mcprack user delete alice --yes
 ```
 
 **`server`** — manage MCP catalog servers:
 
 ```bash
-flask server list
-flask server show jenkins                    # non-secret config only
-flask server enable jenkins
-flask server disable jenkins
-flask server delete jenkins --yes             # also clears stored secrets
+mcprack server list
+mcprack server show jenkins                    # non-secret config only
+mcprack server edit jenkins --label "Jenkins CI" --disabled
+mcprack server enable jenkins
+mcprack server disable jenkins
+mcprack server delete jenkins --yes             # also clears stored secrets
+
+# edit env/key metadata in one command
+mcprack server edit multiflexi \
+  --set-env MULTIFLEXI_HOST=https://flexibee-dev.spoje.net:5434/api/VitexSoftware/MultiFlexi/1.0.0 \
+  --set-env MULTIFLEXI_USERNAME=admin \
+  --add-secret-key MULTIFLEXI_PASSWORD \
+  --add-required-key MULTIFLEXI_HOST
 ```
 
 **`secret`** — manage a server's credential (secret env var) values:
 
 ```bash
-flask secret backend                          # Vaultwarden or local encrypted fallback?
-flask secret list jenkins
-flask secret set jenkins JENKINS_TOKEN
-flask secret unset jenkins JENKINS_TOKEN
+mcprack secret backend                          # Vaultwarden or local encrypted fallback?
+mcprack secret list jenkins
+mcprack secret set jenkins JENKINS_TOKEN
+mcprack secret unset jenkins JENKINS_TOKEN
 ```
 
-Every command and option has `--help` (e.g. `flask user create --help`),
+Every command and option has `--help` (e.g. `mcprack user create --help`),
 generated automatically, so it's not duplicated here in full — on a
 Debian install, `man mcprack` also covers the full command reference.
 

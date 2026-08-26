@@ -24,6 +24,16 @@ def _looks_sensitive_name(name):
     return any(hint in upper for hint in SENSITIVE_NAME_HINTS)
 
 
+def _parse_key_value_pair(raw_value, option_name):
+    if "=" not in raw_value:
+        raise click.ClickException(f"{option_name} expects KEY=VALUE, got '{raw_value}'.")
+    key, value = raw_value.split("=", 1)
+    key = key.strip()
+    if not key:
+        raise click.ClickException(f"{option_name} expects non-empty KEY in KEY=VALUE.")
+    return key, value
+
+
 user_cli = AppGroup("user", help="Manage mcprack user accounts.")
 server_cli = AppGroup("server", help="Manage MCP catalog servers.")
 secret_cli = AppGroup("secret", help="Manage a server's credential (secret env var) values.")
@@ -174,6 +184,234 @@ def server_show(name):
     click.echo(f"secret keys: {s.env_var_names or '-'}")
     if s.install_method:
         click.echo(f"installed:   {s.install_method} ({s.installed_version or 'unknown version'})")
+
+
+@server_cli.command("edit")
+@click.argument("name")
+@click.option("--label", help="Set display label.")
+@click.option("--description", help="Set description text.")
+@click.option("--clear-description", is_flag=True, help="Clear description.")
+@click.option("--category", help="Set category.")
+@click.option("--clear-category", is_flag=True, help="Clear category.")
+@click.option("--enabled/--disabled", "enabled", default=None, help="Enable/disable this server.")
+@click.option(
+    "--allow-user-override/--disallow-user-override",
+    "allow_user_override",
+    default=None,
+    help="Allow or block user-level credential overrides.",
+)
+@click.option("--command", help="Set stdio command (stdio transport only).")
+@click.option("--arg", "args_values", multiple=True, help="Set stdio args list (repeatable).")
+@click.option("--clear-args", is_flag=True, help="Clear stdio args list.")
+@click.option("--url", help="Set URL (http/sse transports only).")
+@click.option("--auth-header-name", help="Set auth header name (http/sse transports only).")
+@click.option("--auth-env-key", help="Set env var name used for auth header value.")
+@click.option("--vault-item-name", help="Set Vaultwarden item name used for secret storage.")
+@click.option(
+    "--set-env",
+    "set_env_pairs",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Set a non-secret env var in server config (repeatable).",
+)
+@click.option(
+    "--unset-env",
+    "unset_env_keys",
+    multiple=True,
+    metavar="KEY",
+    help="Remove a non-secret env var from server config (repeatable).",
+)
+@click.option(
+    "--add-secret-key",
+    "add_secret_keys",
+    multiple=True,
+    metavar="KEY",
+    help="Declare an env var key as secret (repeatable).",
+)
+@click.option(
+    "--remove-secret-key",
+    "remove_secret_keys",
+    multiple=True,
+    metavar="KEY",
+    help="Undeclare an env var key as secret and delete its stored value (repeatable).",
+)
+@click.option(
+    "--add-required-key",
+    "add_required_keys",
+    multiple=True,
+    metavar="KEY",
+    help="Mark env var key as required before proxy spawn (repeatable).",
+)
+@click.option(
+    "--remove-required-key",
+    "remove_required_keys",
+    multiple=True,
+    metavar="KEY",
+    help="Unmark env var key as required (repeatable).",
+)
+def server_edit(
+    name,
+    label,
+    description,
+    clear_description,
+    category,
+    clear_category,
+    enabled,
+    allow_user_override,
+    command,
+    args_values,
+    clear_args,
+    url,
+    auth_header_name,
+    auth_env_key,
+    vault_item_name,
+    set_env_pairs,
+    unset_env_keys,
+    add_secret_keys,
+    remove_secret_keys,
+    add_required_keys,
+    remove_required_keys,
+):
+    """Edit an existing MCP server's non-secret and secret-key metadata."""
+    s = _get_server_or_fail(name)
+
+    if clear_description and description is not None:
+        raise click.ClickException("Use either --description or --clear-description, not both.")
+    if clear_category and category is not None:
+        raise click.ClickException("Use either --category or --clear-category, not both.")
+    if clear_args and args_values:
+        raise click.ClickException("Use either --arg or --clear-args, not both.")
+
+    if s.transport != "stdio" and (command is not None or args_values or clear_args):
+        raise click.ClickException(
+            f"Server '{name}' uses transport '{s.transport}', so --command/--arg are not applicable."
+        )
+    if s.transport == "stdio" and (url is not None or auth_header_name is not None or auth_env_key is not None):
+        raise click.ClickException(
+            f"Server '{name}' uses transport 'stdio', so --url/--auth-* are not applicable."
+        )
+
+    changed = []
+
+    if label is not None and label != s.label:
+        s.label = label
+        changed.append("label")
+
+    if description is not None and description != s.description:
+        s.description = description
+        changed.append("description")
+    elif clear_description and s.description is not None:
+        s.description = None
+        changed.append("description")
+
+    if category is not None and category != s.category:
+        s.category = category
+        changed.append("category")
+    elif clear_category and s.category is not None:
+        s.category = None
+        changed.append("category")
+
+    if enabled is not None and enabled != s.enabled:
+        s.enabled = enabled
+        changed.append("enabled")
+
+    if allow_user_override is not None and allow_user_override != s.allow_user_override:
+        s.allow_user_override = allow_user_override
+        changed.append("allow_user_override")
+
+    if command is not None and command != s.command:
+        s.command = command
+        changed.append("command")
+
+    if args_values:
+        new_args = list(args_values)
+        if new_args != s.args:
+            s.args = new_args
+            changed.append("args")
+    elif clear_args and s.args:
+        s.args = []
+        changed.append("args")
+
+    if url is not None and url != s.url:
+        s.url = url
+        changed.append("url")
+
+    if auth_header_name is not None and auth_header_name != s.auth_header_name:
+        s.auth_header_name = auth_header_name
+        changed.append("auth_header_name")
+
+    if auth_env_key is not None and auth_env_key != s.auth_env_key:
+        s.auth_env_key = auth_env_key
+        changed.append("auth_env_key")
+
+    if vault_item_name is not None and vault_item_name != s.vaultwarden_item_name:
+        s.vaultwarden_item_name = vault_item_name
+        changed.append("vaultwarden_item_name")
+
+    env_config = dict(s.env_config or {})
+    for raw_pair in set_env_pairs:
+        key, value = _parse_key_value_pair(raw_pair, "--set-env")
+        if env_config.get(key) != value:
+            env_config[key] = value
+            changed.append(f"env_config:{key}")
+
+    for key in unset_env_keys:
+        if key in env_config:
+            del env_config[key]
+            changed.append(f"env_config:{key}")
+
+    secret_keys = set(s.env_var_names or [])
+    had_secret_mutation = False
+    secret_values = secret_store.load_server_secrets(s) if secret_keys else {}
+
+    for key in add_secret_keys:
+        if key not in secret_keys:
+            secret_keys.add(key)
+            env_config.pop(key, None)
+            had_secret_mutation = True
+            changed.append(f"secret_keys:{key}")
+
+    for key in remove_secret_keys:
+        if key in secret_keys:
+            secret_keys.remove(key)
+            if key in secret_values:
+                del secret_values[key]
+            had_secret_mutation = True
+            changed.append(f"secret_keys:{key}")
+
+    required_keys = set(s.required_env_keys or [])
+    for key in add_required_keys:
+        if key not in required_keys:
+            required_keys.add(key)
+            changed.append(f"required_keys:{key}")
+
+    for key in remove_required_keys:
+        if key in required_keys:
+            required_keys.remove(key)
+            changed.append(f"required_keys:{key}")
+
+    if env_config != (s.env_config or {}):
+        s.env_config = env_config
+
+    normalized_secret_keys = sorted(secret_keys)
+    if normalized_secret_keys != (s.env_var_names or []):
+        s.env_var_names = normalized_secret_keys
+
+    normalized_required_keys = sorted(required_keys)
+    if normalized_required_keys != (s.required_env_keys or []):
+        s.required_env_keys = normalized_required_keys
+
+    if had_secret_mutation:
+        if not s.vaultwarden_item_name:
+            s.vaultwarden_item_name = f"MCP-{s.name}"
+        secret_store.save_server_secrets(s, secret_values)
+
+    if not changed:
+        click.echo(f"No changes for server '{name}'.")
+        return
+
+    db.session.commit()
+    click.echo(f"Server '{name}' updated: {', '.join(sorted(set(changed)))}")
 
 
 @server_cli.command("enable")

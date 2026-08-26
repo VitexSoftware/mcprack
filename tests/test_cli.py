@@ -114,6 +114,83 @@ def test_server_list_show_enable_disable(app):
         assert McpServer.query.filter_by(name="jenkins").first().enabled is True
 
 
+def test_server_edit_updates_config_and_keys(app):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins", enabled=True)
+        server.env_config = {"OLD": "value"}
+        server.env_var_names = ["API_TOKEN"]
+        server.required_env_keys = ["OLD"]
+        db.session.commit()
+        secret_store.save_server_secrets(server, {"API_TOKEN": "abc123", "UNUSED": "x"})
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(
+            args=[
+                "server",
+                "edit",
+                "jenkins",
+                "--label",
+                "Jenkins CI",
+                "--category",
+                "CI",
+                "--disabled",
+                "--disallow-user-override",
+                "--set-env",
+                "JENKINS_URL=https://ci.example.com",
+                "--unset-env",
+                "OLD",
+                "--add-secret-key",
+                "JENKINS_TOKEN",
+                "--remove-secret-key",
+                "API_TOKEN",
+                "--add-required-key",
+                "JENKINS_URL",
+                "--remove-required-key",
+                "OLD",
+                "--arg",
+                "--foo",
+                "--arg",
+                "bar",
+            ]
+        )
+        assert result.exit_code == 0, result.output
+        assert "updated" in result.output
+
+        server = McpServer.query.filter_by(name="jenkins").first()
+        assert server.label == "Jenkins CI"
+        assert server.category == "CI"
+        assert server.enabled is False
+        assert server.allow_user_override is False
+        assert server.env_config == {"JENKINS_URL": "https://ci.example.com"}
+        assert server.env_var_names == ["JENKINS_TOKEN"]
+        assert server.required_env_keys == ["JENKINS_URL"]
+        assert server.args == ["--foo", "bar"]
+
+        secrets_after = secret_store.load_server_secrets(server)
+        assert "API_TOKEN" not in secrets_after
+
+
+def test_server_edit_fails_with_wrong_transport_options(app):
+    with app.app_context():
+        server = McpServer(name="httpsvc", label="HTTPSvc", transport="http", url="https://example.com")
+        db.session.add(server)
+        db.session.commit()
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["server", "edit", "httpsvc", "--command", "/bin/echo"])
+        assert result.exit_code != 0
+        assert "not applicable" in result.output
+
+
+def test_server_edit_requires_key_value_for_set_env(app):
+    with app.app_context():
+        _make_server("jenkins")
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["server", "edit", "jenkins", "--set-env", "BROKEN"])
+        assert result.exit_code != 0
+        assert "expects KEY=VALUE" in result.output
+
+
 def test_server_delete_clears_secrets(app):
     with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         server = _make_server("jenkins", env_var_names=["API_TOKEN"])
@@ -129,7 +206,12 @@ def test_server_delete_clears_secrets(app):
 def test_server_commands_fail_for_unknown_name(app):
     with app.app_context():
         runner = app.test_cli_runner()
-        for args in (["server", "show", "ghost"], ["server", "enable", "ghost"], ["server", "disable", "ghost"]):
+        for args in (
+            ["server", "show", "ghost"],
+            ["server", "enable", "ghost"],
+            ["server", "disable", "ghost"],
+            ["server", "edit", "ghost", "--label", "x"],
+        ):
             result = runner.invoke(args=args)
             assert result.exit_code != 0
             assert "No such MCP server" in result.output
