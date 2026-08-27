@@ -517,7 +517,14 @@ def server_show(name):
 @click.option("--url", help="URL (http/sse transport).")
 @click.option("--category", help="Catalog category.")
 @click.option("--enabled/--disabled", default=True, help="Initial enabled state.")
-def server_create(name, label, transport, command, args_values, url, category, enabled):
+@click.option(
+    "--set-env",
+    "set_env_pairs",
+    multiple=True,
+    metavar="KEY=VALUE",
+    help="Set a non-secret env var in server config (repeatable).",
+)
+def server_create(name, label, transport, command, args_values, url, category, enabled, set_env_pairs):
     """Create an MCP server, or update it in place if it already exists (idempotent)."""
     s = McpServer.query.filter_by(name=name).first()
     created = s is None
@@ -538,6 +545,13 @@ def server_create(name, label, transport, command, args_values, url, category, e
             s.args = list(args_values)
     elif url is not None:
         s.url = url
+
+    if set_env_pairs:
+        env_config = dict(s.env_config or {})
+        for raw_pair in set_env_pairs:
+            key, value = _parse_key_value_pair(raw_pair, "--set-env")
+            env_config[key] = value
+        s.env_config = env_config
 
     db.session.commit()
     click.echo(f"Server '{name}' {'created' if created else 'updated'}.")
