@@ -1,3 +1,10 @@
+mcprack (1.5.2-1) unstable; urgency=medium
+
+  * Add the mcprack-mcp-server-* companion packages to Suggests,
+    alongside the MCP server packages they register.
+
+ -- vitex <info@vitexsoftware.cz>  Thu, 27 Aug 2026 11:28:07 +0200
+
 mcprack (1.5.1-1) unstable; urgency=medium
 
   * Actually commit the 'mcprack server create' implementation promised
