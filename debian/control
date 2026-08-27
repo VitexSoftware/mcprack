@@ -46,7 +46,7 @@ Suggests:
  npm,
  nodejs,
  docker.io,
- abraflexi-mcp-server,
+ mcp-server-abraflexi,
  linkedin-mcp-server,
  mastodon-mcp-server,
  mcp-server-datovka,
