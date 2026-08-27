@@ -1,3 +1,13 @@
+mcprack (1.5.5-1) unstable; urgency=medium
+
+  * Update Suggests for the mcp-server-<name> rename rollout: netbox-
+    mcp-server -> mcp-server-netbox, redmine-mcp-server -> mcp-server-
+    redmine, zabbix-mcp-server -> mcp-server-zabbix; add mcp-server-
+    nextcloud, mcp-server-filesystem, mcp-server-subreg and their
+    mcprack-mcp-server-* companions.
+
+ -- vitex <info@vitexsoftware.cz>  Thu, 27 Aug 2026 15:59:19 +0200
+
 mcprack (1.5.4-1) unstable; urgency=medium
 
   * Add --set-env to 'mcprack server create', so companion Debian
