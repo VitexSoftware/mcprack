@@ -850,3 +850,17 @@ want Docker-based MCP servers — not something to enable by default.
 dependencies in `debian/control` (not hard `Depends`), since not every
 mcprack deployment needs every installer backend.
 
+## Packaging MCP servers to self-register in mcprack
+
+Separately from the Admin → Install runtime installer above, an MCP server
+that ships as its own Debian package can **self-register in mcprack at
+`apt install` time**, with no manual admin step: the server's own repo
+builds a small companion package (`mcprack-mcp-server-<name>`) whose
+`postinst`/`prerm` call `mcprack server create`/`mcprack server delete`.
+
+See [`doc/PACKAGING-MCP-SERVERS.md`](doc/PACKAGING-MCP-SERVERS.md) for the
+full convention: package naming, the `postinst`/`prerm` template, the
+`mcprack server create` CLI reference, a pybuild pitfall that silently ships
+an empty package if missed, and how to rename an existing package into this
+convention with a clean `apt upgrade` path.
+
