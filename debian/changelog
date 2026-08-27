@@ -1,3 +1,10 @@
+mcprack (1.5.7-1) unstable; urgency=medium
+
+  * Add 'MCP server projects' section to README.md linking every
+    Suggests-listed MCP server's GitHub repo.
+
+ -- vitex <info@vitexsoftware.cz>  Thu, 27 Aug 2026 16:16:02 +0200
+
 mcprack (1.5.6-1) unstable; urgency=medium
 
   * Add doc/PACKAGING-MCP-SERVERS.md: spec for packaging an MCP server

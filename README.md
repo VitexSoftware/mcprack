@@ -864,3 +864,26 @@ full convention: package naming, the `postinst`/`prerm` template, the
 an empty package if missed, and how to rename an existing package into this
 convention with a clean `apt upgrade` path.
 
+## MCP server projects
+
+Debian-packaged MCP servers that self-register in mcprack via the
+`mcprack-mcp-server-<name>` companion-package convention above
+(`Suggests:` in `debian/control`):
+
+- [AbraFlexi](https://github.com/VitexSoftware/mcp-server-abraflexi)
+- [CC Token Saver](https://github.com/Vitexus/cc-token-saver-mcp)
+- [Datovka (Czech ISDS Data Box)](https://github.com/VitexSoftware/mcp-server-datovka)
+- [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem)
+- [LinkedIn](https://github.com/Vitexus/linkedin-mcp-server)
+- [Mastodon](https://github.com/VitexSoftware/mastodon-mcp-server)
+- [MultiFlexi](https://github.com/VitexSoftware/multiflexi-mcp-server)
+- [NetBox](https://github.com/Spoje-NET/netbox-mcp-server) (rename to `mcp-server-netbox` pending on GitHub)
+- [Nextcloud](https://github.com/Vitexus/mcp-server-nextcloud)
+- [Phone (Android via ADB)](https://github.com/Vitexus/phone-mcp-server)
+- [Redmine](https://github.com/Vitexus/mcp-server-redmine)
+- [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver)
+- [Semaphore UI](https://github.com/VitexSoftware/semaphore-mcp-server)
+- [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg)
+- [Vaultwarden/Bitwarden](https://github.com/Vitexus/warden-mcp)
+- [Zabbix](https://github.com/Vitexus/mcp-server-zabbix)
+
