@@ -22,6 +22,8 @@ import functools
 import hashlib
 import hmac
 import json
+import os
+import tempfile
 import time
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -44,45 +46,89 @@ def is_vaultwarden_configured():
     return bool(current_app.config.get("BW_SERVER"))
 
 
-# In-memory cache of Vaultwarden-resolved secrets, keyed by (server_id,
-# user_id-or-None). Lives on the Flask app object (app.extensions), not a
-# module-level global, so it's naturally scoped to one app instance instead
-# of leaking cached secrets across the separate `create_app()` calls each
-# test makes. See resolve_server_env() for why this exists at all - every
-# proxied MCP request calls it, and each `bw` CLI round-trip is expensive.
-def _env_cache():
-    return current_app.extensions.setdefault("bw_env_cache", {})
+# Cache of Vaultwarden-resolved secrets, keyed by "server_id:user_id". mcprack
+# runs multiple gunicorn worker *processes* (see debian/mcprack.service), so
+# this has to be shared state on disk, not an in-memory/per-process dict -
+# otherwise each worker pays its own full `bw` round-trip the first time it
+# happens to handle a given server/user, and several of those colliding after
+# a restart (each worker cold at once) is exactly what caused repeated
+# "Vaultwarden is busy" lock-timeout failures even with a cache in place. It
+# lives next to vaultwarden's own lock file in BITWARDENCLI_APPDATA_DIR - the
+# same already-restricted directory that holds `bw`'s own unlocked-vault
+# state, so this doesn't introduce a new trust boundary, just one more
+# mode-600 file in an existing sensitive one. See resolve_server_env() for
+# why this exists at all - every proxied MCP request calls it, and each `bw`
+# CLI round-trip is expensive (measured ~9-13s end to end).
+def _env_cache_path():
+    appdata_dir = current_app.config["BITWARDENCLI_APPDATA_DIR"]
+    os.makedirs(appdata_dir, exist_ok=True)
+    return os.path.join(appdata_dir, ".mcprack-env-cache.json")
+
+
+def _load_env_cache():
+    # Encrypted at rest with the same SECRET_KEY-derived Fernet key used for
+    # local-fallback secret storage below (_encrypt/_decrypt) - app.py
+    # refuses to start mcprack at all without a real SECRET_KEY, so this is
+    # always available. A file-level 600 perm alone would still leave
+    # resolved secrets sitting in plaintext for up to BW_ENV_CACHE_TTL
+    # seconds; this closes that gap even if the file ever got copied out
+    # (backup, snapshot, misconfigured perms) during that window.
+    try:
+        with open(_env_cache_path()) as f:
+            blob = f.read()
+    except (FileNotFoundError, OSError):
+        return {}
+    try:
+        return _decrypt(blob)
+    except SecretStoreError:
+        return {}
+
+
+def _save_env_cache(cache):
+    path = _env_cache_path()
+    blob = _encrypt(cache)
+    fd, tmp_path = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".env-cache-")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(blob)
+        os.chmod(tmp_path, 0o600)
+        os.replace(tmp_path, path)  # atomic - readers never see a partial file
+    except BaseException:
+        os.unlink(tmp_path)
+        raise
 
 
 def _env_cache_key(server, user):
-    return (server.id, user.id if user is not None else None)
+    return f"{server.id}:{user.id if user is not None else ''}"
 
 
 def _get_cached_secrets(key):
-    entry = _env_cache().get(key)
+    entry = _load_env_cache().get(key)
     if entry is None:
         return None
     expires_at, values = entry
-    if time.monotonic() >= expires_at:
-        _env_cache().pop(key, None)
+    if time.time() >= expires_at:
         return None
     return values
 
 
 def _set_cached_secrets(key, values):
     ttl = float(current_app.config.get("BW_ENV_CACHE_TTL", 60.0))
-    _env_cache()[key] = (time.monotonic() + ttl, values)
+    cache = _load_env_cache()
+    cache[key] = [time.time() + ttl, values]
+    _save_env_cache(cache)
 
 
 def _invalidate_cached_secrets(server_id=None, user_id=None):
-    cache = _env_cache()
+    cache = _load_env_cache()
     if server_id is None:
-        cache.clear()
+        cache = {}
     elif user_id is None:
-        for key in [k for k in cache if k[0] == server_id]:
-            del cache[key]
+        prefix = f"{server_id}:"
+        cache = {k: v for k, v in cache.items() if not k.startswith(prefix)}
     else:
-        cache.pop((server_id, user_id), None)
+        cache.pop(f"{server_id}:{user_id}", None)
+    _save_env_cache(cache)
 
 
 @functools.lru_cache(maxsize=4)
@@ -148,9 +194,21 @@ def resolve_server_env(server, user=None):
         key = _env_cache_key(server, user)
         secrets = _get_cached_secrets(key)
         if secrets is None:
-            with vaultwarden.session() as sess:
-                secrets = vaultwarden.resolve_env(sess, server, user=user)
-            _set_cached_secrets(key, secrets)
+            # Acquire vaultwarden's own cross-process lock directly (instead
+            # of going through session(), which would unlock() first) so we
+            # can re-check the shared cache *after* getting exclusive access.
+            # Another worker may have resolved and cached this very key while
+            # we were waiting for the lock - if so, skip the `bw` round trip
+            # entirely instead of paying for it again.
+            with vaultwarden._serialized():
+                secrets = _get_cached_secrets(key)
+                if secrets is None:
+                    sess = vaultwarden.unlock()
+                    try:
+                        secrets = vaultwarden.resolve_env(sess, server, user=user)
+                    finally:
+                        vaultwarden.lock(sess)
+                    _set_cached_secrets(key, secrets)
         env.update(secrets)
         return env
 

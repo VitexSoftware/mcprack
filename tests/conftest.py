@@ -36,8 +36,12 @@ def _isolate_user_proxy_state(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def app():
+def app(tmp_path):
     application = create_app(TestConfig)
+    # Isolated per test - secret_store's shared env-cache file and
+    # vaultwarden's lock file both live here, and a fixed shared path would
+    # leak cached secrets between otherwise-independent tests.
+    application.config["BITWARDENCLI_APPDATA_DIR"] = str(tmp_path / "bw")
     with application.app_context():
         _db.create_all()
         yield application

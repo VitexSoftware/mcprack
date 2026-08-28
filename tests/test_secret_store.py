@@ -1,3 +1,4 @@
+import contextlib
 from unittest.mock import patch
 
 import pytest
@@ -71,7 +72,9 @@ def test_resolve_server_env_merges_config_and_vaultwarden_secrets(app):
         db.session.commit()
 
         with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch("mcprack.secret_store.vaultwarden._serialized"), \
+             patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.secret_store.vaultwarden.lock"), \
              patch("mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}):
             env = secret_store.resolve_server_env(server)
 
@@ -83,7 +86,9 @@ def test_resolve_server_env_caches_vaultwarden_lookup_within_ttl(app):
         server = _server()
 
         with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch("mcprack.secret_store.vaultwarden._serialized"), \
+             patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.secret_store.vaultwarden.lock"), \
              patch(
                  "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
              ) as mock_resolve_env:
@@ -94,13 +99,45 @@ def test_resolve_server_env_caches_vaultwarden_lookup_within_ttl(app):
         mock_resolve_env.assert_called_once()
 
 
+def test_resolve_server_env_skips_unlock_if_cache_filled_while_waiting_for_lock(app):
+    """The whole point of acquiring vaultwarden._serialized() directly
+    (instead of via session(), which unlock()s unconditionally) is so a
+    worker that loses the race to a concurrent one can re-check the cache
+    *after* getting the lock and skip the `bw` round trip entirely - this
+    is what actually fixes multi-worker cold-start pileups, not just the
+    TTL cache by itself. Simulate "another worker already resolved this
+    while we waited" by populating the cache as a side effect of acquiring
+    the lock, and assert unlock()/resolve_env() are never called."""
+    with app.app_context():
+        server = _server()
+        key = secret_store._env_cache_key(server, None)
+
+        def fake_serialized():
+            secret_store._set_cached_secrets(key, {"AUTH_TOKEN": "from-other-worker"})
+            return contextlib.nullcontext()
+
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden._serialized", side_effect=fake_serialized), \
+             patch("mcprack.secret_store.vaultwarden.unlock") as mock_unlock, \
+             patch("mcprack.secret_store.vaultwarden.lock") as mock_lock, \
+             patch("mcprack.secret_store.vaultwarden.resolve_env") as mock_resolve_env:
+            env = secret_store.resolve_server_env(server)
+
+        assert env == {"AUTH_TOKEN": "from-other-worker"}
+        mock_unlock.assert_not_called()
+        mock_lock.assert_not_called()
+        mock_resolve_env.assert_not_called()
+
+
 def test_resolve_server_env_cache_expires_after_ttl(app):
     with app.app_context():
         app.config["BW_ENV_CACHE_TTL"] = 0.01
         server = _server()
 
         with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
-             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch("mcprack.secret_store.vaultwarden._serialized"), \
+             patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.secret_store.vaultwarden.lock"), \
              patch(
                  "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
              ) as mock_resolve_env:
@@ -118,6 +155,9 @@ def test_save_server_secrets_invalidates_cache(app):
         server = _server()
 
         with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden._serialized"), \
+             patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.secret_store.vaultwarden.lock"), \
              patch("mcprack.secret_store.vaultwarden.session"), \
              patch(
                  "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "old"}
@@ -140,7 +180,10 @@ def test_save_user_override_secrets_only_invalidates_that_users_cache(app):
         db.session.add_all([alice, bob])
         db.session.commit()
 
-        with patch("mcprack.secret_store.vaultwarden.session"), \
+        with patch("mcprack.secret_store.vaultwarden._serialized"), \
+             patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.secret_store.vaultwarden.lock"), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
              patch(
                  "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
              ) as mock_resolve_env:
