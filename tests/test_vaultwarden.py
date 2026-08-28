@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import json
 import subprocess
 from types import SimpleNamespace
@@ -281,6 +282,61 @@ def test_diagnose_reports_bad_master_password(app):
     assert statuses["bw_unlock"] == "fail"
     unlock_step = next(s for s in steps if s["key"] == "bw_unlock")
     assert "incorrect" in unlock_step["detail"]
+
+
+def test_diagnose_reports_lock_contention_on_login_step(app):
+    with app.app_context():
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=True), \
+             patch("mcprack.vaultwarden.os.access", return_value=True), \
+             patch("mcprack.vaultwarden.health.check_http_reachable", return_value=True), \
+             patch(
+                 "mcprack.vaultwarden._serialized",
+                 side_effect=vaultwarden.VaultwardenError("Vaultwarden is busy (lock wait exceeded 8.0s)"),
+             ):
+            steps = vaultwarden.diagnose()
+
+    statuses = _step_statuses(steps)
+    assert statuses["bw_server_reachable"] == "ok"
+    assert statuses["bw_api_key_set"] == "ok"
+    assert statuses["bw_api_login"] == "fail"
+    assert statuses["bw_password_set"] == "skipped"
+    assert statuses["bw_unlock"] == "skipped"
+    login_step = next(s for s in steps if s["key"] == "bw_api_login")
+    assert "busy" in login_step["detail"]
+
+
+def test_diagnose_reports_lock_contention_on_unlock_step(app):
+    with app.app_context():
+        with patch("mcprack.vaultwarden.os.path.isfile", return_value=True), \
+             patch("mcprack.vaultwarden.os.access", return_value=True), \
+             patch("mcprack.vaultwarden.health.check_http_reachable", return_value=True), \
+             patch("mcprack.vaultwarden.subprocess.run") as mock_run:
+            mock_run.side_effect = [
+                _proc(),  # config server
+                _proc(stdout='{"status":"unlocked"}'),  # status --raw: already authenticated
+            ]
+
+            real_serialized = vaultwarden._serialized
+            calls = {"n": 0}
+
+            @contextlib.contextmanager
+            def flaky_serialized():
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    with real_serialized():
+                        yield
+                else:
+                    raise vaultwarden.VaultwardenError("Vaultwarden is busy (lock wait exceeded 8.0s)")
+
+            with patch("mcprack.vaultwarden._serialized", side_effect=flaky_serialized):
+                steps = vaultwarden.diagnose()
+
+    statuses = _step_statuses(steps)
+    assert statuses["bw_api_login"] == "ok"
+    assert statuses["bw_password_set"] == "ok"
+    assert statuses["bw_unlock"] == "fail"
+    unlock_step = next(s for s in steps if s["key"] == "bw_unlock")
+    assert "busy" in unlock_step["detail"]
 
 
 def test_session_unlocks_yields_and_locks(app):

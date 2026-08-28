@@ -374,30 +374,33 @@ def diagnose():
 
     login_ok, login_detail = False, "Not attempted."
     if not blocked:
-        with _serialized():
-            _run(["config", "server", server], check=False)
-            status_result = _run(["status", "--raw"], check=False)
-            current_status = "unknown"
-            if status_result and status_result.stdout:
-                try:
-                    current_status = json.loads(status_result.stdout).get("status", "unknown")
-                except ValueError:
-                    pass
+        try:
+            with _serialized():
+                _run(["config", "server", server], check=False)
+                status_result = _run(["status", "--raw"], check=False)
+                current_status = "unknown"
+                if status_result and status_result.stdout:
+                    try:
+                        current_status = json.loads(status_result.stdout).get("status", "unknown")
+                    except ValueError:
+                        pass
 
-            if current_status == "unauthenticated":
-                login_result = _run(["login", "--apikey", "--quiet"], check=False)
-                login_ok = login_result is not None and login_result.returncode == 0
-                if login_ok:
-                    login_detail = "Logged in successfully with the configured API key."
+                if current_status == "unauthenticated":
+                    login_result = _run(["login", "--apikey", "--quiet"], check=False)
+                    login_ok = login_result is not None and login_result.returncode == 0
+                    if login_ok:
+                        login_detail = "Logged in successfully with the configured API key."
+                    else:
+                        stderr = (login_result.stderr.strip() or login_result.stdout.strip()) if login_result else ""
+                        login_detail = stderr or (
+                            "Login failed — double check BW_CLIENTID/BW_CLIENTSECRET are correct for this "
+                            "Vaultwarden server (Account Settings -> Security -> API Key)."
+                        )
                 else:
-                    stderr = (login_result.stderr.strip() or login_result.stdout.strip()) if login_result else ""
-                    login_detail = stderr or (
-                        "Login failed — double check BW_CLIENTID/BW_CLIENTSECRET are correct for this "
-                        "Vaultwarden server (Account Settings -> Security -> API Key)."
-                    )
-            else:
-                login_ok = True
-                login_detail = f"Already authenticated (status: {current_status})."
+                    login_ok = True
+                    login_detail = f"Already authenticated (status: {current_status})."
+        except VaultwardenError as exc:
+            login_ok, login_detail = False, str(exc)
     add("bw_api_login", "API key login succeeds", login_ok, login_detail)
 
     password_set = bool(cfg["BW_PASSWORD"])
@@ -411,19 +414,22 @@ def diagnose():
 
     unlock_ok, unlock_detail = False, "Not attempted."
     if not blocked:
-        with _serialized():
-            unlock_result = _run(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"], check=False)
-            unlock_ok = bool(unlock_result and unlock_result.returncode == 0 and unlock_result.stdout.strip())
-            if unlock_ok:
-                _run(["lock"], check=False)
-                unlock_detail = "Vault unlocked successfully — Vaultwarden is fully configured."
-            else:
-                stderr = (
-                    (unlock_result.stderr.strip() or unlock_result.stdout.strip()) if unlock_result else ""
-                )
-                unlock_detail = stderr or (
-                    "Unlock failed — double check BW_PASSWORD is the correct master password for this account."
-                )
+        try:
+            with _serialized():
+                unlock_result = _run(["unlock", "--passwordenv", "BW_PASSWORD", "--raw"], check=False)
+                unlock_ok = bool(unlock_result and unlock_result.returncode == 0 and unlock_result.stdout.strip())
+                if unlock_ok:
+                    _run(["lock"], check=False)
+                    unlock_detail = "Vault unlocked successfully — Vaultwarden is fully configured."
+                else:
+                    stderr = (
+                        (unlock_result.stderr.strip() or unlock_result.stdout.strip()) if unlock_result else ""
+                    )
+                    unlock_detail = stderr or (
+                        "Unlock failed — double check BW_PASSWORD is the correct master password for this account."
+                    )
+        except VaultwardenError as exc:
+            unlock_ok, unlock_detail = False, str(exc)
     add("bw_unlock", "Vault unlocks with BW_PASSWORD", unlock_ok, unlock_detail)
 
     return steps
