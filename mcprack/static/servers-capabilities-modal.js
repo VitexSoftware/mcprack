@@ -6,6 +6,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalTitle = document.getElementById('modal-title');
   const modalContent = document.getElementById('modal-content');
 
+  const closeBtn = document.querySelector('[data-capabilities-close]');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => modal.close());
+  }
+
   document.querySelectorAll('[data-capabilities-btn]').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();

@@ -108,9 +108,34 @@ def check_reachable(server):
     return check_stdio_command(server.command)
 
 
-def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0):
+# The streamable-HTTP MCP transport (what fastmcp's proxy speaks - see
+# user_proxy.py's _spawn) rejects any request whose Accept header doesn't
+# list *both* of these, and replies to `initialize` with a session id that
+# every subsequent request in the same session must echo back in this
+# header - both requirements come straight from a live 406/400 observed
+# against a real server, not from the spec alone.
+_MCP_ACCEPT = "application/json, text/event-stream"
+_MCP_SESSION_HEADER = "mcp-session-id"
+
+
+def _parse_mcp_body(raw):
+    """The same transport can reply with a plain JSON body or a single SSE
+    event wrapping the identical JSON payload in a `data:` line, depending
+    on how the server negotiates the response - a plain json.loads() alone
+    fails on the latter with a JSONDecodeError."""
+    text = raw.strip()
+    if text.startswith("event:") or text.startswith("data:"):
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("data:"):
+                return json.loads(line[len("data:"):].strip())
+        raise ValueError("SSE response had no data: line")
+    return json.loads(text)
+
+
+def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0, session_id=None):
     """Send a JSON-RPC request to an MCP server and return the response.
-    
+
     Returns (success: bool, data: dict or str).
     On success, data is the response object (tools/resources list, etc).
     On error, data is an error message string.
@@ -122,28 +147,29 @@ def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0):
         "method": method,
         "params": params or {},
     }).encode('utf-8')
-    
+
+    headers = {"Content-Type": "application/json", "Accept": _MCP_ACCEPT}
+    if session_id:
+        headers[_MCP_SESSION_HEADER] = session_id
+
     try:
         conn = http.client.HTTPConnection(host, port, timeout=timeout)
-        conn.request("POST", "/mcp", body=payload, headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        })
+        conn.request("POST", "/mcp", body=payload, headers=headers)
         response = conn.getresponse()
         data = response.read().decode('utf-8')
         conn.close()
-        
+
         if response.status != 200:
             return False, f"HTTP {response.status}: {data}"
-        
+
         try:
-            result = json.loads(data)
+            result = _parse_mcp_body(data)
             if "error" in result:
                 return False, f"MCP Error: {result['error'].get('message', str(result['error']))}"
             if "result" in result:
                 return True, result["result"]
             return False, f"Unexpected response: {data}"
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, ValueError):
             return False, f"Invalid JSON response: {data}"
     except (socket.timeout, OSError) as e:
         return False, f"Connection failed: {e}"
@@ -151,10 +177,11 @@ def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0):
 
 def get_server_capabilities(host, port, timeout=8.0):
     """Query an MCP server for its list of tools and resources.
-    
+
     First initializes the connection via handshake, then requests tools/list
-    and resources/list. Returns a dict with 'tools' and 'resources' keys,
-    or None on failure.
+    and resources/list (reusing the session id the handshake returned -
+    the streamable-HTTP transport rejects follow-up requests without it).
+    Returns a dict with 'tools' and 'resources' keys, or None on failure.
     """
     # Step 1: Initialize handshake
     init_payload = json.dumps({
@@ -167,42 +194,45 @@ def get_server_capabilities(host, port, timeout=8.0):
             "clientInfo": {"name": "mcprack-admin", "version": "1.0"},
         }
     }).encode('utf-8')
-    
+
     deadline = time.monotonic() + timeout
     try:
         conn = http.client.HTTPConnection(host, port, timeout=timeout)
         conn.request("POST", "/mcp", body=init_payload, headers={
             "Content-Type": "application/json",
+            "Accept": _MCP_ACCEPT,
         })
         response = conn.getresponse()
-        init_response = json.loads(response.read().decode('utf-8'))
+        raw = response.read().decode('utf-8')
+        session_id = response.getheader(_MCP_SESSION_HEADER)
         conn.close()
-        
+
+        init_response = _parse_mcp_body(raw)
         if "error" in init_response:
             return None
-    except (socket.timeout, OSError, json.JSONDecodeError):
+    except (socket.timeout, OSError, json.JSONDecodeError, ValueError):
         return None
-    
+
     # Step 2: Get tools list
     tools = []
     remaining = deadline - time.monotonic()
     if remaining > 0.5:
         success, data = _send_jsonrpc_request(
-            host, port, "tools/list", {}, timeout=remaining
+            host, port, "tools/list", {}, timeout=remaining, session_id=session_id
         )
         if success and isinstance(data, dict):
             tools = data.get("tools", [])
-    
+
     # Step 3: Get resources list
     resources = []
     remaining = deadline - time.monotonic()
     if remaining > 0.5:
         success, data = _send_jsonrpc_request(
-            host, port, "resources/list", {}, timeout=remaining
+            host, port, "resources/list", {}, timeout=remaining, session_id=session_id
         )
         if success and isinstance(data, dict):
             resources = data.get("resources", [])
-    
+
     return {
         "tools": tools,
         "resources": resources,
