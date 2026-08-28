@@ -76,6 +76,15 @@ class Config:
     BW_ITEM_PREFIX = os.environ.get("BW_ITEM_PREFIX", "MCP-")
     BW_COMMAND_TIMEOUT = float(os.environ.get("BW_COMMAND_TIMEOUT", "12"))
     BW_LOCK_TIMEOUT = float(os.environ.get("BW_LOCK_TIMEOUT", "8"))
+    # How long a resolved secret stays cached in memory (per gunicorn worker)
+    # before secret_store re-resolves it from Vaultwarden. Each `bw` CLI
+    # invocation is slow (multi-second) and resolve_server_env() is called on
+    # every single proxied MCP request, not once per connection - without
+    # this cache, two concurrent MCP connections are enough to blow past
+    # BW_LOCK_TIMEOUT constantly. Explicit invalidation on secret writes
+    # (see secret_store.py) keeps this from masking real edits; the TTL is
+    # only a safety net for the multi-worker case.
+    BW_ENV_CACHE_TTL = float(os.environ.get("BW_ENV_CACHE_TTL", "60"))
     BITWARDENCLI_APPDATA_DIR = os.environ.get(
         "BITWARDENCLI_APPDATA_DIR", "/opt/mcprack/.bw"
     )

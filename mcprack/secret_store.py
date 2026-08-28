@@ -22,6 +22,7 @@ import functools
 import hashlib
 import hmac
 import json
+import time
 
 from cryptography.fernet import Fernet, InvalidToken
 from flask import current_app
@@ -41,6 +42,47 @@ class SecretStoreError(RuntimeError):
 
 def is_vaultwarden_configured():
     return bool(current_app.config.get("BW_SERVER"))
+
+
+# In-memory cache of Vaultwarden-resolved secrets, keyed by (server_id,
+# user_id-or-None). Lives on the Flask app object (app.extensions), not a
+# module-level global, so it's naturally scoped to one app instance instead
+# of leaking cached secrets across the separate `create_app()` calls each
+# test makes. See resolve_server_env() for why this exists at all - every
+# proxied MCP request calls it, and each `bw` CLI round-trip is expensive.
+def _env_cache():
+    return current_app.extensions.setdefault("bw_env_cache", {})
+
+
+def _env_cache_key(server, user):
+    return (server.id, user.id if user is not None else None)
+
+
+def _get_cached_secrets(key):
+    entry = _env_cache().get(key)
+    if entry is None:
+        return None
+    expires_at, values = entry
+    if time.monotonic() >= expires_at:
+        _env_cache().pop(key, None)
+        return None
+    return values
+
+
+def _set_cached_secrets(key, values):
+    ttl = float(current_app.config.get("BW_ENV_CACHE_TTL", 60.0))
+    _env_cache()[key] = (time.monotonic() + ttl, values)
+
+
+def _invalidate_cached_secrets(server_id=None, user_id=None):
+    cache = _env_cache()
+    if server_id is None:
+        cache.clear()
+    elif user_id is None:
+        for key in [k for k in cache if k[0] == server_id]:
+            del cache[key]
+    else:
+        cache.pop((server_id, user_id), None)
 
 
 @functools.lru_cache(maxsize=4)
@@ -103,8 +145,13 @@ def resolve_server_env(server, user=None):
         return env
 
     if is_vaultwarden_configured():
-        with vaultwarden.session() as sess:
-            env.update(vaultwarden.resolve_env(sess, server, user=user))
+        key = _env_cache_key(server, user)
+        secrets = _get_cached_secrets(key)
+        if secrets is None:
+            with vaultwarden.session() as sess:
+                secrets = vaultwarden.resolve_env(sess, server, user=user)
+            _set_cached_secrets(key, secrets)
+        env.update(secrets)
         return env
 
     env.update(_decrypt(server.env_secrets_encrypted))
@@ -138,6 +185,9 @@ def save_server_secrets(server, values):
         server.env_secrets_encrypted = None
     else:
         server.env_secrets_encrypted = _encrypt(values) if values else None
+    # Defaults changed - invalidate every cached resolution for this server,
+    # since every user's merged env includes these defaults.
+    _invalidate_cached_secrets(server_id=server.id)
 
 
 def load_user_override_secrets(server, user):
@@ -176,6 +226,7 @@ def save_user_override_secrets(server, user, values):
             override_row = UserServerOverride(user_id=user.id, server_id=server.id)
             db.session.add(override_row)
         override_row.env_secrets_encrypted = _encrypt(values)
+    _invalidate_cached_secrets(server_id=server.id, user_id=user.id)
 
 
 def delete_user_override_secrets(server, user):
@@ -192,6 +243,7 @@ def delete_user_override_secrets(server, user):
     ).first()
     if override_row:
         db.session.delete(override_row)
+    _invalidate_cached_secrets(server_id=server.id, user_id=user.id)
 
 
 # --- Migration actions ------------------------------------------------------
@@ -238,6 +290,7 @@ def migrate_local_to_vaultwarden():
                 failed.append((label, str(exc)))
 
     db.session.commit()
+    _invalidate_cached_secrets()
     return {"moved": moved, "failed": failed}
 
 

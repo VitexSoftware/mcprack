@@ -78,6 +78,86 @@ def test_resolve_server_env_merges_config_and_vaultwarden_secrets(app):
         assert env == {"REGION": "eu", "AUTH_TOKEN": "secret"}
 
 
+def test_resolve_server_env_caches_vaultwarden_lookup_within_ttl(app):
+    with app.app_context():
+        server = _server()
+
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch(
+                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
+             ) as mock_resolve_env:
+            first = secret_store.resolve_server_env(server)
+            second = secret_store.resolve_server_env(server)
+
+        assert first == second == {"AUTH_TOKEN": "secret"}
+        mock_resolve_env.assert_called_once()
+
+
+def test_resolve_server_env_cache_expires_after_ttl(app):
+    with app.app_context():
+        app.config["BW_ENV_CACHE_TTL"] = 0.01
+        server = _server()
+
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch(
+                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
+             ) as mock_resolve_env:
+            secret_store.resolve_server_env(server)
+            import time as _time
+
+            _time.sleep(0.02)
+            secret_store.resolve_server_env(server)
+
+        assert mock_resolve_env.call_count == 2
+
+
+def test_save_server_secrets_invalidates_cache(app):
+    with app.app_context():
+        server = _server()
+
+        with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True), \
+             patch("mcprack.secret_store.vaultwarden.session"), \
+             patch(
+                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "old"}
+             ) as mock_resolve_env, \
+             patch("mcprack.secret_store.vaultwarden.set_notes"):
+            secret_store.resolve_server_env(server)
+            secret_store.save_server_secrets(server, {"AUTH_TOKEN": "new"})
+            secret_store.resolve_server_env(server)
+
+        assert mock_resolve_env.call_count == 2
+
+
+def test_save_user_override_secrets_only_invalidates_that_users_cache(app):
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=True):
+        server = _server(allow_user_override=True)
+        alice = User(username="alice", auth_type="local")
+        alice.set_password("pw")
+        bob = User(username="bob", auth_type="local")
+        bob.set_password("pw")
+        db.session.add_all([alice, bob])
+        db.session.commit()
+
+        with patch("mcprack.secret_store.vaultwarden.session"), \
+             patch(
+                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
+             ) as mock_resolve_env:
+            secret_store.resolve_server_env(server, user=alice)
+            secret_store.resolve_server_env(server, user=bob)
+            assert mock_resolve_env.call_count == 2
+
+            with patch("mcprack.secret_store.vaultwarden.set_notes"):
+                secret_store.save_user_override_secrets(server, alice, {"AUTH_TOKEN": "alice-secret"})
+
+            secret_store.resolve_server_env(server, user=bob)
+            assert mock_resolve_env.call_count == 2  # bob still cached
+
+            secret_store.resolve_server_env(server, user=alice)
+            assert mock_resolve_env.call_count == 3  # alice's cache was invalidated
+
+
 def test_local_encryption_roundtrip(app):
     with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         server = _server()
