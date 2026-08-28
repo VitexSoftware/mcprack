@@ -75,7 +75,17 @@ class Config:
     BW_PASSWORD = os.environ.get("BW_PASSWORD", "")
     BW_ITEM_PREFIX = os.environ.get("BW_ITEM_PREFIX", "MCP-")
     BW_COMMAND_TIMEOUT = float(os.environ.get("BW_COMMAND_TIMEOUT", "12"))
-    BW_LOCK_TIMEOUT = float(os.environ.get("BW_LOCK_TIMEOUT", "8"))
+    # A full unlock() -> get_notes() -> lock() cycle chains 4-5 sequential
+    # `bw` CLI invocations, and each one carries multi-second startup
+    # overhead of its own (measured ~1.9-3.5s per call on se-mcp-rack01, even
+    # for calls that do no real work like `config server`) - so a single,
+    # completely uncontended cold resolution can legitimately take
+    # 9-13 seconds. The old 8s default was shorter than that, so even two
+    # servers' resolutions merely overlapping (no misbehavior involved) was
+    # enough to make the second one time out waiting for the lock. Must stay
+    # comfortably above the slowest real resolution observed, not just above
+    # the average.
+    BW_LOCK_TIMEOUT = float(os.environ.get("BW_LOCK_TIMEOUT", "20"))
     # How long a resolved secret stays cached in memory (per gunicorn worker)
     # before secret_store re-resolves it from Vaultwarden. Each `bw` CLI
     # invocation is slow (multi-second) and resolve_server_env() is called on
