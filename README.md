@@ -664,6 +664,53 @@ creates an initial `admin` account (random password saved to
 full post-install configuration steps, and [repo.vitexsoftware.com](https://repo.vitexsoftware.com/)
 for other available packages.
 
+## Ansible Collection
+
+For unattended/repeatable deployments, mcprack can also be installed and
+managed with the [`vitexsoftware.mcprack`](https://github.com/VitexSoftware/mcprack-ansible-collection)
+Ansible collection instead of running `apt install` by hand.
+
+It provides:
+
+- **`vitexsoftware.mcprack.app`** — a role that installs the `.deb`
+  package above, configures `/etc/mcprack/env` (database, LDAP,
+  Vaultwarden, `DEMO_MODE`/`STRICT_SERVER_PERMISSIONS`, ...), optionally
+  fronts it with an nginx reverse proxy and UFW firewall rules, waits for
+  `/health`, and provisions local admin accounts and catalog servers.
+- **Idempotent modules** wrapping this project's own command-line
+  administration surface (see [Command-line
+  administration](#command-line-administration) below) —
+  `mcprack_server`, `mcprack_user`, `mcprack_secret`, `mcprack_template`,
+  `mcprack_template_apply`, and the `mcprack_user_access` /
+  `mcprack_user_selection` / `mcprack_user_override` / `mcprack_user_config`
+  family for per-user server access, pre-selection, credential overrides,
+  and generated client configs.
+
+```bash
+ansible-galaxy collection install vitexsoftware.mcprack
+```
+
+```yaml
+- hosts: mcprack_servers
+  become: true
+  roles:
+    - role: vitexsoftware.mcprack.app
+      vars:
+        mcprack_domain: mcprack.example.com
+        mcprack_admin_users: [alice]
+        mcprack_catalog_servers:
+          - name: netbox
+            label: NetBox
+            transport: http
+            url: "https://netbox.example.com/mcp"
+            category: infra
+```
+
+Note this collection manages the mcprack *application* itself — it does
+not install or run individual MCP servers' own runtime (e.g. as systemd
+services); see [Remote access to stdio MCP
+servers](#remote-access-to-stdio-mcp-servers) below for that.
+
 ## Packaging
 
 See `debian/` — builds a `.deb` following the same conventions as other

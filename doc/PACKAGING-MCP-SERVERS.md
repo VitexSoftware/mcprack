@@ -233,6 +233,38 @@ has no browser to complete an OAuth flow — following
 `mcp-server-nextcloud`'s `stdio.py` (a single-user, BasicAuth-only stripped
 FastMCP instance) as the reference pattern.
 
+## Registering a server in read-only mode
+
+Some servers support a read-only/safe-by-default mode via an env var —
+this family's example: `mcp-server-filesystem`, which defaults to
+`FS_READONLY=true` and only exposes mutating tools (write/delete/move/copy)
+when explicitly set to `false` (see the "Trying it out" section in the main
+README). When packaging a companion package for a server like this, set the
+read-only var explicitly at registration time with `--set-env`, the same
+mechanism used for a stdio-enabling var:
+
+```sh
+mcprack server create mcp-server-filesystem \
+  --label 'Filesystem MCP Server' \
+  --transport stdio \
+  --command /usr/bin/mcp-server-filesystem \
+  --set-env FS_READONLY=true \
+  --category debian \
+  --enabled
+```
+
+Prefer registering read-only by default for any server whose backend
+exposes destructive tools, even if the upstream binary itself defaults to
+read-write — a companion package runs unattended at `apt install` time with
+no admin review of the resulting catalog entry, so the safer default belongs
+in the `postinst`, not left to whatever the binary ships with. An admin who
+actually wants write access can flip it afterward with `mcprack server edit
+<name> --set-env FS_READONLY=false` (or the equivalent var for that server).
+
+This only applies to servers that have a real read-only mode in their own
+code — like the stdio-enabling case above, adding one where none exists is
+a code change in the server itself, not a packaging one.
+
 ## Renaming an existing package
 
 When a server was originally packaged under a name that doesn't fit
