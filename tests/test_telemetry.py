@@ -201,6 +201,26 @@ def test_request_id_appears_as_span_attribute(monkeypatch):
     assert recorded.attributes["audit.request_id"] == request_id
 
 
+def test_missing_dependency_produces_actionable_error(monkeypatch):
+    """OTEL_ENABLED=true but the opentelemetry-* packages aren't installed
+    (the common case on a fresh host that never ran `pip install -r
+    requirements-otel.txt` / installed the Suggested Debian packages) must
+    surface a fix, not a bare 'No module named ...'."""
+
+    def _raise_missing_module(app, effective_protocol):
+        raise ModuleNotFoundError("No module named 'opentelemetry.sdk'")
+
+    monkeypatch.setattr(telemetry, "_init_sdk", _raise_missing_module)
+
+    app = create_app(OtelEnabledConfig)
+    assert telemetry.is_enabled() is False
+
+    state = telemetry.status()
+    assert state["init_error"] is not None
+    assert "requirements-otel.txt" in state["init_error"]
+    assert "opentelemetry.sdk" in state["init_error"]
+
+
 def test_send_test_signal_reports_disabled_when_off():
     app = create_app(OtelDisabledConfig)
     ok, detail = telemetry.send_test_signal()
@@ -218,3 +238,41 @@ def test_send_test_signal_ok_when_enabled(monkeypatch):
     ok, detail = telemetry.send_test_signal()
     assert ok is True
     assert len(fake_span_exporter.exported_spans) == 1
+
+
+@pytest.mark.skipif(not HAS_OTEL_SDK, reason="opentelemetry-sdk not installed")
+def test_send_test_signal_is_self_identifying_by_hostname(monkeypatch):
+    """Multiple mcprack instances can share one Collector, and a
+    misconfigured Collector can drop/overwrite the OTLP resource
+    attributes (service.name, host.name) that would otherwise identify
+    which instance a diagnostic signal came from (see the module
+    docstring on send_test_signal). The signal must be traceable to its
+    origin host from its own span/metric attributes alone."""
+    import socket
+
+    fake_span_exporter, fake_metric_exporter = _make_fake_exporters()
+    monkeypatch.setattr(telemetry, "_build_span_exporter", lambda *a: fake_span_exporter)
+    monkeypatch.setattr(telemetry, "_build_metric_exporter", lambda *a: fake_metric_exporter)
+
+    create_app(OtelEnabledConfig)
+    ok, detail = telemetry.send_test_signal()
+    assert ok is True
+
+    hostname = socket.gethostname()
+    expected_server_name = f"otel-diagnostics@{hostname}"
+    assert expected_server_name in detail
+
+    test_span = fake_span_exporter.exported_spans[0]
+    assert test_span.attributes["mcprack.diagnostics.hostname"] == hostname
+
+    telemetry._state["meter_provider"].force_flush(timeout_millis=5000)
+    recorded_server_names = {
+        point.attributes.get("server_name")
+        for batch in fake_metric_exporter.exported_batches
+        for rd in batch.resource_metrics
+        for sd in rd.scope_metrics
+        for metric in sd.metrics
+        if metric.name == "mcp_server_calls_total"
+        for point in metric.data.data_points
+    }
+    assert expected_server_name in recorded_server_names

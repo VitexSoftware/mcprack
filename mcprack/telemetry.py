@@ -21,6 +21,7 @@ audit.py follows.
 import contextlib
 import hashlib
 import logging
+import socket
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,24 @@ def init_app(app):
 
     try:
         _init_sdk(app, effective_protocol)
+    except (ImportError, ModuleNotFoundError) as exc:
+        # By far the most common init failure: OTEL_ENABLED=true was set but
+        # the optional opentelemetry-* packages were never installed (they
+        # are deliberately NOT a hard dependency of mcprack — see the
+        # module docstring). Make the fix obvious in the admin OTEL
+        # diagnostics page instead of surfacing a bare "No module named ...".
+        logger.exception(
+            "OpenTelemetry packages are not installed — continuing without OTEL. "
+            "Install them with `pip install -r requirements-otel.txt` or the "
+            "python3-opentelemetry-* Debian packages listed in debian/control's "
+            "Suggests, then restart mcprack."
+        )
+        _state["enabled"] = False
+        _state["init_error"] = (
+            f"{exc} — the opentelemetry-* dependencies are not installed. Install them "
+            "with `pip install -r requirements-otel.txt` (or the python3-opentelemetry-* "
+            "Debian packages listed in debian/control's Suggests), then restart mcprack."
+        )
     except Exception as exc:  # pragma: no cover - defensive, see docstring
         logger.exception("Failed to initialize OpenTelemetry — continuing without it")
         _state["enabled"] = False
@@ -287,14 +306,22 @@ def span(name, attributes=None):
         yield current_span
 
 
-def record_mcp_server_call(server_name, transport, result, duration_seconds):
+def record_mcp_server_call(server_name, transport, result, duration_seconds, extra_attributes=None):
+    """extra_attributes is for callers (currently just send_test_signal below)
+    that need extra dimensions beyond server_name/result on this one call,
+    without changing the label set every real MCP proxy call produces."""
     instruments = _state.get("instruments") or {}
     counter = instruments.get("mcp_server_calls_total")
     histogram = instruments.get("mcp_server_call_duration_seconds")
+    counter_attrs = {"server_name": server_name or "unknown", "result": result}
+    histogram_attrs = {"server_name": server_name or "unknown"}
+    if extra_attributes:
+        counter_attrs.update(extra_attributes)
+        histogram_attrs.update(extra_attributes)
     if counter is not None:
-        counter.add(1, {"server_name": server_name or "unknown", "result": result})
+        counter.add(1, counter_attrs)
     if histogram is not None:
-        histogram.record(duration_seconds, {"server_name": server_name or "unknown"})
+        histogram.record(duration_seconds, histogram_attrs)
 
 
 def record_config_download(client_type):
@@ -308,14 +335,44 @@ def send_test_signal():
     """Used by the OTEL diagnostics page: emit one span and one metric
     point and force-flush them, so a real export attempt happens
     synchronously and any exception surfaces immediately instead of being
-    swallowed by the background export thread. Returns (ok, detail)."""
+    swallowed by the background export thread. Returns (ok, detail).
+
+    Every mcprack instance sharing a Collector fires this from the same
+    admin page, so the resulting series/span must be self-identifying on
+    its own — never rely solely on the OTLP resource attributes
+    (service.name/host.name) a downstream Collector attaches, since a
+    misconfigured Collector can silently drop them (e.g. a `prometheus`
+    exporter without `resource_to_telemetry_conversion` enabled turns
+    service.name into only the `job`/`instance` target_info labels, never a
+    per-series label) or overwrite host.name with its own hostname (the
+    OTLP receiver's `resourcedetection` processor detects the Collector
+    host, not the origin). We therefore bake the origin hostname directly
+    into the server_name value itself — and repeat it as an explicit
+    `mcprack.diagnostics.hostname` attribute for programmatic filtering —
+    so the signal is traceable to its source purely from its own
+    attributes, with no dependency on Collector-side config."""
     if not _state["enabled"]:
         return False, "OpenTelemetry is not enabled (OTEL_ENABLED is not set/true)."
+
+    hostname = socket.gethostname()
+    service_name = _state.get("service_name") or "mcprack"
+    diagnostic_server_name = f"otel-diagnostics@{hostname}"
 
     try:
         with _state["tracer"].start_as_current_span("otel.diagnostics.test_span") as test_span:
             test_span.set_attribute("mcprack.diagnostics", True)
-        record_mcp_server_call("otel-diagnostics", "test", "success", 0.0)
+            test_span.set_attribute("mcprack.diagnostics.hostname", hostname)
+            test_span.set_attribute("mcprack.diagnostics.service_name", service_name)
+        record_mcp_server_call(
+            diagnostic_server_name,
+            "test",
+            "success",
+            0.0,
+            extra_attributes={
+                "mcprack.diagnostics.hostname": hostname,
+                "mcprack.diagnostics.service_name": service_name,
+            },
+        )
 
         tracer_provider = _state.get("tracer_provider")
         meter_provider = _state.get("meter_provider")
@@ -326,4 +383,9 @@ def send_test_signal():
     except Exception as exc:
         return False, f"Test span/metric export failed: {exc}"
 
-    return True, "Test span and metric flushed to the configured OTLP endpoint without error."
+    return True, (
+        "Test span and metric flushed to the configured OTLP endpoint without error — "
+        f"look for server_name='{diagnostic_server_name}' (service_name='{service_name}') "
+        "in your metrics/trace backend to confirm it arrived and to tell this instance's "
+        "signal apart from any other mcprack host sharing the same Collector."
+    )

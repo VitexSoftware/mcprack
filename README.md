@@ -528,6 +528,17 @@ Check **Admin → OTEL Diagnostics** (`/admin/otel/wizard`) to see the
 effective (post-fallback) protocol, whether a fallback happened, and to
 fire a one-off test span/metric at the configured endpoint.
 
+If multiple mcprack instances share one Collector, that test signal tags
+itself `server_name="otel-diagnostics@<hostname>"` (plus explicit
+`mcprack.diagnostics.hostname` / `mcprack.diagnostics.service_name`
+attributes) so you can tell which instance it came from directly from the
+signal itself — it deliberately does not rely on the Collector correctly
+propagating OTLP resource attributes (`service.name`, `host.name`), since
+a `prometheus` exporter without `resource_to_telemetry_conversion` enabled
+never turns `service.name` into a per-series label, and a Collector's own
+`resourcedetection` processor stamps `host.name` with *its own* hostname,
+not the origin's.
+
 ### Example `.env` — testing against the shared 10.11.56.226 stack
 
 ```bash
