@@ -148,3 +148,15 @@ class Config:
     SMTP_FROM = os.environ.get("SMTP_FROM", "mcprack <noreply@localhost>")
     # How long a password-reset link stays valid.
     PASSWORD_RESET_MAX_AGE = int(os.environ.get("PASSWORD_RESET_MAX_AGE_SECONDS", str(3600)))
+
+    # How long a user's per-server MCP proxy URL (see catalog.py's
+    # _make_proxy_token/_parse_proxy_token, used by `mcprack user config
+    # show/download` and the "Config" download button) stays valid before
+    # the proxy starts rejecting it with 403. Empty (default) means the
+    # token never expires on its own - only regenerating a user's config
+    # (which mints a fresh token) or rotating SECRET_KEY invalidates it.
+    # Set to a positive integer to re-enable time-limited tokens, e.g. for
+    # an internet-facing instance where a leaked config URL should stop
+    # working on its own after a while.
+    _proxy_token_max_age_raw = os.environ.get("PROXY_TOKEN_MAX_AGE_SECONDS", "").strip()
+    PROXY_TOKEN_MAX_AGE = int(_proxy_token_max_age_raw) if _proxy_token_max_age_raw else None

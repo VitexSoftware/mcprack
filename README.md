@@ -750,6 +750,19 @@ don't fit your hardware:
   under gunicorn's own 30s worker timeout (`--timeout 30` in
   `debian/mcprack.service`).
 
+The proxy URL itself (`/proxy/mcp/<token>/<server_id>`) embeds a signed
+token. `PROXY_TOKEN_MAX_AGE_SECONDS` in `/etc/mcprack/env` controls how long
+it stays valid before the proxy starts rejecting it with `403`:
+
+- Empty/unset (default) — the token never expires on its own; only
+  regenerating the user's config (Admin → Users → Config, or `mcprack user
+  config show/download`) or rotating `SECRET_KEY` invalidates it. This is
+  what most deployments want: a config URL handed to a client (e.g. wired
+  into `claude_desktop_config.json`) should keep working indefinitely.
+- A positive integer (e.g. `86400` for 24h) — re-enables time-limited
+  tokens, for an internet-facing instance where a leaked config URL should
+  stop working on its own after a while.
+
 Separately from those two, each *already-established* request forwarded to a
 running proxy instance has a fixed 10s ceiling (`_PROXY_REQUEST_TIMEOUT` in
 `mcprack/catalog.py`), so one slow backend can't tie up a gunicorn worker.

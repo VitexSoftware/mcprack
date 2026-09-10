@@ -42,7 +42,6 @@ RENDERERS = {
 }
 
 PROXY_TOKEN_SALT = "mcprack-user-proxy"
-PROXY_TOKEN_MAX_AGE = 24 * 3600
 
 
 def _proxy_serializer():
@@ -56,8 +55,14 @@ def _make_proxy_token(user_id, server_id):
 
 
 def _parse_proxy_token(token):
+    from flask import current_app
+
+    # PROXY_TOKEN_MAX_AGE is None by default (see config.py) - itsdangerous
+    # treats max_age=None as "no expiry check", so a config URL keeps
+    # working until the user's config is regenerated or SECRET_KEY rotates.
+    max_age = current_app.config["PROXY_TOKEN_MAX_AGE"]
     try:
-        return _proxy_serializer().loads(token, max_age=PROXY_TOKEN_MAX_AGE)
+        return _proxy_serializer().loads(token, max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
 

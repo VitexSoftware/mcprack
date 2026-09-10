@@ -1,3 +1,14 @@
+mcprack (1.5.8-1) unstable; urgency=medium
+
+  * Make the per-user MCP proxy URL's token lifetime configurable via
+    PROXY_TOKEN_MAX_AGE_SECONDS in /etc/mcprack/env (was hardcoded to
+    24h in mcprack/catalog.py). Default changed to never expire on its
+    own, since a config URL wired into a client is meant to keep
+    working until the user's config is regenerated or SECRET_KEY
+    rotates - set a positive integer to restore time-limited tokens.
+
+ -- vitex <info@vitexsoftware.cz>  Thu, 10 Sep 2026 21:34:50 +0200
+
 mcprack (1.5.7-1) unstable; urgency=medium
 
   * Add 'MCP server projects' section to README.md linking every
