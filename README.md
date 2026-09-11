@@ -488,6 +488,8 @@ audit log, it is **opt-in**: with `OTEL_ENABLED` unset/false, `telemetry.py`
 is a complete no-op (no spans, no metrics, no network calls), and none of
 the `opentelemetry-*` packages even need to be installed.
 
+![Grafana Scrrenshot](grafana/grafana-dashboard-screenshot.png?raw=true)
+
 ### Architecture
 
 ```
