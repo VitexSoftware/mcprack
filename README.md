@@ -959,4 +959,4 @@ Debian-packaged MCP servers that self-register in mcprack via the
 - [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg)
 - [Vaultwarden/Bitwarden](https://github.com/Vitexus/warden-mcp)
 - [Zabbix](https://github.com/Vitexus/mcp-server-zabbix)
-
+- [Email](https://github.com/Vitexus/mcp-email-server)
