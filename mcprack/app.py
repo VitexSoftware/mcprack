@@ -107,6 +107,24 @@ def create_app(config_object=Config):
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
+        # The user-proxy MCP endpoint is bearer-token authenticated via the
+        # signed token in the URL path, not cookies - so, unlike the rest of
+        # the app, it's safe to open up to cross-origin callers. Remote MCP
+        # clients (Claude Desktop, claude.ai) are browser/Electron-based and
+        # enforce CORS: without these headers their preflight OPTIONS - or
+        # the browser's post-preflight block of the real request - fails
+        # before mcprack's response ever gets read, even though the request
+        # itself would have succeeded (curl doesn't enforce CORS, so this is
+        # invisible outside a real browser-based client).
+        if request.path.startswith("/proxy/mcp/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Accept, Authorization, Mcp-Session-Id, "
+                "Mcp-Protocol-Version, Last-Event-ID"
+            )
+            response.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
+            response.headers["Access-Control-Max-Age"] = "86400"
         return response
 
     from .auth import bp as auth_bp

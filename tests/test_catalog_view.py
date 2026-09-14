@@ -259,6 +259,57 @@ def test_user_proxy_route_relays_to_backend_url_for_network_server(app, client):
     assert called_url == "http://10.11.25.175:3108/mcp"
 
 
+def test_user_proxy_route_sends_cors_headers_for_browser_based_mcp_clients(app, client):
+    """Claude Desktop and claude.ai are browser/Electron-based MCP clients
+    and enforce CORS. Without Access-Control-* headers on /proxy/mcp/, their
+    preflight OPTIONS (or the browser's block of the real request after a
+    failed preflight) fails before mcprack's response is ever read - even
+    though the request itself succeeds fine over plain HTTP (e.g. curl,
+    which doesn't enforce CORS). The endpoint is bearer-token authenticated
+    via the signed URL token, not cookies, so it's safe to open up."""
+    from mcprack import catalog
+
+    user_id = _login(client)
+    with app.app_context():
+        server = McpServer(
+            name="mcp-rack-abraflexi",
+            label="AbraFlexi via mcp_rack",
+            transport="http",
+            url="http://10.11.25.175:3108/mcp",
+            enabled=True,
+        )
+        db.session.add(server)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=server.id))
+        db.session.commit()
+        server_id = server.id
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    preflight = client.options(
+        f"/proxy/mcp/{token}/{server_id}",
+        headers={
+            "Origin": "https://claude.ai",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type,mcp-session-id",
+        },
+    )
+    assert preflight.headers.get("Access-Control-Allow-Origin") == "*"
+    assert "POST" in preflight.headers.get("Access-Control-Allow-Methods", "")
+    assert "Mcp-Session-Id" in preflight.headers.get("Access-Control-Allow-Headers", "")
+
+    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.catalog.vaultwarden.lock"), \
+         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={}), \
+         patch.object(catalog, "_forward_to_backend_url", return_value=app.response_class("ok", status=200)):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    assert resp.headers.get("Access-Control-Allow-Origin") == "*"
+    assert resp.headers.get("Access-Control-Expose-Headers") == "Mcp-Session-Id"
+
+
 def test_forward_to_backend_url_connects_to_remote_host(app):
     """_forward_to_backend_url must not assume the backend is on
     127.0.0.1 - mcp_rack proxies (and genuinely network-native MCP
