@@ -47,6 +47,36 @@ def _add_enabled_server(app, name="icon-test"):
         return server.id
 
 
+def test_index_renders_copyable_name_and_url_for_each_configured_server(app, client):
+    """The catalog page must offer a name+URL pair (with copy buttons) per
+    selected server - the friendlier way to add a server to Claude
+    Desktop's "Add custom connector" dialog, which wants those two fields
+    rather than a JSON config file. A server the user hasn't selected must
+    not appear here."""
+    user_id = _login(client)
+    server_id = _add_selected_server(app, user_id)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert 'data-copy-value="jenkins"' in body
+    assert f"/proxy/mcp/" in body
+    assert f"/{server_id}\"" in body
+    assert "copy-connector.js" in body
+
+
+def test_index_omits_connector_section_when_nothing_selected(app, client):
+    _login(client)
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "connector-row" not in body
+    assert "copy-connector.js" not in body
+
+
 def test_view_renders_textarea_with_config_json(app, client):
     """Every server — including one with a real network `url` of its own,
     like Jenkins here — is rendered as a /proxy/mcp/ relay URL, never its

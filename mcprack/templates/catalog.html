@@ -44,6 +44,35 @@
   </div>
 </section>
 
+{% if connectors %}
+<section class="section">
+  <h2>{{ _('Add as Individual Connectors') }}</h2>
+  <p class="text-muted">{{ _("Claude Desktop's \"Add custom connector\" dialog (and claude.ai) asks for a name and a URL — copy each one below instead of using a JSON config file.") }}</p>
+
+  <div class="connector-list">
+    {% for connector in connectors %}
+    <div class="connector-row">
+      <div class="connector-label">{{ connector.label }}</div>
+      <div class="connector-field">
+        <span class="connector-field-label">{{ _('Name') }}</span>
+        <code class="connector-value">{{ connector.name }}</code>
+        <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.name }}">
+          📋 {{ _('Copy') }}
+        </button>
+      </div>
+      <div class="connector-field">
+        <span class="connector-field-label">{{ _('URL') }}</span>
+        <code class="connector-value connector-url">{{ connector.url }}</code>
+        <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.url }}">
+          📋 {{ _('Copy') }}
+        </button>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="section">
   <form method="post" action="{{ url_for('catalog.selection') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -91,5 +120,9 @@
     </div>
   </form>
 </section>
+
+{% if connectors %}
+<script src="{{ url_for('static', filename='copy-connector.js') }}"></script>
+{% endif %}
 
 {% endblock %}

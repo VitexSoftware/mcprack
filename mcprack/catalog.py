@@ -222,8 +222,13 @@ def index():
         row.server_id
         for row in UserServerOverride.query.filter_by(user_id=current_user.id).all()
     }
+    connectors = _selected_server_connectors(current_user)
     return render_template(
-        "catalog.html", servers=servers, selected_ids=selected_ids, override_ids=override_ids
+        "catalog.html",
+        servers=servers,
+        selected_ids=selected_ids,
+        override_ids=override_ids,
+        connectors=connectors,
     )
 
 
@@ -391,6 +396,45 @@ def override(server_id):
     )
 
 
+def _selected_enabled_allowed_servers(user):
+    """The McpServer rows `user` has both selected and is currently allowed
+    to see - shared by _build_client_config_json and
+    _selected_server_connectors so the "which servers is this user actually
+    configured with" definition can't drift between the two."""
+    allowed_ids = _allowed_enabled_server_ids(user.id)
+    return (
+        McpServer.query.join(UserServerSelection)
+        .filter(
+            UserServerSelection.user_id == user.id,
+            McpServer.enabled.is_(True),
+            McpServer.id.in_(allowed_ids),
+        )
+        .all()
+    )
+
+
+def _selected_server_connectors(user):
+    """Each of `user`'s configured servers as a {id, name, label, url}
+    dict, for the "copy name / copy URL" rows on the catalog page (see
+    catalog.html). Some MCP clients - notably Claude Desktop's "Add custom
+    connector" dialog - want a plain name+URL pair per server rather than a
+    JSON config file; this is the friendlier route for those. Same relay-URL
+    construction as _build_client_config_json below."""
+    connectors = []
+    for server in _selected_enabled_allowed_servers(user):
+        token = _make_proxy_token(user.id, server.id)
+        relay_url = url_for(
+            "catalog.user_proxy_mcp",
+            token=token,
+            server_id=server.id,
+            _external=True,
+        )
+        connectors.append(
+            {"id": server.id, "name": server.name, "label": server.label, "url": relay_url}
+        )
+    return connectors
+
+
 def _build_client_config_json(client, user=None):
     """Resolve `user`'s (default: the current user) selected+enabled servers
     into a rendered client config, as a pretty-printed JSON string. Returns
@@ -418,16 +462,7 @@ def _build_client_config_json(client, user=None):
         abort(404)
     render_fn, filename = RENDERERS[client]
 
-    allowed_ids = _allowed_enabled_server_ids(user.id)
-    selected = (
-        McpServer.query.join(UserServerSelection)
-        .filter(
-            UserServerSelection.user_id == user.id,
-            McpServer.enabled.is_(True),
-            McpServer.id.in_(allowed_ids),
-        )
-        .all()
-    )
+    selected = _selected_enabled_allowed_servers(user)
 
     if not selected:
         return None, filename, "You haven't selected any MCP servers yet."
