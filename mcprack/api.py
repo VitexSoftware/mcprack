@@ -355,6 +355,17 @@ def admin_servers():
 
         server = McpServer(name=name)
         try:
+            transport = data["transport"]
+        except KeyError as exc:
+            return api_error(400, "invalid_request", f"missing required field: {exc}")
+
+        errors, warnings = admin.validate_server_endpoint(
+            transport, data.get("command"), data.get("url")
+        )
+        if errors:
+            return api_error(400, "invalid_request", "; ".join(errors))
+
+        try:
             admin._apply_server_fields(server, data)
         except KeyError as exc:
             return api_error(400, "invalid_request", f"missing required field: {exc}")
@@ -371,6 +382,8 @@ def admin_servers():
         response = _server_detail(server)
         if secrets_error:
             response["secrets_error"] = secrets_error
+        if warnings:
+            response["warnings"] = warnings
         return api_ok(response, status=201)
 
     include_health = request.args.get("include_health") == "1"
@@ -399,7 +412,14 @@ def admin_server_update(server_id):
     server = db.get_or_404(McpServer, server_id)
     data = request.get_json(silent=True) or {}
 
-    admin._apply_server_fields(server, _server_update_data(server, data))
+    update = _server_update_data(server, data)
+    errors, warnings = admin.validate_server_endpoint(
+        update["transport"], update.get("command"), update.get("url")
+    )
+    if errors:
+        return api_error(400, "invalid_request", "; ".join(errors))
+
+    admin._apply_server_fields(server, update)
     secrets_error = None
     if "env" in data or "secrets" in data:
         secrets_error = admin._apply_server_secrets(
@@ -415,6 +435,8 @@ def admin_server_update(server_id):
     response = _server_detail(server)
     if secrets_error:
         response["secrets_error"] = secrets_error
+    if warnings:
+        response["warnings"] = warnings
     return api_ok(response)
 
 

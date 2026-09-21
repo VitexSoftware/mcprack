@@ -2,6 +2,8 @@
 {% block title %}{{ "Edit" if server else "Register" }} MCP server — mcprack{% endblock %}
 {% block content %}
 
+{% set fv = form_values if form_values is defined else none %}
+
 <script src="{{ url_for('static', filename='server-form-submit-guard.js') }}"></script>
 
 <section class="section">
@@ -34,7 +36,7 @@
             <span class="label-text">Name (unique slug)</span>
             {% if server %}<span class="label-badge">read-only</span>{% endif %}
           </label>
-          <input type="text" id="name" name="name" value="{{ server.name if server else '' }}"
+          <input type="text" id="name" name="name" value="{{ server.name if server else (fv.name if fv else '') }}"
                  {{ 'readonly' if server else '' }} required class="form-control">
           <small class="form-hint">Used in URLs and API endpoints. Cannot be changed after creation.</small>
         </div>
@@ -44,7 +46,7 @@
             <span class="label-text">Label</span>
             <span class="label-badge required" title="Required field">*</span>
           </label>
-          <input type="text" id="label" name="label" value="{{ server.label if server else '' }}" required class="form-control">
+          <input type="text" id="label" name="label" value="{{ server.label if server else (fv.label if fv else '') }}" required class="form-control">
           <small class="form-hint">User-friendly name displayed in the catalog.</small>
         </div>
 
@@ -52,7 +54,7 @@
           <label for="description">
             <span class="label-text">Description</span>
           </label>
-          <textarea id="description" name="description" rows="3" class="form-control">{{ server.description if server else '' }}</textarea>
+          <textarea id="description" name="description" rows="3" class="form-control">{{ server.description if server else (fv.description if fv else '') }}</textarea>
           <small class="form-hint">Brief description of what this server does. Supports Markdown.</small>
         </div>
 
@@ -60,7 +62,7 @@
           <label for="category">
             <span class="label-text">Category</span>
           </label>
-          <input type="text" id="category" name="category" value="{{ server.category if server else '' }}" class="form-control" placeholder="e.g., DevTools, Utilities, Data">
+          <input type="text" id="category" name="category" value="{{ server.category if server else (fv.category if fv else '') }}" class="form-control" placeholder="e.g., DevTools, Utilities, Data">
           <small class="form-hint">Used to organize servers in the catalog.</small>
         </div>
       </div>
@@ -74,16 +76,17 @@
             <span class="label-text">Transport Protocol</span>
             <span class="label-badge required" title="Required field">*</span>
           </label>
+          {% set current_transport = server.transport if server else (fv.transport if fv else 'stdio') %}
           <select id="transport" name="transport" class="form-control" required>
             {% for t in ["stdio", "http", "sse"] %}
-            <option value="{{ t }}" {{ "selected" if server and server.transport == t else "" }}>
+            <option value="{{ t }}" {{ "selected" if current_transport == t else "" }}>
               {{ t | upper }}
             </option>
             {% endfor %}
           </select>
           <small class="form-hint">
-            <strong>stdio:</strong> Local process spawned per user (recommended for most servers)<br>
-            <strong>http/sse:</strong> External service with network endpoint
+            <strong>stdio:</strong> Local process mcprack spawns per user, exposed to clients via <code>/proxy/mcp/</code><br>
+            <strong>http/sse:</strong> External network endpoint mcprack relays to (clients still get a <code>/proxy/mcp/</code> URL)
           </small>
         </div>
       </div>
@@ -92,14 +95,14 @@
       <div class="form-card">
         <h2 class="form-card-title">💻 Local Command (stdio)</h2>
         <p class="form-card-description">
-          Configure the command mcprack will spawn on demand, one instance per user. Users never directly access this process — mcprack manages it transparently.
+          Configure the command mcprack will spawn on demand, one instance per user. Users never directly access this process — mcprack manages it transparently. If both a command and a URL are set, the command wins.
         </p>
         
         <div class="form-group">
           <label for="command">
             <span class="label-text">Command</span>
           </label>
-          <input type="text" id="command" name="command" value="{{ server.command if server else '' }}" class="form-control" placeholder="e.g., mcp-server-webdriver">
+          <input type="text" id="command" name="command" value="{{ server.command if server else (fv.command if fv else '') }}" class="form-control" placeholder="e.g., mcp-server-webdriver">
           <small class="form-hint">Executable name or full path to the server binary.</small>
         </div>
 
@@ -107,7 +110,7 @@
           <label for="args">
             <span class="label-text">Arguments</span>
           </label>
-          <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server else '' }}" class="form-control" placeholder="space-separated arguments">
+          <input type="text" id="args" name="args" value="{{ server.args | join(' ') if server and server.args else (fv.args if fv else '') }}" class="form-control" placeholder="space-separated arguments">
           <small class="form-hint">Optional command-line arguments passed when spawning the server.</small>
         </div>
       </div>
@@ -116,16 +119,16 @@
       <div class="form-card">
         <h2 class="form-card-title">🌐 Network Endpoint (http/sse)</h2>
         <p class="form-card-description">
-          Only configure this section if your server is already running elsewhere and accessible via network. Leave empty for local stdio servers.
+          Only configure this section if the backend already speaks HTTP/SSE somewhere mcprack can reach. Leave empty for local stdio servers — do not paste a proxy URL here; clients always receive mcprack's own <code>/proxy/mcp/</code> relay.
         </p>
         
         <div class="form-group">
           <label for="url">
             <span class="label-text">URL</span>
           </label>
-          <input type="text" id="url" name="url" value="{{ server.url if server else '' }}" class="form-control"
+          <input type="text" id="url" name="url" value="{{ server.url if server else (fv.url if fv else '') }}" class="form-control"
                  placeholder="http://server.example.com:3100/mcp/">
-          <small class="form-hint">Full HTTP/SSE endpoint URL where mcprack can reach the server.</small>
+          <small class="form-hint">Backend HTTP/SSE endpoint URL. Ignored when a command is also set.</small>
         </div>
 
         <div class="form-row">
@@ -134,7 +137,7 @@
               <span class="label-text">Auth Header Name</span>
             </label>
             <input type="text" id="auth_header_name" name="auth_header_name"
-                   value="{{ server.auth_header_name if server else '' }}" class="form-control" placeholder="Authorization">
+                   value="{{ server.auth_header_name if server else (fv.auth_header_name if fv else '') }}" class="form-control" placeholder="Authorization">
             <small class="form-hint">HTTP header name for authentication.</small>
           </div>
 
@@ -143,7 +146,7 @@
               <span class="label-text">Auth Token Env Key</span>
             </label>
             <input type="text" id="auth_env_key" name="auth_env_key"
-                   value="{{ server.auth_env_key if server else '' }}" class="form-control" placeholder="AUTH_TOKEN">
+                   value="{{ server.auth_env_key if server else (fv.auth_env_key if fv else '') }}" class="form-control" placeholder="AUTH_TOKEN">
             <small class="form-hint">Environment variable key containing the auth token.</small>
           </div>
         </div>

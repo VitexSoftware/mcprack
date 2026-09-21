@@ -264,7 +264,7 @@ def test_server_edit_prefills_detected_but_unconfigured_rows(app, client):
             name="foo", label="Foo", transport="stdio", command="/bin/true", enabled=True,
         )
         server.detected_env_vars = [
-            {"name": "API_KEY", "required": True, "secret": True, "description": None, "source": "registry"},
+            {"name": "API_KEY", "required": True, "secret": True, "description": "API token", "source": "registry"},
             {"name": "LOG_LEVEL", "required": False, "secret": False, "description": None, "source": "source-scan"},
         ]
         db.session.add(server)
@@ -283,8 +283,22 @@ def test_server_edit_prefills_detected_but_unconfigured_rows(app, client):
     by_key = {row["key"]: row for row in rows}
 
     # required=True is only pre-checked for the registry-sourced suggestion
-    assert by_key["API_KEY"] == {"key": "API_KEY", "value": "", "sensitive": True, "required": True}
-    assert by_key["LOG_LEVEL"] == {"key": "LOG_LEVEL", "value": "", "sensitive": False, "required": False}
+    assert by_key["API_KEY"] == {
+        "key": "API_KEY",
+        "value": "",
+        "sensitive": True,
+        "required": True,
+        "source": "registry",
+        "description": "API token",
+    }
+    assert by_key["LOG_LEVEL"] == {
+        "key": "LOG_LEVEL",
+        "value": "",
+        "sensitive": False,
+        "required": False,
+        "source": "source-scan",
+        "description": None,
+    }
 
 
 def test_server_edit_excludes_already_configured_detected_suggestion(app, client):
@@ -341,3 +355,65 @@ def test_server_edit_persists_manually_checked_required_flag(app, client):
     with app.app_context():
         server = db.session.get(McpServer, server_id)
         assert server.required_env_keys == ["SOME_VAR"]
+
+
+def test_server_create_rejects_missing_command_and_url(app, client):
+    _login_admin(client)
+
+    resp = client.post(
+        "/admin/servers/new",
+        data={
+            "name": "broken",
+            "label": "Broken",
+            "transport": "stdio",
+            "command": "",
+            "url": "",
+            "enabled": "on",
+        },
+    )
+    assert resp.status_code == 200
+    assert b"Provide either a local command or a network URL" in resp.data
+    with app.app_context():
+        assert McpServer.query.filter_by(name="broken").first() is None
+
+
+def test_server_create_warns_when_stdio_has_command_and_url(app, client):
+    _login_admin(client)
+
+    resp = client.post(
+        "/admin/servers/new",
+        data={
+            "name": "mixed",
+            "label": "Mixed",
+            "transport": "stdio",
+            "command": "/bin/true",
+            "url": "http://example.test/mcp/",
+            "enabled": "on",
+        },
+        follow_redirects=True,
+    )
+    assert resp.status_code == 200
+    assert b"ignore the URL" in resp.data
+    with app.app_context():
+        server = McpServer.query.filter_by(name="mixed").first()
+        assert server is not None
+        assert server.command == "/bin/true"
+        assert server.url == "http://example.test/mcp/"
+
+
+def test_server_create_rejects_http_without_url(app, client):
+    _login_admin(client)
+
+    resp = client.post(
+        "/admin/servers/new",
+        data={
+            "name": "http-no-url",
+            "label": "HTTP",
+            "transport": "http",
+            "command": "",
+            "url": "",
+            "enabled": "on",
+        },
+    )
+    assert resp.status_code == 200
+    assert b"http transport requires a network URL" in resp.data

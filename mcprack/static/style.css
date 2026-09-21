@@ -1217,6 +1217,16 @@ tr.row-warn {
   border-radius: var(--border-radius-sm, 4px);
 }
 
+.env-row-wrap {
+  margin-bottom: var(--space-sm);
+}
+
+.env-row-hint {
+  display: block;
+  margin: 0 0 var(--space-xs) var(--space-sm);
+  opacity: 0.85;
+}
+
 .badge-admin {
   background-color: rgba(59, 130, 246, 0.2);
   color: var(--color-admin);

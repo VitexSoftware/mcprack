@@ -54,14 +54,18 @@ function parseDotEnv(text) {
 document.addEventListener('DOMContentLoaded', function () {
   var counters = {};
 
-  function addEnvRow(containerId, sensitiveLabel, key, value, sensitive, required, requiredLabel) {
+  function addEnvRow(containerId, sensitiveLabel, key, value, sensitive, required, requiredLabel, meta) {
     counters[containerId] = (counters[containerId] || 0) + 1;
     var id = containerId + '-' + counters[containerId];
+    meta = meta || {};
+
+    var wrap = document.createElement('div');
+    wrap.className = 'env-row-wrap';
 
     var row = document.createElement('div');
     row.className = 'env-row' + (required ? ' env-row-required' : '');
     row.dataset.rowId = id;
-    row.style.cssText = 'display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-sm);';
+    row.style.cssText = 'display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-xs);';
 
     var keyInput = document.createElement('input');
     keyInput.type = 'text';
@@ -103,11 +107,27 @@ document.addEventListener('DOMContentLoaded', function () {
     removeButton.className = 'btn btn-sm btn-danger';
     removeButton.textContent = '✕';
     removeButton.addEventListener('click', function () {
-      row.remove();
+      wrap.remove();
     });
 
     row.append(keyInput, valueInput, label, requiredLabelEl, removeButton);
-    document.getElementById(containerId).appendChild(row);
+    wrap.appendChild(row);
+
+    if (meta.source || meta.description) {
+      var hint = document.createElement('small');
+      hint.className = 'env-row-hint form-hint';
+      var parts = [];
+      if (meta.source) {
+        parts.push('suggested from ' + meta.source);
+      }
+      if (meta.description) {
+        parts.push(meta.description);
+      }
+      hint.textContent = parts.join(' — ');
+      wrap.appendChild(hint);
+    }
+
+    document.getElementById(containerId).appendChild(wrap);
   }
 
   document.querySelectorAll('[data-env-rows-container]').forEach(function (container) {
@@ -120,7 +140,16 @@ document.addEventListener('DOMContentLoaded', function () {
       initial = [];
     }
     initial.forEach(function (row) {
-      addEnvRow(container.id, sensitiveLabel, row.key, row.value, row.sensitive, row.required, requiredLabel);
+      addEnvRow(
+        container.id,
+        sensitiveLabel,
+        row.key,
+        row.value,
+        row.sensitive,
+        row.required,
+        requiredLabel,
+        { source: row.source, description: row.description }
+      );
     });
   });
 

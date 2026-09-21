@@ -161,6 +161,21 @@ def servers_list():
     return render_template("admin/servers_list.html", servers=servers, server_health=server_health)
 
 
+def _flash_endpoint_validation(form):
+    """Run validate_server_endpoint on a Werkzeug form; flash messages.
+    Returns True when save must be blocked."""
+    errors, warnings = validate_server_endpoint(
+        form.get("transport", "stdio"),
+        form.get("command", ""),
+        form.get("url", ""),
+    )
+    for message in errors:
+        flash(message, "error")
+    for message in warnings:
+        flash(message, "warning")
+    return bool(errors)
+
+
 @bp.route("/servers/new", methods=["GET", "POST"])
 @admin_required
 def server_new():
@@ -168,6 +183,14 @@ def server_new():
     if blocked:
         return blocked
     if request.method == "POST":
+        if _flash_endpoint_validation(request.form):
+            return render_template(
+                "admin/server_form.html",
+                server=None,
+                env_rows=_env_rows_from_form(request.form),
+                form_values=request.form,
+                demo_mode=current_app.config.get("DEMO_MODE", False),
+            )
         server = McpServer(name=request.form["name"])
         _apply_server_form(server, request.form)
         db.session.add(server)
@@ -191,6 +214,32 @@ def server_edit(server_id):
         blocked = _demo_mode_blocked()
         if blocked:
             return blocked
+        if _flash_endpoint_validation(request.form):
+            # Keep the in-memory object in sync with the rejected POST so the
+            # re-rendered form shows what the admin just typed.
+            _apply_server_fields(
+                server,
+                {
+                    "label": request.form.get("label", server.name),
+                    "description": request.form.get("description", ""),
+                    "transport": request.form["transport"],
+                    "category": request.form.get("category", ""),
+                    "enabled": request.form.get("enabled") == "on",
+                    "allow_user_override": request.form.get("allow_user_override") == "on",
+                    "command": request.form.get("command", ""),
+                    "args": request.form.get("args", ""),
+                    "url": request.form.get("url", ""),
+                    "auth_header_name": request.form.get("auth_header_name", ""),
+                    "auth_env_key": request.form.get("auth_env_key", ""),
+                },
+            )
+            return render_template(
+                "admin/server_form.html",
+                server=server,
+                env_rows=_env_rows_from_form(request.form),
+                icon_url=None,
+                demo_mode=current_app.config.get("DEMO_MODE", False),
+            )
         _apply_server_form(server, request.form)
         db.session.commit()
         _invalidate_health_cache()
@@ -227,6 +276,7 @@ def server_edit(server_id):
     # submits the form. Only registry/manifest sources ever carry
     # required=True (see env_detection.py); a heuristic source-scan/
     # docker-inspect guess is still shown, just not pre-checked required.
+    # `source` / `description` are display-only hints for the row editor.
     configured_keys = set(server.env_config or {}) | set(server.env_var_names)
     for suggestion in server.detected_env_vars:
         if suggestion.get("name") not in configured_keys:
@@ -236,6 +286,8 @@ def server_edit(server_id):
                     "value": "",
                     "sensitive": bool(suggestion.get("secret")),
                     "required": bool(suggestion.get("required")),
+                    "source": suggestion.get("source"),
+                    "description": suggestion.get("description"),
                 }
             )
 
@@ -281,15 +333,74 @@ def _parse_env_rows(form):
     return non_secret, secret, required_keys
 
 
+def _env_rows_from_form(form):
+    """Rebuild env_rows for re-rendering the form after a validation error."""
+    non_secret, secret, required_keys = _parse_env_rows(form)
+    rows = [
+        {"key": k, "value": v, "sensitive": False, "required": k in required_keys}
+        for k, v in non_secret.items()
+    ]
+    rows += [
+        {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
+        for k, v in secret.items()
+    ]
+    return rows
+
+
+def _nullable_text(value):
+    value = (value or "").strip()
+    if not value or value.lower() == "none":
+        return None
+    return value
+
+
+def validate_server_endpoint(transport, command, url):
+    """Validate command/url consistency for a catalog server.
+
+    Returns ``(errors, warnings)`` — errors must block save; warnings are
+    advisory (historically, setting a dead URL on a stdio+command row made
+    client configs point at a non-existent proxy; today clients always get
+    ``/proxy/mcp/`` URLs, but a leftover URL is still confusing because the
+    spawn path ignores it when ``command`` is set — see catalog.user_proxy_mcp).
+    """
+    command = _nullable_text(command)
+    url = _nullable_text(url)
+    errors = []
+    warnings = []
+
+    if not command and not url:
+        errors.append("Provide either a local command or a network URL.")
+
+    if transport == "stdio" and not command and url:
+        warnings.append(
+            "transport is stdio but only a URL is set — mcprack will relay to "
+            "that URL (no local process). Prefer transport http/sse for clarity, "
+            "or add a command to spawn."
+        )
+
+    if transport == "stdio" and command and url:
+        warnings.append(
+            "URL is set on a stdio server that also has a command — mcprack will "
+            "spawn the command via the per-user proxy and ignore the URL. Clear "
+            "the URL unless you intend to relay to an external endpoint instead "
+            "(in which case remove the command)."
+        )
+
+    if transport in ("http", "sse") and not url:
+        errors.append(f"{transport} transport requires a network URL.")
+
+    if transport in ("http", "sse") and command and url:
+        warnings.append(
+            "Both command and URL are set — mcprack prefers the command and will "
+            "spawn a local process. Clear the command to relay to the network URL."
+        )
+
+    return errors, warnings
+
+
 def _apply_server_fields(server, data):
     """Plain-dict field assignment shared by the HTML form and the JSON API
     — no Werkzeug form dependency, so it works the same from either caller."""
-    def _nullable_text(value):
-        value = (value or "").strip()
-        if not value or value.lower() == "none":
-            return None
-        return value
-
     server.label = data.get("label") or server.name
     server.description = data.get("description", "") or ""
     server.transport = data["transport"]
@@ -297,12 +408,9 @@ def _apply_server_fields(server, data):
     server.enabled = bool(data.get("enabled"))
     server.allow_user_override = bool(data.get("allow_user_override"))
 
-    # Command/args (how the server is actually run) and url/auth (how remote
-    # users reach it over the network) are independent of each other: a
-    # stdio-implemented server can still have a network endpoint if it's
-    # proxied — in that case remote users should always get the network
-    # address, never a "run this locally" command. Only a server with no
-    # url at all falls back to local stdio spawn. See config_formats.py.
+    # Command wins over url at proxy time (catalog.user_proxy_mcp): if both
+    # are set, mcprack spawns the command; url is only used when command is
+    # empty. Clients always receive a /proxy/mcp/ relay URL either way.
     server.command = _nullable_text(data.get("command", ""))
     args = data.get("args", [])
     if isinstance(args, str):

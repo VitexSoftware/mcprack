@@ -53,6 +53,39 @@ def test_admin_server_create_requires_transport(app, client):
     assert resp.status_code == 400
 
 
+def test_admin_server_create_rejects_http_without_url(app, client):
+    _create_user(app, "admin", is_admin=True)
+    _login(client, "admin")
+
+    resp = client.post(
+        "/api/v1/admin/servers",
+        json={"name": "svc", "label": "Svc", "transport": "http", "enabled": True},
+    )
+    assert resp.status_code == 400
+    assert "url" in resp.get_json()["error"]["message"].lower()
+
+
+def test_admin_server_create_returns_warning_for_stdio_with_url(app, client):
+    _create_user(app, "admin", is_admin=True)
+    _login(client, "admin")
+
+    resp = client.post(
+        "/api/v1/admin/servers",
+        json={
+            "name": "svc",
+            "label": "Svc",
+            "transport": "stdio",
+            "command": "/bin/true",
+            "url": "http://example.test/mcp/",
+            "enabled": True,
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.get_json()["data"]
+    assert body["url"] == "http://example.test/mcp/"
+    assert any("ignore the URL" in w for w in body.get("warnings", []))
+
+
 def test_non_admin_gets_json_403_not_html(app, client):
     _create_user(app, "alice", is_admin=False)
     _login(client, "alice")

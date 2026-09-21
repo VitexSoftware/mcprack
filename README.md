@@ -939,24 +939,27 @@ convention with a clean `apt upgrade` path.
 
 ## MCP server projects
 
-Debian-packaged MCP servers that self-register in mcprack via the
-`mcprack-mcp-server-<name>` companion-package convention above
-(`Suggests:` in `debian/control`):
+Debian-packaged MCP servers listed in `Suggests:` in `debian/control`.
+Those with a published `mcprack-mcp-server-<name>` companion self-register
+into the catalog on `apt install`; the rest are still useful to install
+alongside mcprack and register manually (or via the companion once it
+ships).
 
-- [AbraFlexi](https://github.com/VitexSoftware/mcp-server-abraflexi)
-- [CC Token Saver](https://github.com/Vitexus/cc-token-saver-mcp)
-- [Datovka (Czech ISDS Data Box)](https://github.com/VitexSoftware/mcp-server-datovka)
-- [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem)
-- [LinkedIn](https://github.com/Vitexus/linkedin-mcp-server)
-- [Mastodon](https://github.com/VitexSoftware/mastodon-mcp-server)
-- [MultiFlexi](https://github.com/VitexSoftware/multiflexi-mcp-server)
-- [NetBox](https://github.com/Spoje-NET/netbox-mcp-server) (rename to `mcp-server-netbox` pending on GitHub)
-- [Nextcloud](https://github.com/Vitexus/mcp-server-nextcloud)
-- [Phone (Android via ADB)](https://github.com/Vitexus/phone-mcp-server)
-- [Redmine](https://github.com/Vitexus/mcp-server-redmine)
-- [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver)
-- [Semaphore UI](https://github.com/VitexSoftware/semaphore-mcp-server)
-- [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg)
-- [Vaultwarden/Bitwarden](https://github.com/Vitexus/warden-mcp)
-- [Zabbix](https://github.com/Vitexus/mcp-server-zabbix)
-- [Email](https://github.com/Vitexus/mcp-email-server)
+- [AbraFlexi](https://github.com/VitexSoftware/abraflexi-mcp-server) (`abraflexi-mcp-server`; rename to `mcp-server-abraflexi` + companion pending)
+- [Blender](https://github.com/ahujasid/blender-mcp) (`mcp-server-blender`)
+- [CC Token Saver](https://github.com/Vitexus/cc_token_saver_mcp) (`cc-token-saver-mcp`)
+- [Datovka (Czech ISDS Data Box)](https://github.com/VitexSoftware/mcp-server-datovka) (+ companion)
+- [Email](https://github.com/Vitexus/mcp-email-server) (`mcp-email-server`)
+- [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) (+ companion)
+- [LinkedIn](https://github.com/Vitexus/linkedin-mcp-server) (`linkedin-mcp-server`)
+- [Mastodon](https://github.com/VitexSoftware/mastodon-mcp-server) (+ companion)
+- [Microsoft 365](https://github.com/Softeria/ms-365-mcp-server) (`ms-365-mcp-server`)
+- [MultiFlexi](https://github.com/VitexSoftware/multiflexi-mcp-server) (+ companion)
+- [NetBox](https://github.com/Spoje-NET/netbox-mcp-server) (`netbox-mcp-server`; rename to `mcp-server-netbox` + companion pending)
+- [Phone / ADB](https://github.com/Vitexus/phone-mcp-server) (`mcp-server-adb` + companion; replaces `phone-mcp-server`)
+- [Redmine](https://github.com/Vitexus/mcp-server-redmine) (+ companion)
+- [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver) (+ companion)
+- [Semaphore UI](https://github.com/VitexSoftware/semaphore-mcp-server) (+ companion)
+- [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg) (+ companion)
+- [Vaultwarden/Bitwarden](https://github.com/Vitexus/warden-mcp) (`warden-mcp` + companion)
+- [Zabbix](https://github.com/Vitexus/mcp-server-zabbix) (+ companion)
