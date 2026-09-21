@@ -5,9 +5,9 @@ mcprack (1.5.9-1) UNRELEASED; urgency=medium
     mcprack-mcp-server-<name> naming (AbraFlexi, Mastodon, Semaphore,
     MultiFlexi, LinkedIn, Warden, CC Token Saver, NetBox, Nextcloud,
     MS-365, Email, …).
-  * Demote bw-cli from Depends to Recommends: the published bw-cli is
-    arm64-only, so amd64 CI install tests (and companions that Depend
-    on mcprack) failed with "bw-cli is not installable".
+  * Keep bw-cli as a Depends: the missing trixie amd64 package was an
+    Aptly multi-arch publish bug (fixed in DebianRepository
+    publishDebToAptly), not a packaging gap in Packaging/bw-cli.
   * Convert ad-hoc HTTPS ProxyFix scripts under tests/ into real
     pytest cases so the suite collects cleanly without SECRET_KEY.
   * Validate server command/url on admin form and API: reject empty
