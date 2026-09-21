@@ -940,26 +940,25 @@ convention with a clean `apt upgrade` path.
 ## MCP server projects
 
 Debian-packaged MCP servers listed in `Suggests:` in `debian/control`.
-Those with a published `mcprack-mcp-server-<name>` companion self-register
-into the catalog on `apt install`; the rest are still useful to install
-alongside mcprack and register manually (or via the companion once it
-ships).
+Those with a `mcprack-mcp-server-<name>` companion self-register into
+the catalog on `apt install`.
 
-- [AbraFlexi](https://github.com/VitexSoftware/abraflexi-mcp-server) (`abraflexi-mcp-server`; rename to `mcp-server-abraflexi` + companion pending)
-- [Blender](https://github.com/ahujasid/blender-mcp) (`mcp-server-blender`)
-- [CC Token Saver](https://github.com/Vitexus/cc_token_saver_mcp) (`cc-token-saver-mcp`)
+- [AbraFlexi](https://github.com/VitexSoftware/mcp-server-abraflexi) (`mcp-server-abraflexi` + companion)
+- [Blender](https://github.com/Vitexus/mcp-server-blender) (`mcp-server-blender`)
+- [CC Token Saver](https://github.com/Vitexus/mcp-server-cc-token-saver) (`mcp-server-cc-token-saver` + companion)
 - [Datovka (Czech ISDS Data Box)](https://github.com/VitexSoftware/mcp-server-datovka) (+ companion)
-- [Email](https://github.com/Vitexus/mcp-email-server) (`mcp-email-server`)
+- [Email](https://github.com/Vitexus/mcp-server-email) (`mcp-server-email` + companion)
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) (+ companion)
-- [LinkedIn](https://github.com/Vitexus/linkedin-mcp-server) (`linkedin-mcp-server`)
-- [Mastodon](https://github.com/VitexSoftware/mastodon-mcp-server) (+ companion)
-- [Microsoft 365](https://github.com/Softeria/ms-365-mcp-server) (`ms-365-mcp-server`)
-- [MultiFlexi](https://github.com/VitexSoftware/multiflexi-mcp-server) (+ companion)
-- [NetBox](https://github.com/Spoje-NET/netbox-mcp-server) (`netbox-mcp-server`; rename to `mcp-server-netbox` + companion pending)
-- [Phone / ADB](https://github.com/Vitexus/phone-mcp-server) (`mcp-server-adb` + companion; replaces `phone-mcp-server`)
+- [LinkedIn](https://github.com/Vitexus/mcp-server-linkedin) (`mcp-server-linkedin` + companion)
+- [Mastodon](https://github.com/VitexSoftware/mcp-server-mastodon) (+ companion)
+- [Microsoft 365](https://github.com/Spoje-NET/mcp-server-ms-365) (`mcp-server-ms-365` + companion; upstream Softeria)
+- [MultiFlexi](https://github.com/VitexSoftware/mcp-server-multiflexi) (+ companion)
+- [NetBox](https://github.com/Spoje-NET/netbox-mcp-server) (`mcp-server-netbox` + companion; GitHub repo name unchanged)
+- [Nextcloud](https://github.com/Vitexus/mcp-server-nextcloud) (`mcp-server-nextcloud` + companion)
+- [Phone / ADB](https://github.com/Vitexus/mcp-server-adb) (`mcp-server-adb` + companion)
 - [Redmine](https://github.com/Vitexus/mcp-server-redmine) (+ companion)
 - [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver) (+ companion)
-- [Semaphore UI](https://github.com/VitexSoftware/semaphore-mcp-server) (+ companion)
+- [Semaphore UI](https://github.com/VitexSoftware/mcp-server-semaphore) (+ companion)
 - [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg) (+ companion)
-- [Vaultwarden/Bitwarden](https://github.com/Vitexus/warden-mcp) (`warden-mcp` + companion)
+- [Vaultwarden/Bitwarden](https://github.com/Vitexus/mcp-server-warden) (`mcp-server-warden` + companion)
 - [Zabbix](https://github.com/Vitexus/mcp-server-zabbix) (+ companion)

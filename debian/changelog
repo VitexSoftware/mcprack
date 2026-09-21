@@ -1,13 +1,10 @@
 mcprack (1.5.9-1) UNRELEASED; urgency=medium
 
-  * Sync Suggests with packages actually published on
-    repo.vitexsoftware.com: add npm/nodejs/docker.io (installer
-    backends documented in README), cc-token-saver-mcp, warden-mcp,
-    mcp-server-blender, ms-365-mcp-server, mcp-email-server; replace
-    phone-mcp-server with mcp-server-adb + companion; drop phantom
-    mcp-server-abraflexi/netbox/nextcloud and unpublished companions
-    (keep installable abraflexi-mcp-server / netbox-mcp-server until
-    those renames land).
+  * Sync Suggests to the mcp-server-* rename rollout: every suggested
+    MCP server package and companion now uses the mcp-server-<name> /
+    mcprack-mcp-server-<name> naming (AbraFlexi, Mastodon, Semaphore,
+    MultiFlexi, LinkedIn, Warden, CC Token Saver, NetBox, Nextcloud,
+    MS-365, Email, …).
   * Convert ad-hoc HTTPS ProxyFix scripts under tests/ into real
     pytest cases so the suite collects cleanly without SECRET_KEY.
   * Validate server command/url on admin form and API: reject empty
@@ -19,7 +16,7 @@ mcprack (1.5.9-1) UNRELEASED; urgency=medium
     deprecation); sync pyproject.toml version to 1.5.9; rewrite
     AGENTS.md for the current /proxy/mcp/ architecture.
 
- -- vitex <info@vitexsoftware.cz>  Mon, 21 Sep 2026 15:20:00 +0200
+ -- vitex <info@vitexsoftware.cz>  Mon, 21 Sep 2026 16:30:00 +0200
 
 mcprack (1.5.8-1) unstable; urgency=medium
 
