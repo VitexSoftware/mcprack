@@ -30,6 +30,7 @@
           <th>{{ _('Label') }}</th>
           <th>{{ _('Transport') }}</th>
           <th>{{ _('Category') }}</th>
+          <th>{{ _('Users') }}</th>
           <th>{{ _('Status') }}</th>
           <th>{{ _('Actions') }}</th>
         </tr>
@@ -51,6 +52,12 @@
             </span>
           </td>
           <td>{{ server.category or '—' }}</td>
+          <td>
+            {% set user_count = usage_counts.get(server.id, 0) %}
+            <span class="badge" title="{{ _('%(n)d user(s) have this server selected in their config', n=user_count) }}" style="background-color: rgba(59, 130, 246, 0.2); color: var(--color-primary, #3b82f6);">
+              &#128101; {{ user_count }}
+            </span>
+          </td>
           <td>
             {% if not h.get('reachable', True) %}
               <span class="badge badge-error" title="{% if server.transport == 'stdio' %}{{ _('Command not found on PATH') }}{% else %}{{ _('Host/port not reachable') }}{% endif %}">
@@ -93,7 +100,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" style="text-align: center; padding: var(--space-lg);">
+          <td colspan="7" style="text-align: center; padding: var(--space-lg);">
             <p class="text-muted">{{ _('No servers registered yet. Use the buttons above to register new servers or autodetect existing ones.') }}</p>
           </td>
         </tr>

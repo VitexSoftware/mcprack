@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 import logging
 import time
 
+from sqlalchemy import func
+
 from . import audit
 from . import catalog
 from . import detection
@@ -158,7 +160,17 @@ def _compute_server_health(servers):
 def servers_list():
     servers = McpServer.query.order_by(McpServer.name).all()
     server_health = _compute_server_health(servers)
-    return render_template("admin/servers_list.html", servers=servers, server_health=server_health)
+    usage_counts = dict(
+        db.session.query(UserServerSelection.server_id, func.count(UserServerSelection.user_id))
+        .group_by(UserServerSelection.server_id)
+        .all()
+    )
+    return render_template(
+        "admin/servers_list.html",
+        servers=servers,
+        server_health=server_health,
+        usage_counts=usage_counts,
+    )
 
 
 def _flash_endpoint_validation(form):
