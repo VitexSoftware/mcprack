@@ -28,6 +28,18 @@ logger = logging.getLogger(__name__)
 SUPPORTED_PROTOCOLS = ("grpc", "http/protobuf")
 DEFAULT_PROTOCOL = "http/protobuf"
 
+# Keep in sync with debian/control's Suggests: for the mcprack-mcp-server-* packages.
+_OTEL_DEBIAN_PACKAGES = (
+    "python3-opentelemetry-api",
+    "python3-opentelemetry-sdk",
+    "python3-opentelemetry-instrumentation",
+    "python3-opentelemetry-instrumentation-flask",
+    "python3-opentelemetry-instrumentation-sqlalchemy",
+    "python3-opentelemetry-instrumentation-wsgi",
+    "python3-opentelemetry-exporter-otlp-proto-http",
+    "python3-opentelemetry-exporter-otlp-proto-grpc",
+)
+
 _state = {
     "enabled": False,
     "tracer": None,
@@ -122,20 +134,22 @@ def init_app(app):
         # are deliberately NOT a hard dependency of mcprack — see the
         # module docstring). Make the fix obvious in the admin OTEL
         # diagnostics page instead of surfacing a bare "No module named ...".
-        logger.exception(
-            "OpenTelemetry packages are not installed — continuing without OTEL. "
-            "Install them with `pip install -r requirements-otel.txt` or the "
-            "python3-opentelemetry-* Debian packages listed in debian/control's "
-            "Suggests, then restart mcprack."
+        logger.warning(
+            "OpenTelemetry is enabled (OTEL_ENABLED=true) but required packages are "
+            "missing (%s). Install them with: apt-get install %s "
+            "(or `pip install -r requirements-otel.txt` in a venv), then restart mcprack. "
+            "Continuing without OTEL.",
+            exc,
+            " ".join(_OTEL_DEBIAN_PACKAGES),
         )
         _state["enabled"] = False
         _state["init_error"] = (
             f"{exc} — the opentelemetry-* dependencies are not installed. Install them "
-            "with `pip install -r requirements-otel.txt` (or the python3-opentelemetry-* "
-            "Debian packages listed in debian/control's Suggests), then restart mcprack."
+            f"with: apt-get install {' '.join(_OTEL_DEBIAN_PACKAGES)} "
+            "(or `pip install -r requirements-otel.txt` in a venv), then restart mcprack."
         )
     except Exception as exc:  # pragma: no cover - defensive, see docstring
-        logger.exception("Failed to initialize OpenTelemetry — continuing without it")
+        logger.warning("Failed to initialize OpenTelemetry — continuing without it: %s", exc)
         _state["enabled"] = False
         _state["init_error"] = str(exc)
 
