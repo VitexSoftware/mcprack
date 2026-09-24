@@ -67,6 +67,10 @@ def test_index_renders_copyable_name_and_url_for_each_configured_server(app, cli
 
 
 def test_index_omits_connector_section_when_nothing_selected(app, client):
+    """The "Add as Individual Connectors" bulk section only lists selected
+    servers, but copy-connector.js still loads - it also powers the
+    per-server "Connector" popup on the "Available Servers" list below,
+    which works even for servers the user hasn't selected yet."""
     _login(client)
 
     resp = client.get("/")
@@ -74,7 +78,25 @@ def test_index_omits_connector_section_when_nothing_selected(app, client):
     assert resp.status_code == 200
     body = resp.data.decode()
     assert "connector-row" not in body
-    assert "copy-connector.js" not in body
+    assert "copy-connector.js" in body
+
+
+def test_index_renders_per_server_connector_popup_button(app, client):
+    """Every server in the "Available Servers" list gets its own
+    "Connector" button carrying that server's name+URL, even when the
+    server isn't selected yet - the popup lets a user grab a single
+    server's connector details without first saving a selection."""
+    user_id = _login(client)
+    server_id = _add_enabled_server(app, name="standalone-tool")
+
+    resp = client.get("/")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert 'data-connector-name="standalone-tool"' in body
+    assert f"/proxy/mcp/" in body
+    assert f"/{server_id}&#34;" in body or f'/{server_id}"' in body
+    assert 'id="connector-popup"' in body
 
 
 def test_view_renders_textarea_with_config_json(app, client):

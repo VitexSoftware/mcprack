@@ -45,4 +45,48 @@ document.addEventListener("DOMContentLoaded", function () {
       copyConnectorValue(button.dataset.copyValue, button);
     });
   });
+
+  // Per-server "Connector" popup on the "Available Servers" list: shows
+  // just that one server's name + relay URL, each with its own copy
+  // button, without needing the server to be selected/saved first.
+  var popup = document.getElementById("connector-popup");
+  if (!popup) {
+    return;
+  }
+  var titleEl = document.getElementById("connector-popup-title");
+  var nameEl = document.getElementById("connector-popup-name");
+  var urlEl = document.getElementById("connector-popup-url");
+  var copyNameBtn = document.getElementById("connector-popup-copy-name");
+  var copyUrlBtn = document.getElementById("connector-popup-copy-url");
+  var closeBtn = document.getElementById("connector-popup-close");
+
+  document.querySelectorAll(".connector-popup-btn").forEach(function (button) {
+    button.addEventListener("click", function () {
+      titleEl.textContent = button.dataset.connectorLabel || "";
+      nameEl.textContent = button.dataset.connectorName || "";
+      urlEl.textContent = button.dataset.connectorUrl || "";
+      copyNameBtn.dataset.copyValue = button.dataset.connectorName || "";
+      copyUrlBtn.dataset.copyValue = button.dataset.connectorUrl || "";
+      if (typeof popup.showModal === "function") {
+        popup.showModal();
+      } else {
+        popup.setAttribute("open", "");
+      }
+    });
+  });
+
+  copyNameBtn.addEventListener("click", function () {
+    copyConnectorValue(copyNameBtn.dataset.copyValue, copyNameBtn);
+  });
+  copyUrlBtn.addEventListener("click", function () {
+    copyConnectorValue(copyUrlBtn.dataset.copyValue, copyUrlBtn);
+  });
+  closeBtn.addEventListener("click", function () {
+    popup.close();
+  });
+  popup.addEventListener("click", function (event) {
+    if (event.target === popup) {
+      popup.close();
+    }
+  });
 });

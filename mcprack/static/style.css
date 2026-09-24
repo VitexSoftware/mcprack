@@ -1138,6 +1138,40 @@ tr.row-warn {
 }
 
 /* ========================================
+   PER-SERVER CONNECTOR POPUP (catalog page)
+   ======================================== */
+
+.connector-popup {
+  z-index: var(--z-modal);
+  width: min(480px, calc(100vw - 2 * var(--space-lg)));
+  padding: var(--space-lg);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+
+.connector-popup::backdrop {
+  background-color: rgb(0 0 0 / 0.5);
+}
+
+.connector-popup-title {
+  margin-top: 0;
+  margin-bottom: var(--space-md);
+}
+
+.connector-popup .connector-field {
+  margin-bottom: var(--space-sm);
+}
+
+.connector-popup-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: var(--space-md);
+}
+
+/* ========================================
    CONFIG FILE PATHS (download/view pages)
    ======================================== */
 

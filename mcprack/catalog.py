@@ -223,12 +223,16 @@ def index():
         for row in UserServerOverride.query.filter_by(user_id=current_user.id).all()
     }
     connectors = _selected_server_connectors(current_user)
+    server_connectors = {
+        server.id: _server_connector(current_user, server) for server in servers
+    }
     return render_template(
         "catalog.html",
         servers=servers,
         selected_ids=selected_ids,
         override_ids=override_ids,
         connectors=connectors,
+        server_connectors=server_connectors,
     )
 
 
@@ -413,26 +417,30 @@ def _selected_enabled_allowed_servers(user):
     )
 
 
+def _server_connector(user, server):
+    """A single {id, name, label, url} dict for `server`, for the "copy
+    name / copy URL" popup on the catalog page (see catalog.html). Some MCP
+    clients - notably Claude Desktop's "Add custom connector" dialog - want
+    a plain name+URL pair per server rather than a JSON config file; this
+    is the friendlier route for those. The token only encodes user_id +
+    server_id, so this works whether or not `server` is currently in the
+    user's selection - actually calling the URL still requires the server
+    to be selected (see user_proxy_mcp)."""
+    token = _make_proxy_token(user.id, server.id)
+    relay_url = url_for(
+        "catalog.user_proxy_mcp",
+        token=token,
+        server_id=server.id,
+        _external=True,
+    )
+    return {"id": server.id, "name": server.name, "label": server.label, "url": relay_url}
+
+
 def _selected_server_connectors(user):
-    """Each of `user`'s configured servers as a {id, name, label, url}
-    dict, for the "copy name / copy URL" rows on the catalog page (see
-    catalog.html). Some MCP clients - notably Claude Desktop's "Add custom
-    connector" dialog - want a plain name+URL pair per server rather than a
-    JSON config file; this is the friendlier route for those. Same relay-URL
-    construction as _build_client_config_json below."""
-    connectors = []
-    for server in _selected_enabled_allowed_servers(user):
-        token = _make_proxy_token(user.id, server.id)
-        relay_url = url_for(
-            "catalog.user_proxy_mcp",
-            token=token,
-            server_id=server.id,
-            _external=True,
-        )
-        connectors.append(
-            {"id": server.id, "name": server.name, "label": server.label, "url": relay_url}
-        )
-    return connectors
+    """Each of `user`'s selected+enabled+allowed servers as a connector
+    dict (see _server_connector), for the "Add as Individual Connectors"
+    section of the catalog page."""
+    return [_server_connector(user, server) for server in _selected_enabled_allowed_servers(user)]
 
 
 def _build_client_config_json(client, user=None):

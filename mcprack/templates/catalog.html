@@ -96,6 +96,12 @@
             <span class="server-transport {% if server.transport == 'stdio' %}stdio{% else %}http{% endif %}">
               {{ server.transport | upper }}
             </span>
+            {% set conn = server_connectors[server.id] %}
+            <button type="button" class="btn btn-sm btn-secondary connector-popup-btn"
+                    data-connector-name="{{ conn.name }}" data-connector-url="{{ conn.url }}"
+                    data-connector-label="{{ server.label }}">
+              🔗 {{ _('Connector') }}
+            </button>
             {% if server.allow_user_override %}
               <a href="{{ url_for('catalog.override', server_id=server.id) }}" class="btn btn-sm btn-secondary">
                 {% if server.id in override_ids %}
@@ -121,8 +127,27 @@
   </form>
 </section>
 
-{% if connectors %}
+<dialog id="connector-popup" class="connector-popup">
+  <h3 id="connector-popup-title" class="connector-popup-title"></h3>
+  <div class="connector-field">
+    <span class="connector-field-label">{{ _('Name') }}</span>
+    <code id="connector-popup-name" class="connector-value"></code>
+    <button type="button" class="btn btn-sm btn-secondary copy-btn" id="connector-popup-copy-name">
+      📋 {{ _('Copy') }}
+    </button>
+  </div>
+  <div class="connector-field">
+    <span class="connector-field-label">{{ _('URL') }}</span>
+    <code id="connector-popup-url" class="connector-value connector-url"></code>
+    <button type="button" class="btn btn-sm btn-secondary copy-btn" id="connector-popup-copy-url">
+      📋 {{ _('Copy') }}
+    </button>
+  </div>
+  <div class="connector-popup-actions">
+    <button type="button" class="btn btn-secondary" id="connector-popup-close">{{ _('Close') }}</button>
+  </div>
+</dialog>
+
 <script src="{{ url_for('static', filename='copy-connector.js') }}"></script>
-{% endif %}
 
 {% endblock %}
