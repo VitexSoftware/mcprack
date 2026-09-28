@@ -141,7 +141,8 @@ onto the `User` model) and isn't implemented yet.
 
 - **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed
 - **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden, or locally encrypted if Vaultwarden isn't configured)
-- **Multi-client support** — Generate configs for Claude Desktop, GitHub Copilot, and other MCP-compatible clients
+- **Multi-client support** — Generate configs for Claude Desktop, Cursor, VS Code / GitHub Copilot (`claude`, `cursor`, `vscode`/`copilot` API clients)
+- **Client sync utilities** — Companion packages `mcprack-sync-claude`, `mcprack-sync-cursor`, and `mcprack-sync-vscode` pull `/api/v1/me/config/<client>` with a personal API token and keep the local IDE/desktop config files up to date (optional systemd user timers)
 - **Admin config hand-off** — Admins can view and download any user's client config from Admin → Users, for users who never log into the web UI themselves
 - **Per-user proxy** — Every user connects remotely; stdio servers are spawned on demand, one isolated instance per (user, server) pair, with credentials resolved at spawn time — never embedded in a downloaded config
 - **Vaultwarden integration** — Leverages the same `bw-cli` / Secure Note pattern used by the `mcp_rack` Ansible role

@@ -1,4 +1,4 @@
-{# Expects `client` ('claude' or 'copilot') in context. #}
+{# Expects `client` ('claude', 'copilot', 'cursor', or 'vscode') in context. #}
 {% if client == 'claude' %}
 <details class="config-paths">
   <summary>📁 {{ _('Where to put this file') }}</summary>
@@ -19,8 +19,10 @@
       <tr><td>{{ _('Windows') }}</td><td><code>%USERPROFILE%\.claude.json</code></td></tr>
     </tbody>
   </table>
+
+  <p class="text-sm text-muted">{{ _('Or install <code>mcprack-sync-claude</code> and run <code>mcprack-sync-claude sync</code> to keep this file up to date automatically.') }}</p>
 </details>
-{% elif client == 'copilot' %}
+{% elif client == 'copilot' or client == 'vscode' %}
 <details class="config-paths">
   <summary>📁 {{ _('Where to put this file') }}</summary>
 
@@ -32,5 +34,23 @@
       <tr><td>{{ _('Windows') }}</td><td><code>%APPDATA%\Code\User\mcp.json</code></td></tr>
     </tbody>
   </table>
+
+  <p class="text-sm text-muted">{{ _('Or install <code>mcprack-sync-vscode</code> and run <code>mcprack-sync-vscode sync</code> to keep this file up to date automatically.') }}</p>
+</details>
+{% elif client == 'cursor' %}
+<details class="config-paths">
+  <summary>📁 {{ _('Where to put this file') }}</summary>
+
+  <p class="text-sm text-muted">{{ _('Cursor (user profile). If the file already exists, merge the "mcpServers" key into it instead of overwriting it:') }}</p>
+  <table>
+    <tbody>
+      <tr><td>{{ _('Linux') }}</td><td><code>~/.config/Cursor/User/mcp.json</code></td></tr>
+      <tr><td>{{ _('macOS') }}</td><td><code>~/Library/Application Support/Cursor/User/mcp.json</code></td></tr>
+      <tr><td>{{ _('Windows') }}</td><td><code>%APPDATA%\Cursor\User\mcp.json</code></td></tr>
+      <tr><td>{{ _('Also checked') }}</td><td><code>~/.cursor/mcp.json</code></td></tr>
+    </tbody>
+  </table>
+
+  <p class="text-sm text-muted">{{ _('Or install <code>mcprack-sync-cursor</code> and run <code>mcprack-sync-cursor sync</code> to keep this file up to date automatically.') }}</p>
 </details>
 {% endif %}

@@ -39,6 +39,11 @@ bp = Blueprint("catalog", __name__)
 RENDERERS = {
     "claude": (render_claude_config, "claude_desktop_config.json"),
     "copilot": (render_copilot_config, "mcp.json"),
+    # Cursor uses the Claude-shaped mcpServers map; VS Code Copilot uses
+    # the servers map. Aliases so /download/cursor and /api/.../config/vscode
+    # exist for the dedicated sync utilities.
+    "cursor": (render_claude_config, "mcp.json"),
+    "vscode": (render_copilot_config, "mcp.json"),
 }
 
 PROXY_TOKEN_SALT = "mcprack-user-proxy"

@@ -997,7 +997,7 @@ components:
       required: true
       schema:
         type: string
-        enum: [claude, copilot]
+        enum: [claude, copilot, cursor, vscode]
     Reveal:
       name: reveal
       in: query

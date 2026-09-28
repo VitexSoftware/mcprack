@@ -28,17 +28,32 @@
     </div>
 
     <div class="client-card">
-      <h4>GitHub Copilot</h4>
+      <h4>GitHub Copilot / VS Code</h4>
       <p class="text-sm text-muted">{{ _('Works with VS Code Copilot and other GitHub Copilot clients.') }}</p>
       <div class="client-card-actions">
-        <a href="{{ url_for('catalog.download', client='copilot') }}" class="btn btn-secondary" download>
+        <a href="{{ url_for('catalog.download', client='vscode') }}" class="btn btn-secondary" download>
           ⬇️ {{ _('Download Config') }}
         </a>
-        <a href="{{ url_for('catalog.view', client='copilot') }}" class="btn btn-secondary">
+        <a href="{{ url_for('catalog.view', client='vscode') }}" class="btn btn-secondary">
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
-      {% set client = 'copilot' %}
+      {% set client = 'vscode' %}
+      {% include "_config_paths.html" %}
+    </div>
+
+    <div class="client-card">
+      <h4>Cursor</h4>
+      <p class="text-sm text-muted">{{ _('Works with the Cursor IDE MCP settings.') }}</p>
+      <div class="client-card-actions">
+        <a href="{{ url_for('catalog.download', client='cursor') }}" class="btn btn-secondary" download>
+          ⬇️ {{ _('Download Config') }}
+        </a>
+        <a href="{{ url_for('catalog.view', client='cursor') }}" class="btn btn-secondary">
+          👁️ {{ _('View & Copy') }}
+        </a>
+      </div>
+      {% set client = 'cursor' %}
       {% include "_config_paths.html" %}
     </div>
   </div>
