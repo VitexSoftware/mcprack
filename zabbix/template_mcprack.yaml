@@ -262,10 +262,50 @@ zabbix_export:
       name: 'MCPrack service by Zabbix agent'
       description: |
         Host-level checks for the mcprack systemd unit. Needs a Zabbix agent on
-        the mcprack host; link it in addition to "MCPrack by HTTP".
+        the mcprack host (Zabbix agent 2: systemd.unit.info and web.certificate.get
+        are agent 2 items); link it in addition to "MCPrack by HTTP".
       groups:
         - name: Templates/Applications
+      macros:
+        - macro: '{$MCPRACK.HOST}'
+          value: 'mcprack.example.org'
+          description: 'Public DNS name served by mcprack over HTTPS (for the certificate check).'
+        - macro: '{$MCPRACK.CERT.WARN}'
+          value: '14d'
+          description: 'Warn when the TLS certificate expires sooner than this.'
       items:
+        - uuid: 1cbc784409e84f8bbc2efa56756fdc74
+          name: 'mcprack TLS certificate: raw'
+          type: ZABBIX_ACTIVE
+          key: 'web.certificate.get[{$MCPRACK.HOST},443]'
+          delay: 1h
+          history: 1d
+          trends: '0'
+          value_type: TEXT
+          tags:
+            - tag: component
+              value: mcprack
+        - uuid: fe71f7e6cff444fe82a6aab37cc732ff
+          name: 'mcprack TLS certificate: expires at'
+          type: DEPENDENT
+          key: mcprack.cert.notafter
+          delay: '0'
+          history: 30d
+          units: unixtime
+          master_item:
+            key: 'web.certificate.get[{$MCPRACK.HOST},443]'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.x509.not_after.timestamp
+          tags:
+            - tag: component
+              value: mcprack
+          triggers:
+            - uuid: fef7b3718b1f4746adca8196a0ee0d48
+              expression: 'last(/MCPrack service by Zabbix agent/mcprack.cert.notafter)-now()<{$MCPRACK.CERT.WARN}'
+              name: 'mcprack TLS certificate expires soon on {HOST.NAME}'
+              priority: AVERAGE
         - uuid: 42c7246d67244b27b078b9eeaae71943
           name: 'mcprack service: state'
           type: ZABBIX_ACTIVE

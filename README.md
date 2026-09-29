@@ -672,7 +672,7 @@ The package ships a Zabbix 7.4 template in `/usr/share/doc/mcprack/zabbix/templa
 **MCPrack by HTTP** (health, per-server discovery with status/tools/latency/last error,
 stale-report and endpoint-down triggers; set `{$MCPRACK.URL}` and the secret macro
 `{$MCPRACK.MONITOR_TOKEN}` on the host) and **MCPrack service by Zabbix agent**
-(systemd unit state). `mcprack-mcp-probe --tools URL` also exits non-zero when a
+(systemd unit state, TLS certificate expiry; Zabbix agent 2). `mcprack-mcp-probe --tools URL` also exits non-zero when a
 server returns no tools, for ad-hoc checks.
 
 ## Tests
