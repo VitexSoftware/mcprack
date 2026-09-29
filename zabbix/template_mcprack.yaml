@@ -176,9 +176,8 @@ zabbix_export:
                   parameters:
                     - |
                       var s = JSON.parse(value).servers.filter(function (x) { return x.id == {#SID}; })[0];
-                      if (!s) return '';
+                      if (!s) throw 'server not in report';
                       return s.ok === true ? 1 : (s.ok === false ? 0 : 2);
-                  error_handler: DISCARD_VALUE
               tags:
                 - tag: component
                   value: mcprack

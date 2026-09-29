@@ -47,16 +47,14 @@ def resolve_env(server, user):
     """(env, early_result). Credential lookups go through Vaultwarden's
     single cross-process lock, so callers resolve them one server at a time
     (parallel lookups just time out on each other and read as outages)."""
-    start = time.monotonic()
+    # latency stays 0 for early results: it is meant to be handshake latency,
+    # and a slow Vaultwarden lookup must not raise "server is slow".
     try:
         env = secret_store.resolve_server_env(server, user=user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return None, _result(
-            server, False, error=f"could not resolve credentials: {exc}"[:200],
-            latency=time.monotonic() - start,
-        )
+        return None, _result(server, False, error=f"could not resolve credentials: {exc}"[:200])
     if [key for key in server.required_env_keys if not env.get(key)]:
-        return None, _result(server, None, error="unconfigured", latency=time.monotonic() - start)
+        return None, _result(server, None, error="unconfigured")
     return env, None
 
 
