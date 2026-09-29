@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from . import audit
+from . import health
 from . import telemetry
 
 
@@ -192,7 +193,7 @@ def _desired_config(server_name, command, args, env):
     }
 
 
-def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT):
+def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False):
     """Bounded, best-effort liveness probe against a fastmcp proxy
     instance — does its backing stdio command actually respond, or does
     every real request fail? A broken backend (crashes on import, wrong
@@ -266,6 +267,16 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT):
 
     if isinstance(data, dict) and "error" in data:
         return False
+
+    if require_tools:
+        # initialize alone proves nothing about the wrapped backend (see
+        # health.probe_tools). Spawn time is the one moment where a cold
+        # backend start is expected anyway, so the deeper check lives here
+        # and not in the frequent recheck path.
+        ok, _count, _error = health.probe_tools(
+            "127.0.0.1", port, timeout=max(deadline - time.monotonic(), 1.0)
+        )
+        return ok
     return True
 
 
@@ -308,12 +319,12 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
         _clear_state_files(paths)
         raise UserProxyError(f"User proxy process exited early for {server_name}")
 
-    if not _probe_upstream_health(port):
+    if not _probe_upstream_health(port, require_tools=True):
         _stop_pid(proc.pid)
         _clear_state_files(paths)
         raise UserProxyError(
             f"Upstream MCP server '{server_name}' failed its startup handshake within "
-            f"{HANDSHAKE_TIMEOUT}s — the registered command is likely broken (check its "
+            f"{HANDSHAKE_TIMEOUT}s (or serves no tools) — the registered command is likely broken (check its "
             f"log at {paths['log']}, or its registration in Admin → Servers)."
         )
 

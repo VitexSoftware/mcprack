@@ -1,5 +1,6 @@
 import json
 import http.client
+import logging
 import socket
 import time
 from urllib.parse import urlsplit
@@ -20,6 +21,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from . import appstream_icons
 from . import audit
+from . import health
 from . import secret_store
 from . import telemetry
 from . import user_proxy
@@ -35,6 +37,7 @@ from .models import (
 )
 
 bp = Blueprint("catalog", __name__)
+logger = logging.getLogger(__name__)
 
 RENDERERS = {
     "claude": (render_claude_config, "claude_desktop_config.json"),
@@ -94,6 +97,22 @@ def _jsonrpc_error_response(request_id, message, status=502):
     return Response(payload, status=status, mimetype="application/json")
 
 
+def _is_empty_tools_list(request_body, payload):
+    """True when a `tools/list` request was answered successfully but with
+    no tools at all. A fastmcp stdio proxy does exactly this when the
+    wrapped backend crashes (the failure is only logged upstream), so it is
+    worth its own telemetry result and log line instead of a plain
+    "success"."""
+    if b"tools/list" not in request_body:
+        return False
+    try:
+        data = health._parse_mcp_body(payload.decode("utf-8", errors="replace"))
+    except ValueError:
+        return False
+    result = data.get("result") if isinstance(data, dict) else None
+    return isinstance(result, dict) and result.get("tools") == []
+
+
 def _relay_request(conn, path, extra_headers=None, server_name=None, transport="http"):
     """Forward the current Flask request onto an already-open http.client
     connection at `path`, and translate the upstream response (or a
@@ -137,6 +156,13 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
                 response.headers[key] = value
 
             result = "success" if upstream.status < 400 else "error"
+            if result == "success" and _is_empty_tools_list(body, payload):
+                result = "empty_tools"
+                logger.warning(
+                    "MCP server '%s' answered tools/list with no tools - its backend is "
+                    "probably failing to start",
+                    server_name,
+                )
             telemetry.record_mcp_server_call(
                 server_name, transport, result, time.monotonic() - start_time
             )

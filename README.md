@@ -641,6 +641,40 @@ OTEL_TRACE_UI_URL_TEMPLATE="http://10.11.56.226:3000/explore?left=%7B%22datasour
 Leave it unset and the button just says "not configured" instead of
 linking anywhere.
 
+## Monitoring (Zabbix)
+
+`/health` (unauthenticated) only reports that the app and its database are up.
+To catch a broken MCP server before users do, mcprack also offers
+`GET /health/servers`: it performs a real MCP handshake (`initialize` +
+`tools/list`) against every enabled server and returns one entry each
+(`ok`, `tools`, `latency_ms`, `error`). A backend that crashed on startup
+reports `ok: false` even though the relay itself still answers 200.
+
+Enable it in `/etc/mcprack/env` (the endpoint returns 404 while the token is unset):
+
+```
+MONITORING_TOKEN=<long random string>
+MONITORING_USER_ID=<id of a normal mcprack user used for probing>
+MONITORING_CACHE_TTL=120        # optional, seconds between background refreshes
+```
+
+Probes run as `MONITORING_USER_ID` (its credentials and overrides apply);
+servers that need configuration this user lacks are reported as
+`ok: null, error: "unconfigured"` and are not alerted on. Results come from
+a background refresh, never from inside the request, so the first call after
+a restart returns `{"pending": true}`.
+
+```
+curl -H "Authorization: Bearer $MONITORING_TOKEN" https://mcprack.example.org/health/servers
+```
+
+The package ships a Zabbix 7.4 template in `/usr/share/doc/mcprack/zabbix/template_mcprack.yaml`:
+**MCPrack by HTTP** (health, per-server discovery with status/tools/latency/last error,
+stale-report and endpoint-down triggers; set `{$MCPRACK.URL}` and the secret macro
+`{$MCPRACK.MONITOR_TOKEN}` on the host) and **MCPrack service by Zabbix agent**
+(systemd unit state). `mcprack-mcp-probe --tools URL` also exits non-zero when a
+server returns no tools, for ad-hoc checks.
+
 ## Tests
 
 ```bash

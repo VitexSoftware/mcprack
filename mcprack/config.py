@@ -120,6 +120,15 @@ class Config:
     # controls the retention window, not whether logging happens.
     AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "90"))
 
+    # Monitoring (GET /health/servers, used by the Zabbix template). The
+    # endpoint is disabled (404) unless MONITORING_TOKEN is set. Every
+    # enabled server is probed as MONITORING_USER_ID (a normal mcprack user
+    # whose credentials/overrides apply); results are refreshed in the
+    # background at most every MONITORING_CACHE_TTL seconds.
+    MONITORING_TOKEN = os.environ.get("MONITORING_TOKEN", "")
+    MONITORING_USER_ID = int(os.environ.get("MONITORING_USER_ID", "0") or 0)
+    MONITORING_CACHE_TTL = int(os.environ.get("MONITORING_CACHE_TTL", "120"))
+
     # OpenTelemetry — off by default (no-op, no opentelemetry-* packages
     # required) unless explicitly enabled. See telemetry.py and README
     # "Observability (OpenTelemetry)".

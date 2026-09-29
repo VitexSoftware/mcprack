@@ -1,5 +1,16 @@
 mcprack (1.5.9-1) UNRELEASED; urgency=medium
 
+  * Monitoring: new token-protected GET /health/servers runs a real MCP
+    handshake (initialize + tools/list) against every enabled server and
+    reports per-server status, so a crashed backend (200 OK, empty tool
+    list) is no longer invisible. Enabled by MONITORING_TOKEN /
+    MONITORING_USER_ID in /etc/mcprack/env.
+  * Ship a Zabbix 7.4 template (/usr/share/doc/mcprack/zabbix/
+    template_mcprack.yaml) with per-server low-level discovery.
+  * A freshly spawned backend that serves no tools now fails its startup
+    handshake with a clear error; the relay logs and counts empty
+    tools/list answers (telemetry result "empty_tools").
+  * mcprack-mcp-probe --tools exits non-zero when the server has no tools.
   * Sync Suggests to the mcp-server-* rename rollout: every suggested
     MCP server package and companion now uses the mcp-server-<name> /
     mcprack-mcp-server-<name> naming (AbraFlexi, Mastodon, Semaphore,

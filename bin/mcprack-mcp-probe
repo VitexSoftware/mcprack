@@ -219,6 +219,10 @@ if every step succeeded.
             json.dumps(parsed["error"], indent=2),
         )
 
+    if args.tools and not (parsed.get("result") or {}).get("tools"):
+        # A proxy whose backend crashed still answers 200 - with no tools.
+        return fail(f"{method}: server returned no tools (its backend is probably down)", raw)
+
     print(f"{method}: OK (HTTP {status})")
     if args.raw:
         print(raw.strip())

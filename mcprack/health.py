@@ -133,7 +133,15 @@ def _parse_mcp_body(raw):
     return json.loads(text)
 
 
-def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0, session_id=None):
+def _connection(host, port, timeout, https=False):
+    cls = http.client.HTTPSConnection if https else http.client.HTTPConnection
+    return cls(host, port, timeout=timeout)
+
+
+def _send_jsonrpc_request(
+    host, port, method, params=None, timeout=5.0, session_id=None,
+    path="/mcp", https=False, extra_headers=None,
+):
     """Send a JSON-RPC request to an MCP server and return the response.
 
     Returns (success: bool, data: dict or str).
@@ -151,10 +159,12 @@ def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0, session_
     headers = {"Content-Type": "application/json", "Accept": _MCP_ACCEPT}
     if session_id:
         headers[_MCP_SESSION_HEADER] = session_id
+    if extra_headers:
+        headers.update(extra_headers)
 
     try:
-        conn = http.client.HTTPConnection(host, port, timeout=timeout)
-        conn.request("POST", "/mcp", body=payload, headers=headers)
+        conn = _connection(host, port, timeout, https)
+        conn.request("POST", path, body=payload, headers=headers)
         response = conn.getresponse()
         data = response.read().decode('utf-8')
         conn.close()
@@ -173,6 +183,59 @@ def _send_jsonrpc_request(host, port, method, params=None, timeout=5.0, session_
             return False, f"Invalid JSON response: {data}"
     except (socket.timeout, OSError) as e:
         return False, f"Connection failed: {e}"
+
+
+def probe_tools(host, port, timeout=8.0, path="/mcp", https=False, extra_headers=None):
+    """Deep liveness check: initialize, then tools/list, against a local
+    fastmcp proxy instance. Returns (ok, tool_count, error).
+
+    A fastmcp stdio proxy answers `initialize` on its own and only talks
+    to the wrapped backend lazily, so a backend that crashes on import
+    still gets a green handshake - and then `tools/list` comes back empty
+    (fastmcp only logs "Connection closed"). An empty tool list is
+    therefore treated as a failure here.
+    """
+    deadline = time.monotonic() + timeout
+    try:
+        conn = _connection(host, port, timeout, https)
+        init_headers = {"Content-Type": "application/json", "Accept": _MCP_ACCEPT}
+        if extra_headers:
+            init_headers.update(extra_headers)
+        conn.request("POST", path, body=json.dumps({
+            "jsonrpc": "2.0",
+            "id": "mcprack-probe-init",
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "mcprack-probe", "version": "1.0"},
+            },
+        }).encode("utf-8"), headers=init_headers)
+        response = conn.getresponse()
+        raw = response.read().decode("utf-8")
+        session_id = response.getheader(_MCP_SESSION_HEADER)
+        conn.close()
+        if response.status != 200:
+            return False, 0, f"initialize returned HTTP {response.status}"
+        init_response = _parse_mcp_body(raw)
+    except (socket.timeout, OSError, http.client.HTTPException, ValueError) as exc:
+        return False, 0, f"initialize failed: {exc}"
+    if "error" in init_response:
+        return False, 0, "initialize returned a JSON-RPC error"
+
+    remaining = deadline - time.monotonic()
+    if remaining <= 0.2:
+        return False, 0, "timed out before tools/list"
+    success, data = _send_jsonrpc_request(
+        host, port, "tools/list", {}, timeout=remaining, session_id=session_id,
+        path=path, https=https, extra_headers=extra_headers,
+    )
+    if not success:
+        return False, 0, str(data)[:200]
+    tools = data.get("tools", []) if isinstance(data, dict) else []
+    if not tools:
+        return False, 0, "backend serves no tools (it probably crashed on startup)"
+    return True, len(tools), None
 
 
 def get_server_capabilities(host, port, timeout=8.0):

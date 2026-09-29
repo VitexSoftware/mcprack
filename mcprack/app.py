@@ -200,6 +200,27 @@ def register_static_routes(app):
         return jsonify(status="ok" if healthy else "degraded", checks=checks), status_code
 
 
+    @app.route("/health/servers")
+    def health_servers():
+        """Per-server end-to-end status for Zabbix (see monitoring.py).
+        Bearer-token protected and disabled unless MONITORING_TOKEN is set;
+        reports names, booleans, tool counts and short error strings only."""
+        import hmac
+
+        from flask import abort, jsonify
+
+        from . import monitoring
+
+        token = current_app.config.get("MONITORING_TOKEN")
+        if not token:
+            abort(404)
+        header = request.headers.get("Authorization", "")
+        supplied = header[7:] if header.lower().startswith("bearer ") else ""
+        if not hmac.compare_digest(supplied.encode(), token.encode()):
+            abort(401)
+        return jsonify(monitoring.get_snapshot(current_app._get_current_object()))
+
+
 def register_cli(app):
     from .cli import register_management_cli
 

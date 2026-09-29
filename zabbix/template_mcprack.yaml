@@ -1,0 +1,284 @@
+zabbix_export:
+  version: '7.4'
+  template_groups:
+    - uuid: fa12348fabed4066976cd248aa6e8bb8
+      name: Templates/Applications
+  templates:
+    - uuid: 42efd87edd244afc94e3a24b49af1a6b
+      template: 'MCPrack by HTTP'
+      name: 'MCPrack by HTTP'
+      description: |
+        End-to-end monitoring of an mcprack instance over HTTP (no agent needed).
+
+        /health only proves that the app and its database are up. The check that
+        matters to users is /health/servers: mcprack performs a real MCP handshake
+        (initialize + tools/list) against every enabled server and reports one
+        result each. A server whose backend crashed - the relay still answers 200
+        but serves no tools - shows up there as ok=0.
+
+        Setup on the mcprack host: set MONITORING_TOKEN and MONITORING_USER_ID in
+        the service environment, then set {$MCPRACK.URL} and the secret macro
+        {$MCPRACK.MONITOR_TOKEN} on the Zabbix host.
+      groups:
+        - name: Templates/Applications
+      macros:
+        - macro: '{$MCPRACK.URL}'
+          value: 'https://mcprack.example.org'
+          description: 'Base URL of the mcprack instance, without trailing slash.'
+        - macro: '{$MCPRACK.MONITOR_TOKEN}'
+          type: SECRET_TEXT
+          description: 'Must equal MONITORING_TOKEN on the mcprack host.'
+        - macro: '{$MCPRACK.LATENCY.WARN}'
+          value: '20000'
+          description: 'Handshake latency (ms) above which a server is reported slow.'
+        - macro: '{$MCPRACK.STALE}'
+          value: '900'
+          description: 'Seconds after which the /health/servers snapshot counts as stale.'
+      items:
+        - uuid: bd8f47f0a0b34dd499e32648fd935ad3
+          name: 'mcprack health: HTTP status'
+          type: HTTP_AGENT
+          key: mcprack.health.code
+          delay: 1m
+          history: 7d
+          trends: '0'
+          url: '{$MCPRACK.URL}/health'
+          retrieve_mode: HEADERS
+          status_codes: ''
+          timeout: 10s
+          preprocessing:
+            - type: REGEX
+              parameters:
+                - 'HTTP/[\d.]+\s+(\d+)'
+                - \1
+          tags:
+            - tag: component
+              value: mcprack
+          triggers:
+            - uuid: daa3cfedb709428a84609ecbbd5ffd2e
+              expression: 'last(/MCPrack by HTTP/mcprack.health.code)<>200 or nodata(/MCPrack by HTTP/mcprack.health.code,10m)=1'
+              name: 'mcprack is not healthy on {HOST.NAME} (/health does not return 200)'
+              priority: HIGH
+              description: 'The application is down, unreachable, or cannot reach its database.'
+        - uuid: 3076939df90d4556aaa71cded350189e
+          name: 'mcprack servers: raw report'
+          type: HTTP_AGENT
+          key: mcprack.servers.raw
+          delay: 5m
+          history: 1d
+          trends: '0'
+          value_type: TEXT
+          url: '{$MCPRACK.URL}/health/servers'
+          headers:
+            - name: Authorization
+              value: 'Bearer {$MCPRACK.MONITOR_TOKEN}'
+          status_codes: '200'
+          timeout: 30s
+          tags:
+            - tag: component
+              value: mcprack
+          triggers:
+            - uuid: 9dee4f78ab864f20be2df911e1e207bf
+              expression: 'nodata(/MCPrack by HTTP/mcprack.servers.raw,20m)=1'
+              name: 'mcprack server report not available on {HOST.NAME}'
+              priority: AVERAGE
+              description: >
+                /health/servers did not answer with 200 for 20 minutes (wrong token,
+                MONITORING_TOKEN unset -> 404, or the app is down). Per-server alerts
+                cannot fire while this is the case.
+        - uuid: 58a4913472cb496893271ffd88afd11b
+          name: 'mcprack servers: failed'
+          type: DEPENDENT
+          key: mcprack.servers.failed
+          delay: '0'
+          history: 30d
+          master_item:
+            key: mcprack.servers.raw
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.failed
+          tags:
+            - tag: component
+              value: mcprack
+        - uuid: bfe784f718fc4b62992b90cdd5ee7155
+          name: 'mcprack servers: total probed'
+          type: DEPENDENT
+          key: mcprack.servers.total
+          delay: '0'
+          history: 30d
+          master_item:
+            key: mcprack.servers.raw
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.total
+          tags:
+            - tag: component
+              value: mcprack
+        - uuid: 02db22f2fa8a4078acb103a5801a9281
+          name: 'mcprack servers: report age'
+          type: DEPENDENT
+          key: mcprack.servers.age
+          delay: '0'
+          history: 30d
+          units: s
+          master_item:
+            key: mcprack.servers.raw
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.age_seconds
+              error_handler: DISCARD_VALUE
+          tags:
+            - tag: component
+              value: mcprack
+          triggers:
+            - uuid: 2b0d42243fc245809f147a8e3947ba97
+              expression: 'last(/MCPrack by HTTP/mcprack.servers.age)>{$MCPRACK.STALE}'
+              name: 'mcprack server probing is stale on {HOST.NAME}'
+              priority: AVERAGE
+              description: 'The background prober has not refreshed the server report in over {$MCPRACK.STALE}s.'
+      discovery_rules:
+        - uuid: 5c7ce21874fb41c5b60cef3f99eab1dc
+          name: 'mcprack MCP server discovery'
+          type: DEPENDENT
+          key: mcprack.servers.discovery
+          delay: '0'
+          lifetime: 7d
+          master_item:
+            key: mcprack.servers.raw
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - $.servers
+          lld_macro_paths:
+            - lld_macro: '{#SID}'
+              path: $.id
+            - lld_macro: '{#NAME}'
+              path: $.name
+            - lld_macro: '{#TRANSPORT}'
+              path: $.transport
+          item_prototypes:
+            - uuid: e16bd2dfc54f428ba8c46b18a91c8d02
+              name: 'MCP server {#NAME}: status'
+              type: DEPENDENT
+              key: 'mcprack.server.ok[{#SID}]'
+              delay: '0'
+              history: 30d
+              description: '1 = handshake ok with tools, 0 = failed or no tools, 2 = not configured for the monitoring user (not alerted).'
+              valuemap:
+                name: 'mcprack server status'
+              master_item:
+                key: mcprack.servers.raw
+              preprocessing:
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var s = JSON.parse(value).servers.filter(function (x) { return x.id == {#SID}; })[0];
+                      if (!s) return '';
+                      return s.ok === true ? 1 : (s.ok === false ? 0 : 2);
+                  error_handler: DISCARD_VALUE
+              tags:
+                - tag: component
+                  value: mcprack
+              trigger_prototypes:
+                - uuid: 47173f3935824629a07778b6ae1efe23
+                  expression: 'min(/MCPrack by HTTP/mcprack.server.ok[{#SID}],#2)=0'
+                  name: 'MCP server {#NAME} is broken on {HOST.NAME}'
+                  priority: HIGH
+                  description: >
+                    The handshake with {#NAME} failed or it serves no tools. Details:
+                    see item "MCP server {#NAME}: last error" and the backend log in
+                    /var/lib/mcprack/user-proxies/.
+            - uuid: c8b0070a7ad54b7aad6b3c02faefe91a
+              name: 'MCP server {#NAME}: tools'
+              type: DEPENDENT
+              key: 'mcprack.server.tools[{#SID}]'
+              delay: '0'
+              history: 30d
+              master_item:
+                key: mcprack.servers.raw
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.servers[?(@.id=={#SID})].tools.first()'
+                  error_handler: DISCARD_VALUE
+              tags:
+                - tag: component
+                  value: mcprack
+            - uuid: 3d66c15ca31443e7a8a306a3ce389b94
+              name: 'MCP server {#NAME}: handshake latency'
+              type: DEPENDENT
+              key: 'mcprack.server.latency[{#SID}]'
+              delay: '0'
+              history: 30d
+              units: ms
+              master_item:
+                key: mcprack.servers.raw
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.servers[?(@.id=={#SID})].latency_ms.first()'
+                  error_handler: DISCARD_VALUE
+              tags:
+                - tag: component
+                  value: mcprack
+              trigger_prototypes:
+                - uuid: 849ace371a1b4e95a5cc9e0fad3e1c05
+                  expression: 'avg(/MCPrack by HTTP/mcprack.server.latency[{#SID}],#3)>{$MCPRACK.LATENCY.WARN}'
+                  name: 'MCP server {#NAME} is slow on {HOST.NAME}'
+                  priority: WARNING
+            - uuid: 18368e47903d440aa249c54a29630691
+              name: 'MCP server {#NAME}: last error'
+              type: DEPENDENT
+              key: 'mcprack.server.error[{#SID}]'
+              delay: '0'
+              history: 30d
+              trends: '0'
+              value_type: TEXT
+              master_item:
+                key: mcprack.servers.raw
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$.servers[?(@.id=={#SID})].error.first()'
+                  error_handler: DISCARD_VALUE
+              tags:
+                - tag: component
+                  value: mcprack
+      valuemaps:
+        - uuid: 776a281d8f4944d5a3cf7050215cb164
+          name: 'mcprack server status'
+          mappings:
+            - value: '0'
+              newvalue: Broken
+            - value: '1'
+              newvalue: OK
+            - value: '2'
+              newvalue: 'Not configured'
+    - uuid: e3f52821e8c0487c890654510bb08cb3
+      template: 'MCPrack service by Zabbix agent'
+      name: 'MCPrack service by Zabbix agent'
+      description: |
+        Host-level checks for the mcprack systemd unit. Needs a Zabbix agent on
+        the mcprack host; link it in addition to "MCPrack by HTTP".
+      groups:
+        - name: Templates/Applications
+      items:
+        - uuid: 42c7246d67244b27b078b9eeaae71943
+          name: 'mcprack service: state'
+          type: ZABBIX_ACTIVE
+          key: 'systemd.unit.info["mcprack.service",ActiveState]'
+          delay: 1m
+          history: 7d
+          trends: '0'
+          value_type: CHAR
+          tags:
+            - tag: component
+              value: mcprack
+          triggers:
+            - uuid: 2ac57f7eb8294ba9a2e83a1662f5458a
+              expression: 'last(/MCPrack service by Zabbix agent/systemd.unit.info["mcprack.service",ActiveState])<>"active"'
+              name: 'mcprack.service is not active on {HOST.NAME}'
+              priority: DISASTER
