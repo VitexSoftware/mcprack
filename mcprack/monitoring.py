@@ -43,22 +43,36 @@ def _result(server, ok, tools=None, error=None, latency=0.0):
     }
 
 
-def check_server(server, user):
+def resolve_env(server, user):
+    """(env, early_result). Credential lookups go through Vaultwarden's
+    single cross-process lock, so callers resolve them one server at a time
+    (parallel lookups just time out on each other and read as outages)."""
+    start = time.monotonic()
+    try:
+        env = secret_store.resolve_server_env(server, user=user)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        return None, _result(
+            server, False, error=f"could not resolve credentials: {exc}"[:200],
+            latency=time.monotonic() - start,
+        )
+    if [key for key in server.required_env_keys if not env.get(key)]:
+        return None, _result(server, None, error="unconfigured", latency=time.monotonic() - start)
+    return env, None
+
+
+def check_server(server, user, env=None):
     """Probe one server. ok is True/False, or None when the monitoring
-    user simply lacks required configuration (not an outage)."""
+    user simply lacks required configuration (not an outage). Pass `env`
+    when already resolved; otherwise it is resolved here."""
+    if env is None:
+        env, early = resolve_env(server, user)
+        if early is not None:
+            return early
+
     start = time.monotonic()
 
     def done(ok, tools=None, error=None):
         return _result(server, ok, tools, error, time.monotonic() - start)
-
-    try:
-        env = secret_store.resolve_server_env(server, user=user)
-    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return done(False, error=f"could not resolve credentials: {exc}"[:200])
-
-    missing = [key for key in server.required_env_keys if not env.get(key)]
-    if missing:
-        return done(None, error="unconfigured")
 
     if server.command:
         try:
@@ -108,22 +122,30 @@ def check_servers(app):
 
     user_id = app.config["MONITORING_USER_ID"]
     with app.app_context():
-        if db.session.get(User, user_id) is None:
+        user = db.session.get(User, user_id)
+        if user is None:
             raise RuntimeError("MONITORING_USER_ID does not name an existing user")
         servers = [
-            (s.id, s.name)
-            for s in McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
+            s for s in McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
             if s.command or s.url
         ]
+        # Phase 1 (serial): credentials. Phase 2 (parallel): probes.
+        results, todo = {}, []
+        for server in servers:
+            env, early = resolve_env(server, user)
+            if early is not None:
+                results[server.id] = early
+            else:
+                todo.append((server.id, server.name, env))
+        order = [s.id for s in servers]
 
     def run(item):
-        server_id, name = item
+        server_id, name, env = item
         # Own app context (= own DB session) per worker thread.
         with app.app_context():
             server = db.session.get(McpServer, server_id)
-            user = db.session.get(User, user_id)
             try:
-                return check_server(server, user)
+                return check_server(server, db.session.get(User, user_id), env=env)
             except Exception as exc:  # one broken server must not hide the rest
                 logger.exception("monitoring probe of %s crashed", name)
                 return {
@@ -133,7 +155,9 @@ def check_servers(app):
                 }
 
     with ThreadPoolExecutor(max_workers=_MAX_PARALLEL) as pool:
-        results = list(pool.map(run, servers))
+        for result in pool.map(run, todo):
+            results[result["id"]] = result
+    results = [results[i] for i in order]
 
     failed = sum(1 for r in results if r["ok"] is False)
     return {
