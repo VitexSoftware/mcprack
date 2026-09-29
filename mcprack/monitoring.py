@@ -8,11 +8,14 @@ per-server results.
 
 Probing spawns backends (cold starts take seconds), so it never runs inside
 a request: `get_snapshot()` returns the last result immediately and, when it
-has gone stale, refreshes it in a background thread (one at a time per
-worker process).
+has gone stale, refreshes it in a background thread. The result lives in a
+file shared by all gunicorn workers; a flock keeps refreshes single-flight.
 """
 
+import fcntl
+import json
 import logging
+import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -26,9 +29,6 @@ from . import vaultwarden
 logger = logging.getLogger(__name__)
 
 _MAX_PARALLEL = 4
-_lock = threading.Lock()
-_snapshot = None
-_refreshing = False
 
 
 def _result(server, ok, tools=None, error=None, latency=0.0):
@@ -168,37 +168,70 @@ def check_servers(app):
     }
 
 
-def _refresh(app):
-    global _snapshot, _refreshing
+def _snapshot_paths():
+    # Next to the per-user proxy state (isolated per test via STATE_DIR).
+    base = user_proxy.STATE_DIR.parent
+    return base / "monitoring.json", base / "monitoring.lock"
+
+
+def _read_snapshot():
+    path, _ = _snapshot_paths()
     try:
-        snapshot = check_servers(app)
-    except Exception as exc:
-        logger.exception("monitoring refresh failed")
-        snapshot = {
-            "generated_at": int(time.time()),
-            "servers": [],
-            "total": 0,
-            "failed": 0,
-            "error": str(exc)[:200],
-        }
-    with _lock:
-        _snapshot = snapshot
-        _refreshing = False
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def _refresh(app, lock_file):
+    """Runs in a background thread holding the (non-blocking) flock, so only
+    one worker process probes at a time; the result goes to a shared file
+    that every gunicorn worker serves."""
+    try:
+        try:
+            snapshot = check_servers(app)
+        except Exception as exc:
+            logger.exception("monitoring refresh failed")
+            snapshot = {
+                "generated_at": int(time.time()),
+                "servers": [],
+                "total": 0,
+                "failed": 0,
+                "error": str(exc)[:200],
+            }
+        path, _ = _snapshot_paths()
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(snapshot))
+        os.replace(tmp, path)
+    finally:
+        fcntl.flock(lock_file, fcntl.LOCK_UN)
+        lock_file.close()
 
 
 def get_snapshot(app):
     """Last known result (with `age_seconds`); starts a background refresh
-    when it is older than MONITORING_CACHE_TTL or missing."""
-    global _refreshing
+    when it is older than MONITORING_CACHE_TTL or missing. The snapshot is a
+    file shared by all worker processes, and a flock makes refreshes
+    single-flight across them."""
     ttl = app.config["MONITORING_CACHE_TTL"]
-    with _lock:
-        snapshot = _snapshot
-        stale = snapshot is None or time.time() - snapshot["generated_at"] > ttl
-        start = stale and not _refreshing
-        if start:
-            _refreshing = True
-    if start:
-        threading.Thread(target=_refresh, args=(app,), daemon=True, name="mcprack-monitor").start()
+    snapshot = _read_snapshot()
+    stale = snapshot is None or time.time() - snapshot["generated_at"] > ttl
+    if stale:
+        path, lock_path = _snapshot_paths()
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            lock_file = open(lock_path, "w")
+        except OSError:
+            lock_file = None
+            logger.exception("monitoring: cannot create lock file")
+        if lock_file is not None:
+            try:
+                fcntl.flock(lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                lock_file.close()  # another worker is refreshing
+            else:
+                threading.Thread(
+                    target=_refresh, args=(app, lock_file), daemon=True, name="mcprack-monitor"
+                ).start()
 
     if snapshot is None:
         return {"pending": True, "servers": [], "total": 0, "failed": 0, "age_seconds": None}

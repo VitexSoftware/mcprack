@@ -1,3 +1,5 @@
+import json
+import time
 from unittest.mock import patch
 
 import pytest
@@ -7,13 +9,6 @@ from mcprack.extensions import db
 from mcprack.models import McpServer, User
 
 
-@pytest.fixture(autouse=True)
-def _reset_snapshot():
-    monitoring._snapshot = None
-    monitoring._refreshing = False
-    yield
-    monitoring._snapshot = None
-    monitoring._refreshing = False
 
 
 def _server(**kw):
@@ -86,19 +81,21 @@ def test_check_server_missing_required_env_is_unconfigured_not_failed(app):
     assert result["ok"] is None and result["error"] == "unconfigured"
 
 
-def test_get_snapshot_is_pending_then_served_from_cache(app):
+def test_get_snapshot_is_pending_then_served_from_shared_file(app):
     app.config["MONITORING_USER_ID"] = 1
-    fake = {"generated_at": 0, "servers": [], "total": 0, "failed": 0}
     with patch("mcprack.monitoring.threading.Thread") as thread:
         first = monitoring.get_snapshot(app)
-    assert first["pending"] is True
-    thread.return_value.start.assert_called_once()
-
-    monitoring._snapshot = dict(fake, generated_at=__import__("time").time())
-    monitoring._refreshing = False
-    with patch("mcprack.monitoring.threading.Thread") as thread:
+        # A second worker asking while the first holds the flock must not
+        # start another refresh.
         second = monitoring.get_snapshot(app)
-    assert "pending" not in second and second["age_seconds"] >= 0
+    assert first["pending"] is True and second["pending"] is True
+    thread.assert_called_once()
+
+    path, _ = monitoring._snapshot_paths()
+    path.write_text(json.dumps({"generated_at": time.time(), "servers": [], "total": 0, "failed": 0}))
+    with patch("mcprack.monitoring.threading.Thread") as thread:
+        cached = monitoring.get_snapshot(app)
+    assert "pending" not in cached and cached["age_seconds"] >= 0
     thread.assert_not_called()
 
 
