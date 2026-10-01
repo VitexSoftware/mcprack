@@ -717,6 +717,7 @@ def server_edit(
 
     if vault_item_name is not None and vault_item_name != s.vaultwarden_item_name:
         s.vaultwarden_item_name = vault_item_name
+        s.vault_item_id = None  # cached id belonged to the old item
         changed.append("vaultwarden_item_name")
 
     env_config = dict(s.env_config or {})

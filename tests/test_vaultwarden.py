@@ -102,6 +102,7 @@ def test_delete_item_noop_when_not_found(app):
 def test_resolve_env_merges_override_over_default(app):
     class FakeServer:
         vault_item = "MCP-jenkins"
+        vault_item_id = None
 
     class FakeUser:
         username = "carol"
@@ -170,6 +171,7 @@ def test_missing_credential_keys_empty_blank_value_counts_as_missing(app):
 def test_resolve_env_without_user_returns_defaults_only(app):
     class FakeServer:
         vault_item = "MCP-jenkins"
+        vault_item_id = None
 
     with app.app_context():
         with patch("mcprack.vaultwarden.get_notes") as mock_get_notes:
@@ -423,3 +425,26 @@ def test_session_lock_contention_fails_fast(app):
 
     holder.join(timeout=1.0)
     assert "busy" in str(exc.value)
+
+
+def test_get_notes_prefers_cached_item_id_and_falls_back_to_name(app):
+    with app.app_context():
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
+            mock_run.side_effect = [_proc(returncode=1), _proc(stdout="A=1\n")]
+            values = vaultwarden.get_notes("s", "MCP-x", item_id="stale-id")
+    assert values == {"A": "1"}
+    assert "stale-id" in mock_run.call_args_list[0].args[0]
+    assert "MCP-x" in mock_run.call_args_list[1].args[0]
+
+
+def test_list_notes_keeps_only_wellformed_secure_notes(app):
+    items = [
+        {"id": "1", "type": 2, "name": "MCP-a", "notes": "K=v"},
+        {"id": "2", "type": 1, "name": "a login", "notes": None},
+        {"id": "3", "type": 0, "name": {"bad": "cipher"}, "notes": {"bad": 1}},
+    ]
+    with app.app_context():
+        with patch("mcprack.vaultwarden.subprocess.run") as mock_run:
+            mock_run.return_value = _proc(stdout=json.dumps(items))
+            notes = vaultwarden.list_notes("s")
+    assert notes == {"MCP-a": ("1", "K=v")}

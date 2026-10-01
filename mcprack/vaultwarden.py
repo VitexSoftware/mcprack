@@ -213,9 +213,28 @@ def _find_item_id(session, item_name):
     return None
 
 
-def get_notes(session, item_name):
+def parse_notes(notes):
+    """KEY=value lines (blank lines, comments and non-identifier keys
+    ignored) -> dict."""
+    values = {}
+    for line in (notes or "").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, val = line.partition("=")
+        key = key.strip()
+        if key.isidentifier():
+            values[key] = val
+    return values
+
+
+def get_notes(session, item_name, item_id=None):
     """Fetch the Secure Note for `item_name` and parse KEY=value lines into a
     dict. Returns {} if the item doesn't exist.
+
+    `item_id` (a cached, non-secret Vaultwarden item id) is tried first: a
+    lookup by id decrypts one cipher instead of the whole vault. A stale id
+    simply falls back to the name lookup.
 
     Traced as "vaultwarden.lookup" with only a one-way hash of the item
     name as an attribute — never the item name itself (it can embed a
@@ -223,18 +242,34 @@ def get_notes(session, item_name):
     with telemetry.span(
         "vaultwarden.lookup", {"secret_name_hash": telemetry.hash_secret_name(item_name)}
     ):
-        result = _run(["get", "notes", item_name, "--session", session], check=False)
-        notes = result.stdout or ""
-        values = {}
-        for line in notes.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key = key.strip()
-            if key.isidentifier():
-                values[key] = val
-        return values
+        result = None
+        if item_id:
+            result = _run(["get", "notes", item_id, "--session", session], check=False)
+            if result.returncode != 0:
+                result = None
+        if result is None:
+            result = _run(["get", "notes", item_name, "--session", session], check=False)
+        return parse_notes(result.stdout)
+
+
+def list_notes(session):
+    """One `bw list items` round trip -> {item name: (item id, notes text)}
+    for every Secure Note in the vault. Lets a caller resolve many servers
+    from a single vault decrypt instead of one per server. Entries that
+    aren't well-formed notes are skipped."""
+    result = _run(["list", "items", "--session", session])
+    try:
+        items = json.loads(result.stdout or "[]")
+    except ValueError as exc:
+        raise VaultwardenError(f"bw list items returned invalid JSON: {exc}") from exc
+    notes = {}
+    for item in items:
+        if not isinstance(item, dict) or item.get("type") != 2:
+            continue
+        name = item.get("name")
+        if isinstance(name, str) and isinstance(item.get("id"), str):
+            notes[name] = (item["id"], item.get("notes") or "")
+    return notes
 
 
 def _render_notes(values):
@@ -288,7 +323,7 @@ def resolve_env(session, server, user=None):
     Logs only that a credential access happened (server + user) — never the
     resolved values themselves."""
     try:
-        values = get_notes(session, server.vault_item)
+        values = get_notes(session, server.vault_item, item_id=server.vault_item_id)
         if user is not None:
             override_item = f"{server.vault_item}-user-{user.username}"
             overrides = get_notes(session, override_item)

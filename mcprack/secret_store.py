@@ -22,6 +22,7 @@ import functools
 import hashlib
 import hmac
 import json
+import logging
 import os
 import tempfile
 import time
@@ -29,7 +30,10 @@ import time
 from cryptography.fernet import Fernet, InvalidToken
 from flask import current_app
 
+from . import audit
 from . import vaultwarden
+
+logger = logging.getLogger(__name__)
 
 _KEY_SALT = b"mcprack-secret-storage-v1"
 
@@ -224,6 +228,78 @@ def resolve_server_env(server, user=None):
     return env
 
 
+def resolve_server_envs(servers, user=None):
+    """resolve_server_env() for many servers at once: {server.id: env or
+    exception}. Everything not already cached is resolved under ONE lock
+    cycle with ONE unlock, ONE `bw list items` and ONE lock - instead of an
+    unlock/lookup/lock round trip (each several seconds) per server - so a
+    pass over N servers holds Vaultwarden's lock for about as long as one
+    resolution. A failure is returned per server, never raised."""
+    results, pending = {}, []
+    for server in servers:
+        env = dict(server.env_config or {})
+        try:
+            if not server_needs_secrets(server) or not is_vaultwarden_configured():
+                results[server.id] = resolve_server_env(server, user=user)
+                continue
+            secrets = _get_cached_secrets(_env_cache_key(server, user))
+        except Exception as exc:  # e.g. local-store decrypt failure
+            results[server.id] = exc
+            continue
+        if secrets is None:
+            pending.append(server)
+        else:
+            env.update(secrets)
+            results[server.id] = env
+    if not pending:
+        return results
+
+    try:
+        with vaultwarden._serialized():
+            # Another worker may have filled the cache while we waited.
+            todo = []
+            for server in pending:
+                secrets = _get_cached_secrets(_env_cache_key(server, user))
+                if secrets is None:
+                    todo.append(server)
+                else:
+                    results[server.id] = {**(server.env_config or {}), **secrets}
+            if todo:
+                sess = vaultwarden.unlock()
+                try:
+                    notes = vaultwarden.list_notes(sess)
+                finally:
+                    vaultwarden.lock(sess)
+    except (vaultwarden.VaultwardenError, SecretStoreError) as exc:
+        for server in pending:
+            results.setdefault(server.id, exc)
+        return results
+
+    learned = False
+    for server in todo:
+        default = notes.get(server.vault_item)
+        values = vaultwarden.parse_notes(default[1]) if default else {}
+        if user is not None:
+            override = notes.get(f"{server.vault_item}-user-{user.username}")
+            if override:
+                values.update(vaultwarden.parse_notes(override[1]))
+        audit.log_audit_event("credential_access", "success", user=user, server=server)
+        _set_cached_secrets(_env_cache_key(server, user), values)
+        results[server.id] = {**(server.env_config or {}), **values}
+        if default and server.vault_item_id != default[0]:
+            server.vault_item_id = default[0]
+            learned = True
+    if learned:
+        from .extensions import db
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.warning("could not persist learned vault item ids", exc_info=True)
+    return results
+
+
 def load_server_secrets(server):
     """The admin-default secret values for a server, from whichever backend
     is currently authoritative."""
@@ -231,7 +307,7 @@ def load_server_secrets(server):
         return {}
     if is_vaultwarden_configured():
         with vaultwarden.session() as sess:
-            return vaultwarden.get_notes(sess, server.vault_item)
+            return vaultwarden.get_notes(sess, server.vault_item, item_id=server.vault_item_id)
     return _decrypt(server.env_secrets_encrypted)
 
 

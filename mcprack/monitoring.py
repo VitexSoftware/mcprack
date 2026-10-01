@@ -43,19 +43,37 @@ def _result(server, ok, tools=None, error=None, latency=0.0):
     }
 
 
-def resolve_env(server, user):
-    """(env, early_result). Credential lookups go through Vaultwarden's
-    single cross-process lock, so callers resolve them one server at a time
-    (parallel lookups just time out on each other and read as outages)."""
+def _env_or_early(server, resolved):
+    """(env, early_result) from one resolve_server_env outcome (an env dict
+    or the exception it raised)."""
     # latency stays 0 for early results: it is meant to be handshake latency,
     # and a slow Vaultwarden lookup must not raise "server is slow".
-    try:
-        env = secret_store.resolve_server_env(server, user=user)
-    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return None, _result(server, False, error=f"could not resolve credentials: {exc}"[:200])
-    if [key for key in server.required_env_keys if not env.get(key)]:
+    if isinstance(resolved, (vaultwarden.VaultwardenError, secret_store.SecretStoreError)):
+        return None, _result(server, False, error=f"could not resolve credentials: {resolved}"[:200])
+    if isinstance(resolved, Exception):
+        raise resolved
+    if [key for key in server.required_env_keys if not resolved.get(key)]:
         return None, _result(server, None, error="unconfigured")
-    return env, None
+    return resolved, None
+
+
+def resolve_env(server, user):
+    """(env, early_result) for one server."""
+    try:
+        resolved = secret_store.resolve_server_env(server, user=user)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        resolved = exc
+    return _env_or_early(server, resolved)
+
+
+def resolve_envs(servers, user):
+    """{server.id: (env, early_result)} for all servers. Credential lookups
+    share Vaultwarden's single cross-process lock, so they are batched into
+    one unlock/list/lock cycle (see secret_store.resolve_server_envs)
+    rather than one cycle per server - parallel lookups would just time
+    out on each other and read as outages."""
+    resolved = secret_store.resolve_server_envs(servers, user=user)
+    return {s.id: _env_or_early(s, resolved[s.id]) for s in servers}
 
 
 def check_server(server, user, env=None):
@@ -129,8 +147,9 @@ def check_servers(app):
         ]
         # Phase 1 (serial): credentials. Phase 2 (parallel): probes.
         results, todo = {}, []
+        envs = resolve_envs(servers, user)
         for server in servers:
-            env, early = resolve_env(server, user)
+            env, early = envs[server.id]
             if early is not None:
                 results[server.id] = early
             else:

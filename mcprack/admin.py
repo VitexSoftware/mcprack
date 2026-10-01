@@ -269,6 +269,7 @@ def server_edit(server_id):
     ]
     
     t_secrets_start = time.time()
+    t_secrets_end = t_secrets_start
     try:
         secret_values = secret_store.load_server_secrets(server)
         t_secrets_end = time.time()
@@ -279,6 +280,7 @@ def server_edit(server_id):
             for k, v in secret_values.items()
         ]
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        t_secrets_end = time.time()
         logger.warning(f"Failed to load secrets for {server.name}: {exc}")
         flash(f"Could not load current secret values: {exc}", "error")
 

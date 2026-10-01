@@ -135,6 +135,10 @@ class McpServer(db.Model):
     # non-secret hints only — actual values live in Vaultwarden
     env_var_names_json = db.Column(db.Text, nullable=True)  # JSON-encoded list[str]
     vaultwarden_item_name = db.Column(db.String(255), nullable=True)
+    # Cached Vaultwarden item id of the default-secrets note (not a secret).
+    # Learned from a batch listing; lets lookups skip the full-vault name
+    # search. May go stale - readers must fall back to the name.
+    vault_item_id = db.Column(db.String(64), nullable=True)
 
     # Non-secret environment variables for this server (JSON dict), stored
     # directly in the app DB — no Vaultwarden round-trip needed for these.
