@@ -37,6 +37,13 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Overlay UI/app files from the repository build context (see Makefile).
+# Lets the public demo pick up frontend/CSP changes ahead of the next .deb
+# publish cycle while still installing the packaged runtime from apt.
+COPY mcprack/static/ /usr/lib/mcprack/mcprack/static/
+COPY mcprack/templates/ /usr/lib/mcprack/mcprack/templates/
+COPY mcprack/app.py /usr/lib/mcprack/mcprack/app.py
+
 EXPOSE 8913
 
 ENTRYPOINT ["gunicorn", \
