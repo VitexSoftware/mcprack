@@ -3,7 +3,10 @@ def test_security_headers_present_on_login_page(client):
     assert resp.headers.get("X-Content-Type-Options") == "nosniff"
     assert resp.headers.get("X-Frame-Options") == "DENY"
     assert resp.headers.get("Referrer-Policy") == "same-origin"
+    csp = resp.headers.get("Content-Security-Policy", "")
     assert "Content-Security-Policy" in resp.headers
+    assert "fonts.googleapis.com" in csp
+    assert "fonts.gstatic.com" in csp
 
 
 def test_hsts_absent_on_plain_http_test_request(client):

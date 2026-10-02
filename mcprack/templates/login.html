@@ -8,7 +8,7 @@
     <p class="text-muted">{{ _('MCP Self-Service Catalog & Config Generator') }}</p>
   </div>
 
-  <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border);">
+  <div class="form-card" style="padding: var(--space-lg);">
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="form-group">
@@ -22,7 +22,7 @@
       </div>
 
       <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: var(--space-lg);">
-        🔓 {{ _('Log In') }}
+        {{ _('Log In') }}
       </button>
     </form>
     <p style="text-align: center; margin: var(--space-md) 0 0;">
@@ -30,7 +30,7 @@
     </p>
   </div>
 
-  <div style="margin-top: var(--space-lg); padding: var(--space-md); background-color: var(--color-bg-tertiary); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm);">
+  <div style="margin-top: var(--space-lg); padding: var(--space-md); background: var(--color-bg-secondary); border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm);">
     {% if config['LDAP_ENABLED'] %}
       <p class="text-muted" style="margin: 0;">{{ _('Use your local mcprack account, or your Active Directory credentials.') }}</p>
     {% else %}

@@ -97,7 +97,9 @@ def create_app(config_object=Config):
         response.headers.setdefault("Referrer-Policy", "same-origin")
         response.headers.setdefault(
             "Content-Security-Policy",
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "default-src 'self'; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; script-src 'self'",
         )
         # Only makes sense once we know we're actually behind HTTPS (i.e.

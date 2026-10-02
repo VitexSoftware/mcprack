@@ -2,20 +2,19 @@
 // paint (must stay an external file — the CSP's script-src 'self' with no
 // 'unsafe-inline' blocks inline <script> blocks and onclick="..." handlers
 // alike, which is why this used to silently do nothing).
+// Brand default matches vitexsoftware.com: dark evening sky; light is "dawn".
 (function () {
   var saved = localStorage.getItem('mcprack-theme');
   if (saved === 'light' || saved === 'dark') {
     document.documentElement.setAttribute('data-theme', saved);
+  } else {
+    document.documentElement.setAttribute('data-theme', 'dark');
   }
 })();
 
 function toggleTheme() {
   var root = document.documentElement;
-  var current = root.getAttribute('data-theme');
-  if (!current) {
-    var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    current = prefersDark ? 'dark' : 'light';
-  }
+  var current = root.getAttribute('data-theme') || 'dark';
   var next = current === 'dark' ? 'light' : 'dark';
   root.setAttribute('data-theme', next);
   localStorage.setItem('mcprack-theme', next);
