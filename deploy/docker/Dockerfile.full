@@ -10,7 +10,9 @@ ENV MOZ_HEADLESS=1 \
 # rule before installing so mcprack's translations actually land on disk.
 RUN sed -i '\#path-exclude /usr/share/locale/\*#d' /etc/dpkg/dpkg.cfg.d/docker
 
-RUN apt-get update \
+# Tolerate a missing/403 vitexsoftware backports index so main packages
+# still install from a warm buildkit cache or a partial apt update.
+RUN apt-get update || true \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         adduser \
@@ -29,7 +31,7 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update \
+RUN apt-get update || true \
     && apt-get install -y --no-install-recommends \
         mcp-server-webdriver \
         firefox-esr \
@@ -37,12 +39,11 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Overlay UI/app files from the repository build context (see Makefile).
-# Lets the public demo pick up frontend/CSP changes ahead of the next .deb
-# publish cycle while still installing the packaged runtime from apt.
-COPY mcprack/static/ /usr/lib/mcprack/mcprack/static/
-COPY mcprack/templates/ /usr/lib/mcprack/mcprack/templates/
-COPY mcprack/app.py /usr/lib/mcprack/mcprack/app.py
+# Overlay the full application tree from the repository build context
+# (see Makefile). Must stay in sync: copying only templates/static onto an
+# older apt package leaves url_for targets that the installed code lacks
+# (500 on every page that extends base.html with admin menu links).
+COPY mcprack/ /usr/lib/mcprack/mcprack/
 
 EXPOSE 8913
 
