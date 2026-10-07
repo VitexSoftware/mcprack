@@ -139,6 +139,29 @@ def _run(args, input_text=None, check=True):
     return result
 
 
+_configured_servers = set()
+
+
+def _ensure_server(server):
+    """Point `bw` at `server`, once per process.
+
+    `bw config server` is persisted in the appdata dir, so repeating it on
+    every request only costs a node startup (and, on newer CLIs, a network
+    round trip). A timeout here is tolerated and retried next time: if the
+    server is genuinely unreachable, the following login/unlock reports it.
+    """
+    key = (current_app.config["BITWARDENCLI_APPDATA_DIR"], server)
+    if key in _configured_servers:
+        return
+    try:
+        result = _run(["config", "server", server], check=False)
+    except VaultwardenError as exc:
+        logger.warning(f"bw config server not confirmed, continuing: {exc}")
+        return
+    if result.returncode == 0:
+        _configured_servers.add(key)
+
+
 def unlock():
     """Configure server, log in with API key (idempotent), unlock the vault.
     Returns a session token string."""
@@ -151,7 +174,7 @@ def unlock():
         raise VaultwardenError("BW_PASSWORD is not configured")
     
     try:
-        _run(["config", "server", cfg["BW_SERVER"]], check=False)
+        _ensure_server(cfg["BW_SERVER"])
 
         status = _run(["status", "--raw"], check=False)
         if '"unauthenticated"' in (status.stdout or ""):
@@ -411,7 +434,7 @@ def diagnose():
     if not blocked:
         try:
             with _serialized():
-                _run(["config", "server", server], check=False)
+                _ensure_server(server)
                 status_result = _run(["status", "--raw"], check=False)
                 current_status = "unknown"
                 if status_result and status_result.stdout:
