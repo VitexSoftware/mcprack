@@ -54,6 +54,29 @@ function parseDotEnv(text) {
 document.addEventListener('DOMContentLoaded', function () {
   var counters = {};
 
+  function missingLabel(containerId) {
+    var c = document.getElementById(containerId);
+    return (c && c.dataset.missingLabel) || 'Required value missing — the server cannot start until this is filled in.';
+  }
+
+  function updateMissingSummary(containerId) {
+    var c = document.getElementById(containerId);
+    if (!c) {
+      return;
+    }
+    var summary = c.previousElementSibling;
+    if (!summary || !summary.classList.contains('env-missing-summary')) {
+      summary = document.createElement('div');
+      summary.className = 'env-missing-summary';
+      summary.setAttribute('role', 'alert');
+      c.parentNode.insertBefore(summary, c);
+    }
+    var n = c.querySelectorAll('.env-row-missing').length;
+    summary.hidden = n === 0;
+    var template = c.dataset.missingSummary || '{n} required value(s) missing — the MCP server will not start until they are filled in.';
+    summary.textContent = '⚠ ' + template.replace('{n}', String(n));
+  }
+
   function addEnvRow(containerId, sensitiveLabel, key, value, sensitive, required, requiredLabel, meta) {
     counters[containerId] = (counters[containerId] || 0) + 1;
     var id = containerId + '-' + counters[containerId];
@@ -98,6 +121,7 @@ document.addEventListener('DOMContentLoaded', function () {
     requiredInput.checked = !!required;
     requiredInput.addEventListener('change', function () {
       row.classList.toggle('env-row-required', requiredInput.checked);
+      refreshMissing();
     });
     requiredLabelEl.appendChild(requiredInput);
     requiredLabelEl.appendChild(document.createTextNode(' ' + (requiredLabel || 'required')));
@@ -108,10 +132,30 @@ document.addEventListener('DOMContentLoaded', function () {
     removeButton.textContent = '✕';
     removeButton.addEventListener('click', function () {
       wrap.remove();
+      updateMissingSummary(containerId);
     });
 
     row.append(keyInput, valueInput, label, requiredLabelEl, removeButton);
     wrap.appendChild(row);
+
+    // A required row with no value means the server can't start with this
+    // configuration: flag it on the row itself, not just in the list view.
+    var missingHint = document.createElement('small');
+    missingHint.className = 'env-row-missing-hint';
+    missingHint.hidden = true;
+    wrap.appendChild(missingHint);
+
+    function refreshMissing() {
+      var missing = requiredInput.checked && keyInput.value.trim() !== '' && valueInput.value.trim() === '';
+      row.classList.toggle('env-row-missing', missing);
+      valueInput.setAttribute('aria-invalid', missing ? 'true' : 'false');
+      missingHint.hidden = !missing;
+      missingHint.textContent = missing ? missingLabel(containerId) : '';
+      updateMissingSummary(containerId);
+    }
+    valueInput.addEventListener('input', refreshMissing);
+    keyInput.addEventListener('input', refreshMissing);
+    refreshMissing();
 
     if (meta.source || meta.description) {
       var hint = document.createElement('small');
@@ -128,6 +172,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     document.getElementById(containerId).appendChild(wrap);
+    updateMissingSummary(containerId);
   }
 
   document.querySelectorAll('[data-env-rows-container]').forEach(function (container) {

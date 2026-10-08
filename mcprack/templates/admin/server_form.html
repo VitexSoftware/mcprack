@@ -159,7 +159,7 @@
           Provide secrets and configuration for your server. <strong>Mark as sensitive</strong> if it's a secret — sensitive variables are stored in Vaultwarden or encrypted locally. Others are stored in the database.
         </p>
 
-        <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}" class="env-rows-wrapper"></div>
+        <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}" data-missing-label="{{ _('Required value missing — the server cannot start until this is filled in.') }}" data-missing-summary="{{ _('%(n)s required value(s) missing — the MCP server will not start until they are filled in.', n='{n}') }}" class="env-rows-wrapper"></div>
 
         <div class="env-rows-actions">
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">

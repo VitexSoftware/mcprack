@@ -331,3 +331,29 @@ For both packages after every change:
    `mcprack server show mcp-server-<name>` reflects the right
    `command`/`transport`/`env config`; remove the companion package, confirm
    `mcprack server show mcp-server-<name>` reports "No such MCP server".
+
+## Configuration manifest (`server.json`)
+
+mcprack pre-fills the **Environment Variables** section of a server's edit
+form from a manifest shipped by the server's package, so admins see the exact
+key names (no typos) and any default values. Format: MCP Registry `server.json`
+(top-level `environmentVariables`, or `packages[].environmentVariables`):
+
+```json
+{"environmentVariables": [
+  {"name": "MCP_EMAIL_SERVER_IMAP_HOST", "description": "IMAP host", "isRequired": true},
+  {"name": "MCP_EMAIL_SERVER_IMAP_PORT", "default": "993"},
+  {"name": "MCP_EMAIL_SERVER_PASSWORD", "isRequired": true, "isSecret": true}
+]}
+```
+
+- Install it as `/usr/share/<command-basename>/server.json`
+  (`dh_install server.json usr/share/mcp-server-<name>/`); mcprack finds it by the
+  basename of the server's `command`. Alternative for a server you do not
+  package yourself: `/usr/share/mcprack/manifests/<command-basename>.json`.
+- It is re-read each time the edit form opens, so a package upgrade that adds
+  keys shows them immediately; nothing is saved until an admin submits the form.
+- Secrets (`isSecret`, or names containing KEY/SECRET/TOKEN/PASSWORD…) never get
+  a pre-filled default. Keys already configured are not suggested again.
+- A manifest takes precedence over registry lookup, package source scan and
+  docker inspect, and works for servers not installed through mcprack.

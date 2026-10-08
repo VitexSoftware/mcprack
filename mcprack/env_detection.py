@@ -4,7 +4,8 @@ likely env vars pre-listed instead of having to read the package's source
 or docs.
 
 Detection only ever produces *suggestions* — a name, a guess at
-required/secret status, and an optional description. It never touches
+required/secret status, an optional description and, only when a manifest
+declares one, a default value (never for secrets). It never touches
 McpServer.env_config/env_var_names/required_env_keys directly and never
 fabricates a value. Only the "registry" and "manifest" tiers may ever mark
 a suggestion required=True — the heuristic source-scan and docker-inspect
@@ -73,20 +74,41 @@ def _bare_package_name(package_spec):
 def _env_vars_from_manifest_dict(data):
     """Maps the MCP Registry / bundled server.json shape:
     environmentVariables: [{name, description, isRequired, isSecret, default, choices}]
-    -> our suggestion dicts (source filled in by the caller)."""
+    -> our suggestion dicts (source filled in by the caller).
+
+    Accepts the list at the top level and, for full registry documents,
+    under packages[].environmentVariables. `default` and `choices` are kept
+    so the admin form can pre-fill them; a default is never carried for a
+    secret, since a pre-filled credential would be a guess at best."""
+    entries = list(data.get("environmentVariables") or [])
+    for pkg in data.get("packages") or []:
+        if isinstance(pkg, dict):
+            entries.extend(pkg.get("environmentVariables") or [])
+
     results = []
-    for entry in data.get("environmentVariables") or []:
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
         name = entry.get("name")
         if not name:
             continue
-        results.append(
-            {
-                "name": name,
-                "required": bool(entry.get("isRequired")),
-                "secret": bool(entry.get("isSecret")) or _looks_sensitive(name),
-                "description": entry.get("description"),
-            }
-        )
+        # An explicit isSecret (true or false) from the manifest author wins;
+        # the name heuristic is only the fallback when the field is absent
+        # (e.g. CREDENTIAL_STORAGE is a mode switch, not a credential).
+        secret = bool(entry["isSecret"]) if "isSecret" in entry else _looks_sensitive(name)
+        default = entry.get("default")
+        suggestion = {
+            "name": name,
+            "required": bool(entry.get("isRequired")),
+            "secret": secret,
+            "description": entry.get("description"),
+        }
+        if default is not None and not secret:
+            suggestion["default"] = str(default)
+        choices = entry.get("choices")
+        if isinstance(choices, list) and choices:
+            suggestion["choices"] = [str(c) for c in choices]
+        results.append(suggestion)
     return results
 
 
@@ -356,11 +378,59 @@ def _dedupe(suggestions):
     return list(seen.values())
 
 
+# Where a packaged server may ship its own manifest (MCP Registry
+# server.json shape), looked up by the basename of its command, e.g.
+# /usr/bin/mcp-server-email -> /usr/share/mcp-server-email/server.json.
+# The second location lets a companion package describe a server whose
+# upstream package it does not control.
+MANIFEST_DIRS = ("/usr/share", "/usr/share/mcprack/manifests")
+MANIFEST_MAX_BYTES = 256 * 1024
+_SAFE_BASENAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _manifest_candidates(command):
+    name = Path(command).name if command else ""
+    if not _SAFE_BASENAME.match(name):
+        return []
+    return [
+        Path(MANIFEST_DIRS[0]) / name / "server.json",
+        Path(MANIFEST_DIRS[1]) / f"{name}.json",
+    ]
+
+
+def from_system_manifest(server):
+    """Suggestions from a manifest installed on this host by the server's
+    own (or its companion) package. Works for any server that has a command,
+    whatever installed it — unlike the pip/npm/docker tiers, which only exist
+    for servers mcprack installed itself. Local file read only (no network),
+    so it is cheap enough to run when rendering the edit form. Never raises."""
+    try:
+        for path in _manifest_candidates(getattr(server, "command", None)):
+            if not path.is_file() or path.stat().st_size > MANIFEST_MAX_BYTES:
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(data, dict):
+                continue
+            results = _env_vars_from_manifest_dict(data)
+            for entry in results:
+                entry["source"] = "manifest"
+            if results:
+                return _dedupe(results)
+    except (OSError, ValueError):
+        logger.debug("env_detection.from_system_manifest failed", exc_info=True)
+    return []
+
+
 def detect_env_vars(server):
     """Entry point. `server` is an McpServer with install_method set.
     Returns a deduped list of suggestion dicts:
-    {"name", "required", "secret", "description", "source"}. Never raises."""
+    {"name", "required", "secret", "description", "source"} plus optional
+    "default" / "choices" when a manifest declares them. Never raises."""
     try:
+        shipped = from_system_manifest(server)
+        if shipped:
+            return shipped
+
         install_method = server.install_method
         package_spec = server.package_spec
         install_path = server.install_path

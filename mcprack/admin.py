@@ -270,15 +270,17 @@ def server_edit(server_id):
     
     t_secrets_start = time.time()
     t_secrets_end = t_secrets_start
+    secrets_loaded = False
     try:
         secret_values = secret_store.load_server_secrets(server)
         t_secrets_end = time.time()
         logger.info(f"load_server_secrets({server.name}): {t_secrets_end - t_secrets_start:.2f}s")
-        
+
         env_rows += [
             {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
             for k, v in secret_values.items()
         ]
+        secrets_loaded = True
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         t_secrets_end = time.time()
         logger.warning(f"Failed to load secrets for {server.name}: {exc}")
@@ -292,16 +294,44 @@ def server_edit(server_id):
     # docker-inspect guess is still shown, just not pre-checked required.
     # `source` / `description` are display-only hints for the row editor.
     configured_keys = set(server.env_config or {}) | set(server.env_var_names)
-    for suggestion in server.detected_env_vars:
+    # A manifest shipped with the installed package is authoritative and cheap
+    # (local file), so it is re-read on every render — an upgraded package's
+    # new keys/defaults show up without re-running install detection, and it
+    # also covers servers that were never installed through mcprack.
+    for suggestion in env_detection.from_system_manifest(server) or server.detected_env_vars:
         if suggestion.get("name") not in configured_keys:
+            description = suggestion.get("description") or ""
+            if suggestion.get("choices"):
+                choices = "one of: " + ", ".join(suggestion["choices"])
+                description = f"{description} ({choices})" if description else choices
             env_rows.append(
                 {
                     "key": suggestion["name"],
-                    "value": "",
+                    "value": suggestion.get("default") or "",
                     "sensitive": bool(suggestion.get("secret")),
                     "required": bool(suggestion.get("required")),
                     "source": suggestion.get("source"),
-                    "description": suggestion.get("description"),
+                    "description": description or None,
+                }
+            )
+
+    # A declared secret key (env_var_names) or required key with no stored
+    # value has no row from the sources above — secrets are only listed when
+    # they already hold a value. Without a row the admin can't see that the
+    # server is missing e.g. its password. Add an empty row for each so the
+    # editor can flag it. Skipped when the secret backend failed to load:
+    # empty placeholders there would be misleading, and saving them would
+    # overwrite values we simply couldn't read.
+    if secrets_loaded:
+        present_keys = {row["key"] for row in env_rows}
+        declared_secret_keys = set(server.env_var_names)
+        for key in sorted((declared_secret_keys | required_keys) - present_keys):
+            env_rows.append(
+                {
+                    "key": key,
+                    "value": "",
+                    "sensitive": key in declared_secret_keys,
+                    "required": key in required_keys,
                 }
             )
 
