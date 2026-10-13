@@ -68,19 +68,28 @@
     {% for connector in connectors %}
     <div class="connector-row">
       <div class="connector-label">{{ connector.label }}</div>
-      <div class="connector-field">
-        <span class="connector-field-label">{{ _('Name') }}</span>
-        <code class="connector-value">{{ connector.name }}</code>
-        <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.name }}">
-          📋 {{ _('Copy') }}
-        </button>
-      </div>
-      <div class="connector-field">
-        <span class="connector-field-label">{{ _('URL') }}</span>
-        <code class="connector-value connector-url">{{ connector.url }}</code>
-        <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.url }}">
-          📋 {{ _('Copy') }}
-        </button>
+      <div class="connector-content">
+        <div class="connector-icon-wrap">
+          <img src="{{ url_for('catalog.server_icon', server_id=connector.id) }}"
+               alt="" class="connector-icon" loading="lazy"
+               width="96" height="96">
+        </div>
+        <div class="connector-fields">
+          <div class="connector-field">
+            <span class="connector-field-label">{{ _('Name') }}</span>
+            <code class="connector-value">{{ connector.name }}</code>
+            <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.name }}">
+              📋 {{ _('Copy') }}
+            </button>
+          </div>
+          <div class="connector-field">
+            <span class="connector-field-label">{{ _('URL') }}</span>
+            <code class="connector-value connector-url">{{ connector.url }}</code>
+            <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.url }}">
+              📋 {{ _('Copy') }}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
     {% endfor %}

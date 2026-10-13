@@ -64,6 +64,8 @@ def test_index_renders_copyable_name_and_url_for_each_configured_server(app, cli
     assert f"/proxy/mcp/" in body
     assert f"/{server_id}\"" in body
     assert "copy-connector.js" in body
+    assert f"/icon/server/{server_id}" in body
+    assert 'class="connector-icon"' in body
 
 
 def test_index_omits_connector_section_when_nothing_selected(app, client):

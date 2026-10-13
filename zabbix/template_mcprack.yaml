@@ -203,6 +203,11 @@ zabbix_export:
                   parameters:
                     - '$.servers[?(@.id=={#SID})].tools.first()'
                   error_handler: DISCARD_VALUE
+                - type: JAVASCRIPT
+                  parameters:
+                    - |
+                      var v = parseInt(value, 10);
+                      return isNaN(v) ? 0 : v;
               tags:
                 - tag: component
                   value: mcprack
