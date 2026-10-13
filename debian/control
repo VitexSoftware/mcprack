@@ -70,6 +70,8 @@ Suggests:
  mcp-server-blender,
  mcp-server-ms-365,
  mcp-server-email,
+ mcp-server-wakatime,
+ mcp-server-raynet,
  mcprack-mcp-server-abraflexi,
  mcprack-mcp-server-linkedin,
  mcprack-mcp-server-datovka,
@@ -87,7 +89,9 @@ Suggests:
  mcprack-mcp-server-webdriver,
  mcprack-mcp-server-cc-token-saver,
  mcprack-mcp-server-ms-365,
- mcprack-mcp-server-email
+ mcprack-mcp-server-email,
+ mcprack-mcp-server-wakatime,
+ mcprack-mcp-server-raynet
 Description: Self-service MCP server catalog and client config generator
  mcprack lets an admin register MCP (Model Context Protocol) servers once;
  users log in (local account or Active Directory), pick which servers they
