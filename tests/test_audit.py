@@ -74,6 +74,99 @@ def test_log_audit_event_survives_db_failure(app, monkeypatch):
         assert entry is None
 
 
+def test_log_audit_event_degrades_on_dead_server_fk(app, monkeypatch):
+    """Regression (magnymph incident 2026-10-17): a per-user proxy process
+    idle-timed out after its McpServer row was deleted, and the
+    proxy_stop insert died on the audit_log_entries_server_id_fkey
+    constraint. The row must still land — drop the stale server_id,
+    keep the denormalized server_name and the user link."""
+    from sqlalchemy.exc import IntegrityError
+
+    with app.app_context():
+        user = _make_user()
+        real_commit = db.session.commit
+        attempts = {"count": 0}
+
+        def commit_dead_server_fk_once():
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise IntegrityError(
+                    "INSERT INTO audit_log_entries ...",
+                    {},
+                    Exception(
+                        'insert or update on table "audit_log_entries" violates '
+                        'foreign key constraint "audit_log_entries_server_id_fkey"\n'
+                        'DETAIL:  Key (server_id)=(5) is not present in table "mcp_servers".'
+                    ),
+                )
+            return real_commit()
+
+        monkeypatch.setattr(db.session, "commit", commit_dead_server_fk_once)
+        entry = audit.log_audit_event(
+            "proxy_stop",
+            "success",
+            user_id=user.id,
+            server_id=999999,
+            server_name="jenkins",
+            error_message="idle timeout",
+        )
+
+        assert entry is not None
+        assert entry.id is not None
+        assert entry.server_id is None
+        assert entry.user_id == user.id
+        assert entry.server_name == "jenkins"
+        assert entry.error_message == "idle timeout"
+        assert attempts["count"] == 2
+
+
+def test_log_audit_event_degrades_on_dead_user_fk(app, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+
+    with app.app_context():
+        real_commit = db.session.commit
+        attempts = {"count": 0}
+
+        def commit_dead_user_fk_once():
+            attempts["count"] += 1
+            if attempts["count"] == 1:
+                raise IntegrityError(
+                    "INSERT INTO audit_log_entries ...",
+                    {},
+                    Exception(
+                        'insert or update on table "audit_log_entries" violates '
+                        'foreign key constraint "audit_log_entries_user_id_fkey"'
+                    ),
+                )
+            return real_commit()
+
+        monkeypatch.setattr(db.session, "commit", commit_dead_user_fk_once)
+        entry = audit.log_audit_event("proxy_stop", "success", user_id=999999)
+
+        assert entry is not None
+        assert entry.user_id is None
+        assert attempts["count"] == 2
+
+
+def test_log_audit_event_returns_none_on_other_integrity_error(app, monkeypatch):
+    """Only stale-reference FK violations degrade to a retryable row;
+    anything else is a real failure and must not be written half-way."""
+    from sqlalchemy.exc import IntegrityError
+
+    with app.app_context():
+        def boom():
+            raise IntegrityError(
+                "INSERT INTO audit_log_entries ...",
+                {},
+                Exception("UNIQUE constraint failed: audit_log_entries.id"),
+            )
+
+        monkeypatch.setattr(db.session, "commit", boom)
+        entry = audit.log_audit_event("login", "success")
+        assert entry is None
+        assert AuditLogEntry.query.count() == 0
+
+
 def test_audit_log_entry_is_append_only_by_convention(app):
     """AuditLogEntry deliberately exposes no update/delete helper methods —
     callers that need to remove rows go through audit_retention.py, which

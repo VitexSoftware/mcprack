@@ -1,4 +1,5 @@
 import fcntl
+import json
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -265,6 +266,57 @@ def test_cleanup_stops_idle_proxy(state_dir):
 
     stop_pid.assert_called_once_with(99999)
     assert paths["pid"].exists()
+
+
+def test_cleanup_audit_entry_carries_server_name(state_dir):
+    """Even when the McpServer row is gone by the time an idle proxy is
+    reaped, the proxy_stop audit row must keep a readable name — the
+    meta file written at spawn time is the only source left."""
+    _make_idle_instance(1, 11)
+    user_proxy._paths(1, 11)["meta"].write_text(
+        json.dumps({"mcpServers": {"jenkins": {"type": "stdio"}}})
+    )
+    with patch("mcprack.user_proxy._pid_running", return_value=True), \
+         patch("mcprack.user_proxy._stop_pid"), \
+         patch("mcprack.user_proxy.audit.log_audit_event") as audit_log:
+        user_proxy.cleanup_idle_proxies()
+
+    audit_log.assert_called_once_with(
+        "proxy_stop",
+        "success",
+        user_id=1,
+        server_id=11,
+        server_name="jenkins",
+        error_message="idle timeout",
+    )
+
+
+def test_stop_server_proxies_stops_every_instance_of_that_server(state_dir):
+    """Regression (magnymph incident 2026-10-17): deleting a server row
+    while per-user proxy processes are still running left orphans whose
+    later proxy_stop audit insert violated the dead server_id FK. The
+    delete paths must stop every instance of that server first."""
+    jenkins_u1 = _make_idle_instance(1, 11, idle_seconds=0)
+    jenkins_u2 = _make_idle_instance(2, 11, idle_seconds=0)
+    other = _make_idle_instance(1, 12, idle_seconds=0)
+    for user_id, server_id in ((1, 11), (2, 11), (1, 12)):
+        user_proxy._paths(user_id, server_id)["meta"].write_text(
+            json.dumps({"mcpServers": {"jenkins" if server_id == 11 else "other": {"type": "stdio"}}})
+        )
+
+    with patch("mcprack.user_proxy._stop_pid") as stop_pid, \
+         patch("mcprack.user_proxy.audit.log_audit_event") as audit_log:
+        user_proxy.stop_server_proxies(11)
+
+    assert stop_pid.call_count == 2
+    for paths in (jenkins_u1, jenkins_u2):
+        assert not paths["pid"].exists()
+        assert not paths["meta"].exists()
+    assert other["pid"].exists()
+    assert audit_log.call_count == 2
+    audit_log.assert_any_call(
+        "proxy_stop", "success", user_id=1, server_id=11, server_name="jenkins"
+    )
 
 
 def test_cleanup_skips_busy_lock_without_raising_or_waiting(state_dir):

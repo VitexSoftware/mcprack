@@ -16,11 +16,18 @@ import logging
 import uuid
 
 import flask
+from sqlalchemy.exc import IntegrityError
 
 from .extensions import db
 from .models import AuditLogEntry
 
 logger = logging.getLogger(__name__)
+
+# Foreign-key constraint names on audit_log_entries (PostgreSQL's default
+# naming) — used to tell *which* reference went stale when an insert
+# fails with IntegrityError, so only that one is degraded.
+_SERVER_ID_FK = "audit_log_entries_server_id_fkey"
+_USER_ID_FK = "audit_log_entries_user_id_fkey"
 
 
 def new_request_id():
@@ -95,6 +102,56 @@ def log_audit_event(
     try:
         db.session.add(entry)
         db.session.commit()
+    except IntegrityError as exc:
+        # The row this event points at may have been deleted between the
+        # event and this write (e.g. an admin deleted a server while one
+        # of its per-user proxy processes was still running; the process
+        # later idle-times out and logs proxy_stop against a dead
+        # server_id). The audit row itself must still land — drop the
+        # stale reference and retry once; the denormalized server_name
+        # snapshot keeps the entry readable.
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        message = str(getattr(exc, "orig", None) or exc)
+        if _SERVER_ID_FK not in message and _USER_ID_FK not in message:
+            logger.exception("Failed to write audit log entry (action=%s)", action)
+            return None
+        if _SERVER_ID_FK in message:
+            resolved_server_id = None
+        if _USER_ID_FK in message:
+            resolved_user_id = None
+        logger.warning(
+            "Audit log entry (action=%s) references a deleted row "
+            "(server_id=%s, user_id=%s); writing it without that reference",
+            action,
+            resolved_server_id,
+            resolved_user_id,
+        )
+        entry = AuditLogEntry(
+            user_id=resolved_user_id,
+            server_id=resolved_server_id,
+            server_name=resolved_server_name,
+            action=action,
+            result=result,
+            error_code=error_code,
+            error_message=(error_message[:500] if error_message else None),
+            source_ip=source_ip,
+            hostname=hostname,
+            duration_ms=duration_ms,
+            request_id=request_id or current_request_id(),
+        )
+        try:
+            db.session.add(entry)
+            db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            logger.exception("Failed to write audit log entry (action=%s)", action)
+            return None
     except Exception:
         try:
             db.session.rollback()

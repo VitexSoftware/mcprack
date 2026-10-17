@@ -814,6 +814,9 @@ def server_delete(name):
     s = _get_server_or_fail(name)
     if secret_store.server_needs_secrets(s):
         secret_store.save_server_secrets(s, {})
+    # Stop still-running per-user proxies *before* the row goes away, so
+    # their proxy_stop audit entries keep a valid server_id.
+    admin.user_proxy.stop_server_proxies(s.id)
     db.session.delete(s)
     db.session.commit()
     click.echo(f"Server '{name}' deleted.")

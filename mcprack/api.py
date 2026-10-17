@@ -445,6 +445,9 @@ def admin_server_update(server_id):
 def admin_server_delete(server_id):
     server = db.get_or_404(McpServer, server_id)
     name = server.name
+    # Stop still-running per-user proxies *before* the row goes away, so
+    # their proxy_stop audit entries keep a valid server_id.
+    admin.user_proxy.stop_server_proxies(server.id)
     db.session.delete(server)
     db.session.commit()
     admin._invalidate_health_cache()

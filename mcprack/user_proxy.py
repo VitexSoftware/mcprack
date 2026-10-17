@@ -515,8 +515,60 @@ def cleanup_idle_proxies(max_idle_seconds=900):
                 "success",
                 user_id=user_id,
                 server_id=server_id,
+                server_name=_server_name_from_meta(user_id, server_id),
                 error_message="idle timeout",
             )
+
+
+def _server_name_from_meta(user_id, server_id):
+    """Best-effort server-name snapshot from the instance's meta file, for
+    audit rows written after the McpServer row is gone (e.g. an admin
+    deleted the server while a proxy process was still running)."""
+    raw = _read_text(_paths(user_id, server_id)["meta"])
+    if not raw:
+        return None
+    try:
+        names = list(json.loads(raw).get("mcpServers", {}).keys())
+    except (ValueError, AttributeError):
+        return None
+    return names[0] if len(names) == 1 else None
+
+
+def stop_server_proxies(server_id):
+    """Stop every running per-user proxy instance for one server.
+
+    Callers: server deletion paths (admin route, API, CLI). Without this,
+    an already-spawned process outlives its mcp_servers row and the
+    later idle-timeout proxy_stop audit entry references a dead foreign
+    key. Pairs whose lock is held by another worker are skipped — the
+    audit fallback (server_id dropped, name kept) covers those.
+    """
+    if not STATE_DIR.exists():
+        return
+    for pid_path in STATE_DIR.glob("*.pid"):
+        pid_user_id, pid_server_id = _parse_key(pid_path.stem)
+        if pid_user_id is None or pid_server_id != server_id:
+            continue
+        try:
+            with _serialized(pid_user_id, server_id, wait_seconds=0):
+                server_name = _server_name_from_meta(pid_user_id, server_id)
+                pid = _read_pid(pid_path)
+                if pid:
+                    _stop_pid(pid)
+                for key in ("pid", "last_used", "meta", "config", "healthy_at"):
+                    try:
+                        _paths(pid_user_id, server_id)[key].unlink()
+                    except OSError:
+                        pass
+        except UserProxyError:
+            continue
+        audit.log_audit_event(
+            "proxy_stop",
+            "success",
+            user_id=pid_user_id,
+            server_id=server_id,
+            server_name=server_name,
+        )
 
 
 def stop_user_server_proxy(user_id, server_id):
