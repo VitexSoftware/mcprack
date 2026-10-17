@@ -279,7 +279,14 @@ def server_icon(server_id):
 
 @bp.route("/proxy/mcp/<token>/<int:server_id>", methods=["GET", "POST", "DELETE"])
 def user_proxy_mcp(token, server_id):
-    user_proxy.cleanup_idle_proxies()
+    # Housekeeping only — a cleanup failure must never take the user's
+    # actual proxy request down with it. (It used to: a lock-wait timeout
+    # raised out of cleanup_idle_proxies() propagated as a 500 before the
+    # token was even parsed.)
+    try:
+        user_proxy.cleanup_idle_proxies()
+    except Exception:
+        logger.exception("Idle proxy cleanup failed; continuing with the request")
 
     data = _parse_proxy_token(token)
     if not data or data.get("s") != server_id:

@@ -664,6 +664,13 @@ servers that need configuration this user lacks are reported as
 a background refresh, never from inside the request, so the first call after
 a restart returns `{"pending": true}`.
 
+A probe only contacts Vaultwarden where it genuinely needs credentials: a
+cold stdio spawn (a server start) or a network handshake carrying an auth
+header. An already-running instance is probed on its port directly, with no
+credential resolution at all — the refresh runs every couple of minutes and
+must not be a periodic Vaultwarden client (a single failing `bw unlock` would
+otherwise mark every credential-backed server broken at once).
+
 ```
 curl -H "Authorization: Bearer $MONITORING_TOKEN" https://mcprack.example.org/health/servers
 ```

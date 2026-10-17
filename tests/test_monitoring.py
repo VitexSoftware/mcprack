@@ -82,6 +82,65 @@ def test_check_server_missing_required_env_is_unconfigured_not_failed(app):
     assert result["ok"] is None and result["error"] == "unconfigured"
 
 
+def test_check_server_warm_proxy_never_resolves_credentials(app):
+    """A running instance is probed on its port directly: no credential
+    resolution, no spawn path — /health/servers refreshes periodically and
+    must not be a periodic Vaultwarden client."""
+    server, user = _server(), _user()
+    with patch("mcprack.monitoring.user_proxy.running_proxy_port", return_value=4321), \
+         patch("mcprack.monitoring.user_proxy.mark_proxy_used") as mark, \
+         patch("mcprack.monitoring.user_proxy.ensure_user_server_proxy") as spawn, \
+         patch("mcprack.monitoring.secret_store.resolve_server_env") as resolve, \
+         patch("mcprack.monitoring.health.probe_tools", return_value=(True, 18, None)):
+        result = monitoring.check_server(server, user)
+    resolve.assert_not_called()
+    spawn.assert_not_called()
+    mark.assert_called_once_with(user.id, server.id)
+    assert (result["ok"], result["tools"]) == (True, 18)
+
+
+def test_check_server_warm_but_broken_falls_back_to_restart(app):
+    """A warm instance failing the handshake goes through the full start
+    path, which resolves credentials (a server start) and restarts it."""
+    server, user = _server(), _user()
+    with patch("mcprack.monitoring.user_proxy.running_proxy_port", return_value=4321), \
+         patch("mcprack.monitoring.secret_store.resolve_server_env", return_value={"X": "1"}), \
+         patch("mcprack.monitoring.user_proxy.ensure_user_server_proxy", return_value=4322) as spawn, \
+         patch("mcprack.monitoring.health.probe_tools",
+               side_effect=[(False, 0, "connection refused"), (True, 18, None)]):
+        result = monitoring.check_server(server, user)
+    spawn.assert_called_once()
+    assert (result["ok"], result["tools"]) == (True, 18)
+
+
+def test_check_servers_resolves_only_cold_and_network_servers(app):
+    """Warm instances are excluded from the batched credential lookup."""
+    warm = McpServer(name="warm", label="Warm", transport="stdio", command="/bin/x")
+    cold = McpServer(name="cold", label="Cold", transport="stdio", command="/bin/x")
+    db.session.add_all([warm, cold])
+    db.session.commit()
+    user = _user()
+    app.config["MONITORING_USER_ID"] = user.id
+    ports = {user.id: {warm.id: 4001}}
+
+    with patch("mcprack.monitoring.user_proxy.running_proxy_port",
+               side_effect=lambda uid, sid: ports.get(uid, {}).get(sid)), \
+         patch("mcprack.monitoring.resolve_envs",
+               return_value={cold.id: ({"E": "1"}, None)}) as batch, \
+         patch("mcprack.monitoring.check_server") as probe:
+        probe.side_effect = lambda server, user, env=None: {
+            "id": server.id, "name": server.name, "transport": server.transport,
+            "ok": True, "tools": 1, "latency_ms": 1, "error": None,
+        }
+        snapshot = monitoring.check_servers(app)
+
+    batch.assert_called_once()
+    assert [s.id for s in batch.call_args[0][0]] == [cold.id]
+    probe_calls = {c.args[0].id for c in probe.call_args_list}
+    assert probe_calls == {warm.id, cold.id}
+    assert snapshot["total"] == 2 and snapshot["failed"] == 0
+
+
 def test_get_snapshot_is_pending_then_served_from_shared_file(app):
     app.config["MONITORING_USER_ID"] = 1
     with patch("mcprack.monitoring.threading.Thread") as thread:

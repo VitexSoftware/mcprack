@@ -10,6 +10,13 @@ Probing spawns backends (cold starts take seconds), so it never runs inside
 a request: `get_snapshot()` returns the last result immediately and, when it
 has gone stale, refreshes it in a background thread. The result lives in a
 file shared by all gunicorn workers; a flock keeps refreshes single-flight.
+
+Vaultwarden is contacted only where the probe genuinely needs it: a cold
+stdio spawn (a server start) or a network handshake that carries an auth
+header. A warm stdio instance is probed on its running port with no
+credential resolution at all — the refresh runs every couple of minutes and
+must not be a periodic Vaultwarden client (a single failing `bw unlock` used
+to mark every credential-backed server broken at once, 2026-10-16).
 """
 
 import fcntl
@@ -79,11 +86,14 @@ def resolve_envs(servers, user):
 def check_server(server, user, env=None):
     """Probe one server. ok is True/False, or None when the monitoring
     user simply lacks required configuration (not an outage). Pass `env`
-    when already resolved; otherwise it is resolved here."""
-    if env is None:
-        env, early = resolve_env(server, user)
-        if early is not None:
-            return early
+    when already resolved (check_servers batches credential lookups);
+    when None it is resolved here — but only where the probe genuinely
+    needs credentials: a cold stdio proxy spawn (a server start) or a
+    network handshake that carries an auth header. An already-running
+    stdio instance is probed on its port without touching the secret
+    store at all: /health/servers refreshes every couple of minutes and
+    must not be a periodic Vaultwarden client — one failing `bw unlock`
+    used to fan out as a mass "servers broken" alert (2026-10-16)."""
 
     start = time.monotonic()
 
@@ -91,6 +101,23 @@ def check_server(server, user, env=None):
         return _result(server, ok, tools, error, time.monotonic() - start)
 
     if server.command:
+        # Warm instance: probe it in place, no credential resolution.
+        warm_port = user_proxy.running_proxy_port(user.id, server.id)
+        if warm_port is not None:
+            ok, tools, error = health.probe_tools(
+                "127.0.0.1", warm_port, timeout=user_proxy.HANDSHAKE_TIMEOUT
+            )
+            if ok:
+                user_proxy.mark_proxy_used(user.id, server.id)
+                return done(True, tools)
+            # A warm-but-broken instance falls through to the full start
+            # path below, which restarts it — that spawn is a server
+            # start, so resolving credentials there is allowed.
+        if env is None:
+            env, early = resolve_env(server, user)
+            if early is not None:
+                return early
+
         try:
             port = user_proxy.ensure_user_server_proxy(
                 user_id=user.id,
@@ -105,6 +132,11 @@ def check_server(server, user, env=None):
             return done(False, error=str(exc)[:200])
         ok, tools, error = health.probe_tools("127.0.0.1", port, timeout=user_proxy.HANDSHAKE_TIMEOUT)
         return done(ok, tools if ok else 0, error)
+
+    if env is None:
+        env, early = resolve_env(server, user)
+        if early is not None:
+            return early
 
     if server.transport == "sse":
         # No streamable-HTTP handshake to run; reachability is all we can say.
@@ -145,15 +177,26 @@ def check_servers(app):
             s for s in McpServer.query.filter_by(enabled=True).order_by(McpServer.name).all()
             if s.command or s.url
         ]
-        # Phase 1 (serial): credentials. Phase 2 (parallel): probes.
+        # Phase 1 (serial): decide what each probe needs. Warm stdio
+        # instances are probed on their running port and never resolve
+        # credentials — Vaultwarden is only contacted for a server start
+        # or an authenticated network handshake, never merely because the
+        # monitoring refresh runs. Phase 2 (parallel): probes.
         results, todo = {}, []
-        envs = resolve_envs(servers, user)
+        warm, resolve_needed = [], []
         for server in servers:
+            if server.command and user_proxy.running_proxy_port(user.id, server.id) is not None:
+                warm.append((server.id, server.name))
+            else:
+                resolve_needed.append(server)
+        envs = resolve_envs(resolve_needed, user=user)
+        for server in resolve_needed:
             env, early = envs[server.id]
             if early is not None:
                 results[server.id] = early
             else:
                 todo.append((server.id, server.name, env))
+        todo.extend((server_id, name, None) for server_id, name in warm)
         order = [s.id for s in servers]
 
     def run(item):

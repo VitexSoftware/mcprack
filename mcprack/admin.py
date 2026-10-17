@@ -1033,6 +1033,52 @@ def vaultwarden_snapshot_to_local():
     return redirect(url_for("admin.vaultwarden_wizard"))
 
 
+def _database_info():
+    """Which database the app is running on, for the admin System
+    information card. The connection string is rendered through
+    SQLAlchemy's hide_password=True, so the credential from the URI never
+    reaches the browser."""
+    from sqlalchemy import text
+    from sqlalchemy.engine import make_url
+
+    url = make_url(current_app.config["SQLALCHEMY_DATABASE_URI"])
+    dialect = url.get_dialect().name
+
+    engine_labels = {
+        "postgresql": "PostgreSQL",
+        "mysql": "MySQL/MariaDB",
+        "sqlite": "SQLite",
+    }
+
+    version = None
+    try:
+        if dialect == "postgresql":
+            raw = db.session.execute(text("SELECT version()")).scalar() or ""
+            # "PostgreSQL 17.11 (Debian ...) on x86_64 ..." → "PostgreSQL 17.11"
+            version = " ".join(raw.split()[:2])
+        elif dialect == "mysql":
+            version = db.session.execute(text("SELECT VERSION()")).scalar()
+        elif dialect == "sqlite":
+            version = db.session.execute(text("SELECT sqlite_version()")).scalar()
+    except Exception:
+        # A probe failure must not take the whole admin page down.
+        logger.warning("Could not determine database version (dialect=%s)", dialect, exc_info=True)
+
+    if dialect == "sqlite":
+        database = url.database or ":memory:"
+    else:
+        database = url.database or "—"
+
+    return {
+        "engine": engine_labels.get(dialect, dialect),
+        "version": version,
+        "host": url.host or "—",
+        "port": url.port or "—",
+        "database": database,
+        "uri": url.render_as_string(hide_password=True),
+    }
+
+
 @bp.route("/proxy-instances")
 @admin_required
 def proxy_instances():
@@ -1073,7 +1119,10 @@ def proxy_instances():
     ]
 
     return render_template(
-        "admin/proxy_instances.html", rows=rows, subscription_rows=subscription_rows
+        "admin/proxy_instances.html",
+        rows=rows,
+        subscription_rows=subscription_rows,
+        db_info=_database_info(),
     )
 
 

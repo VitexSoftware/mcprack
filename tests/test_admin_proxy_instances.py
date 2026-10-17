@@ -85,3 +85,21 @@ def test_proxy_instance_stop_calls_manager(app, client):
 
     assert resp.status_code == 302
     stop_mock.assert_called_once_with(7, 9)
+
+
+def test_proxy_instances_page_shows_database_info(app, client):
+    """The admin ops page must show which database engine the app runs on
+    (engine, name, and the URI with the password masked away)."""
+    _login_admin(client)
+
+    with patch("mcprack.admin.user_proxy.cleanup_idle_proxies"), \
+         patch("mcprack.admin.user_proxy.list_proxy_instances", return_value=[]):
+        resp = client.get("/admin/proxy-instances")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "System information" in body
+    # TestConfig runs on in-memory SQLite
+    assert "SQLite" in body
+    assert "sqlite://" in body
+    assert ":memory:" in body

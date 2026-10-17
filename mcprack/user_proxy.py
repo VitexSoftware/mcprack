@@ -82,7 +82,7 @@ def _lock_path(user_id, server_id):
 
 
 @contextlib.contextmanager
-def _serialized(user_id, server_id):
+def _serialized(user_id, server_id, wait_seconds=None):
     """Cross-process mutex around the read-decide-spawn sequence for one
     (user, server) pair.
 
@@ -97,9 +97,18 @@ def _serialized(user_id, server_id):
     session against the same server kept working undisturbed the whole
     time (GitHub issue #1). Locking is per-key, so unrelated (user,
     server) pairs never block each other.
+
+    `wait_seconds` bounds how long acquisition may poll before giving up
+    with UserProxyError. None means the full LOCK_WAIT_TIMEOUT — right for
+    a request that actually needs this pair (the caller has nothing to
+    fall back to). Callers that can simply skip a busy pair — idle-proxy
+    cleanup — pass a short (or zero) value instead of queueing behind a
+    spawn that may legitimately hold the lock for a whole cold-start
+    handshake.
     """
+    wait = LOCK_WAIT_TIMEOUT if wait_seconds is None else wait_seconds
     STATE_DIR.mkdir(parents=True, exist_ok=True)
-    deadline = time.monotonic() + LOCK_WAIT_TIMEOUT
+    deadline = time.monotonic() + wait
     with open(_lock_path(user_id, server_id), "w") as lock_file:
         while True:
             try:
@@ -109,7 +118,7 @@ def _serialized(user_id, server_id):
                 if time.monotonic() >= deadline:
                     raise UserProxyError(
                         f"Timed out waiting for another request to finish starting this "
-                        f"server (lock wait exceeded {LOCK_WAIT_TIMEOUT}s)"
+                        f"server (lock wait exceeded {wait}s)"
                     )
                 time.sleep(0.05)
         try:
@@ -428,6 +437,29 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
         return port
 
 
+def running_proxy_port(user_id, server_id):
+    """Port of the already-running instance for this (user, server) pair,
+    or None when there is no live pid. Read-only and deliberately lock-free:
+    callers use it to decide whether a spawn is needed at all, and any race
+    with a concurrent spawn/cleanup is absorbed by the caller's own probe
+    or start path. Used by the monitoring prober so a periodic health
+    refresh can reuse a warm instance without resolving credentials."""
+    if not _pid_running(_read_pid(_paths(user_id, server_id)["pid"])):
+        return None
+    return _port_for(user_id, server_id)
+
+
+def mark_proxy_used(user_id, server_id):
+    """Refresh a running instance's idle timer without spawning anything
+    or touching its config — the monitoring prober verifies a warm
+    instance directly and must keep it alive exactly like a real request
+    would, without becoming a periodic credential client."""
+    try:
+        _paths(user_id, server_id)["last_used"].write_text(str(int(time.time())))
+    except OSError:
+        pass
+
+
 def cleanup_idle_proxies(max_idle_seconds=900):
     if not STATE_DIR.exists():
         return
@@ -452,20 +484,32 @@ def cleanup_idle_proxies(max_idle_seconds=900):
             user_id, server_id = _parse_key(pid_path.stem)
             if user_id is None:
                 continue
-            with _serialized(user_id, server_id):
-                # Re-check under the lock — a concurrent request may have
-                # refreshed (or already stopped) this instance since the
-                # unlocked scan above.
-                pid = _read_pid(pid_path)
-                if not pid:
-                    continue
-                try:
-                    last_used = float((last_used_path.read_text() or "0").strip())
-                except (OSError, ValueError):
-                    last_used = 0.0
-                if (now - last_used) <= max_idle_seconds:
-                    continue
-                _stop_pid(pid)
+            try:
+                with _serialized(user_id, server_id, wait_seconds=0):
+                    # Re-check under the lock — a concurrent request may have
+                    # refreshed (or already stopped) this instance since the
+                    # unlocked scan above.
+                    pid = _read_pid(pid_path)
+                    if not pid:
+                        continue
+                    try:
+                        last_used = float((last_used_path.read_text() or "0").strip())
+                    except (OSError, ValueError):
+                        last_used = 0.0
+                    if (now - last_used) <= max_idle_seconds:
+                        continue
+                    _stop_pid(pid)
+            except UserProxyError:
+                # Another worker holds this pair's lock — it is starting
+                # (or stopping) the instance right now. Never queue a user
+                # request behind it: skip this pair and let the next
+                # request's cleanup round collect it. Waiting here is what
+                # turned cleanup into a request killer: a cold-start spawn
+                # holds the lock for the whole handshake (up to
+                # HANDSHAKE_TIMEOUT seconds), so every concurrent request
+                # burned up to LOCK_WAIT_TIMEOUT in cleanup *before even
+                # parsing its token*, then surfaced as 500/502.
+                continue
             audit.log_audit_event(
                 "proxy_stop",
                 "success",

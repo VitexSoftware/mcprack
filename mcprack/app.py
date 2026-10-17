@@ -90,6 +90,31 @@ def create_app(config_object=Config):
     limiter.init_app(app)
     babel.init_app(app, locale_selector=get_locale)
 
+    # SQLite with several gunicorn workers writing (audit rows on every
+    # proxy start/stop, selections, tokens) hits "database is locked" under
+    # concurrent commits. WAL lets readers proceed while a writer commits,
+    # and busy_timeout makes a colliding writer wait (up to 15s, i.e. well
+    # past any single fast transaction) instead of failing instantly.
+    # WAL is a persistent property of the database file, so this also
+    # covers CLI/one-off connections opened against the same DB.
+    if str(app.config.get("SQLALCHEMY_DATABASE_URI", "")).startswith("sqlite"):
+        from sqlalchemy import event
+        from sqlalchemy.engine import Engine
+
+        @event.listens_for(Engine, "connect")
+        def _sqlite_tune(dbapi_connection, _connection_record):
+            # Fires for every engine built by this process - keep it a no-op
+            # for any non-sqlite3 driver (e.g. a future PostgreSQL switch).
+            if type(dbapi_connection).__module__ != "sqlite3":
+                return
+            cursor = dbapi_connection.cursor()
+            try:
+                cursor.execute("PRAGMA journal_mode=WAL")
+                cursor.execute("PRAGMA busy_timeout=15000")
+                cursor.execute("PRAGMA synchronous=NORMAL")
+            finally:
+                cursor.close()
+
     @app.after_request
     def _set_security_headers(response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")

@@ -1,3 +1,4 @@
+import fcntl
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -246,3 +247,68 @@ def test_effective_args_reflects_env_vars_added_after_registration():
     server.env_var_names = ["NEW_VAR"]
     result = user_proxy._effective_args(server, args)
     assert "NEW_VAR" in result
+
+
+def _make_idle_instance(user_id, server_id, idle_seconds=10_000, pid=99999):
+    paths = user_proxy._paths(user_id, server_id)
+    paths["pid"].parent.mkdir(parents=True, exist_ok=True)
+    paths["pid"].write_text(str(pid))
+    paths["last_used"].write_text(str(time.time() - idle_seconds))
+    return paths
+
+
+def test_cleanup_stops_idle_proxy(state_dir):
+    paths = _make_idle_instance(1, 11)
+    with patch("mcprack.user_proxy._pid_running", return_value=True), \
+         patch("mcprack.user_proxy._stop_pid") as stop_pid:
+        user_proxy.cleanup_idle_proxies()
+
+    stop_pid.assert_called_once_with(99999)
+    assert paths["pid"].exists()
+
+
+def test_cleanup_skips_busy_lock_without_raising_or_waiting(state_dir):
+    """Regression test for the request-killer: cleanup used to wait up to
+    LOCK_WAIT_TIMEOUT for a pair's lock (held for a whole cold-start
+    handshake by another worker) and then raise UserProxyError straight
+    out of every /proxy/mcp request. It must instead skip a busy pair
+    immediately and leave it for the next round."""
+    paths = _make_idle_instance(1, 11)
+    lock_path = user_proxy._lock_path(1, 11)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(lock_path, "w") as other_worker_lock:
+        fcntl.flock(other_worker_lock, fcntl.LOCK_EX)
+        try:
+            with patch("mcprack.user_proxy._pid_running", return_value=True), \
+                 patch("mcprack.user_proxy._stop_pid") as stop_pid:
+                started = time.monotonic()
+                user_proxy.cleanup_idle_proxies()
+                waited = time.monotonic() - started
+        finally:
+            fcntl.flock(other_worker_lock, fcntl.LOCK_UN)
+
+    # Must skip instantly, not queue behind the (22s-worth-of) lock holder.
+    assert waited < 2, f"cleanup blocked for {waited:.1f}s on a busy lock"
+    stop_pid.assert_not_called()
+    assert paths["pid"].exists()
+
+    # And once the lock is free again, the next round collects it.
+    with patch("mcprack.user_proxy._pid_running", return_value=True), \
+         patch("mcprack.user_proxy._stop_pid") as stop_pid:
+        user_proxy.cleanup_idle_proxies()
+
+    stop_pid.assert_called_once_with(99999)
+
+
+def test_proxy_request_survives_cleanup_failure(app):
+    """A raising cleanup must not take the user's proxy request down:
+    the request should continue to its own (here: 403 for a bogus
+    token) response instead of turning into a 500."""
+    from unittest.mock import patch as _patch
+
+    with _patch("mcprack.catalog.user_proxy.cleanup_idle_proxies",
+                side_effect=RuntimeError("boom")):
+        resp = app.test_client().post("/proxy/mcp/not-a-real-token/5")
+
+    assert resp.status_code == 403

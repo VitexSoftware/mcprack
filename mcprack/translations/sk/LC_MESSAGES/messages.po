@@ -1107,3 +1107,23 @@ msgid ""
 msgstr ""
 "Obe akcie vyžadujú, aby bol <code>BW_SERVER</code> nakonfigurovaný a "
 "dostupný."
+
+#: mcprack/templates/admin/proxy_instances.html
+msgid "System information"
+msgstr "Systémové informácie"
+
+#: mcprack/templates/admin/proxy_instances.html
+msgid "Database engine and connection details mcprack is currently using."
+msgstr "Databázový server a pripojovacie údaje, ktoré mcprack aktuálne používa."
+
+#: mcprack/templates/admin/proxy_instances.html
+msgid "Database engine"
+msgstr "Databázový server"
+
+#: mcprack/templates/admin/proxy_instances.html
+msgid "Database name"
+msgstr "Názov databázy"
+
+#: mcprack/templates/admin/proxy_instances.html
+msgid "Connection string"
+msgstr "Pripojovací reťazec"

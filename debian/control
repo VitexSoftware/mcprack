@@ -36,6 +36,13 @@ Depends:
  dbconfig-sqlite3 | dbconfig-pgsql | dbconfig-mysql,
 Recommends:
  python3-fastmcp (>= 4.0.0),
+# Vaultwarden backend for the secret store. Older Vaultwarden lacks the
+# user-key-id endpoint that bw-cli (>= 2026.9) posts during unlock, which
+# crashed every unlock (2026-10-16 incident); 1.37.3-1.5 is the first
+# VitexSoftware build shipping it. Kept in Recommends, not Depends:
+# BW_SERVER may point at a remote Vaultwarden or be unset (local
+# encrypted fallback store).
+ vaultwarden (>= 1.37.3-1.5~),
 Suggests:
  python3-psycopg2,
  python3-pymysql,
