@@ -342,7 +342,10 @@ def server_edit(server_id):
 
     t_render = time.time()
     logger.info(f"server_edit({server.name}): total {t_render - t_start:.2f}s (db {t_db - t_start:.2f}s, secrets {t_secrets_end - t_secrets_start:.2f}s if fetched)")
-    
+    # Required rows first so the admin sees what blocks the server from
+    # starting before the optional noise; stable within each group.
+    env_rows = sorted(env_rows, key=lambda row: not row.get("required"))
+
     return render_template(
         "admin/server_form.html",
         server=server,
@@ -388,7 +391,8 @@ def _env_rows_from_form(form):
         {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
         for k, v in secret.items()
     ]
-    return rows
+    # Required rows first (stable within each group), matching server_edit.
+    return sorted(rows, key=lambda row: not row.get("required"))
 
 
 def _nullable_text(value):

@@ -73,3 +73,35 @@ def test_edit_form_adds_no_placeholders_when_secret_backend_fails(app, client):
 
     keys = [r["key"] for r in _initial_rows(resp.get_data(as_text=True))]
     assert "MCP_EMAIL_SERVER_PASSWORD" not in keys
+
+
+def test_edit_form_lists_required_rows_first(app, client):
+    """Required items must lead the env editor so the admin immediately
+    sees what blocks the server from starting, before optional rows."""
+    _login_admin(client)
+    server_id = _make_server(app)
+
+    with mock.patch.object(
+        secret_store, "load_server_secrets", return_value={"MCP_EMAIL_SERVER_PASSWORD": "s3cret"}
+    ):
+        resp = client.get(f"/admin/servers/{server_id}/edit")
+
+    keys = [r["key"] for r in _initial_rows(resp.get_data(as_text=True))]
+    assert keys.index("MCP_EMAIL_SERVER_PASSWORD") < keys.index("MCP_EMAIL_SERVER_IMAP_HOST")
+
+
+def test_env_rows_from_form_sorts_required_first():
+    from mcprack import admin
+
+    rows = admin._env_rows_from_form(
+        {
+            "env_key__a": "MCP_OPTIONAL",
+            "env_value__a": "x",
+            "env_key__b": "MCP_PASSWORD",
+            "env_value__b": "y",
+            "env_required__b": "on",
+        }
+    )
+    assert [r["key"] for r in rows] == ["MCP_PASSWORD", "MCP_OPTIONAL"]
+    assert rows[0]["required"] is True
+    assert rows[1]["required"] is False
