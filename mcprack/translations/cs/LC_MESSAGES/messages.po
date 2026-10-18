@@ -1121,3 +1121,42 @@ msgstr "Název databáze"
 #: mcprack/templates/admin/proxy_instances.html
 msgid "Connection string"
 msgstr "Připojovací řetězec"
+#: mcprack/templates/admin/server_form.html
+msgid "Form steps"
+msgstr "Kroky formuláře"
+
+#: mcprack/templates/admin/server_form.html
+msgid "Basic information"
+msgstr "Základní informace"
+
+#: mcprack/templates/admin/server_form.html
+msgid "Transport & endpoint"
+msgstr "Transport a endpoint"
+
+#: mcprack/templates/admin/server_form.html
+msgid "Environment"
+msgstr "Prostředí"
+
+#: mcprack/templates/admin/server_form.html
+msgid "Options"
+msgstr "Možnosti"
+
+#: mcprack/templates/admin/server_form.html
+msgid "Previous"
+msgstr "Předchozí"
+
+#: mcprack/templates/admin/server_form.html
+msgid "Next"
+msgstr "Další"
+
+#: mcprack/templates/admin/server_form.html
+msgid "This name is already used by another server."
+msgstr "Tento název už používá jiný server."
+
+#: mcprack/templates/admin/server_form.html mcprack/templates/admin/install_wizard.html
+msgid "Duplicate key — each environment variable name must be unique."
+msgstr "Duplicitní klíč — každý název proměnné prostředí musí být jedinečný."
+
+#: mcprack/templates/admin/server_form.html mcprack/templates/admin/install_wizard.html
+msgid "Key is required when a value is set."
+msgstr "Když je zadána hodnota, je povinný i klíč."

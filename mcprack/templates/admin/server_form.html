@@ -26,9 +26,22 @@
   <form method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <fieldset {{ "disabled" if demo_mode else "" }} class="form-container">
-      
+
+      <nav class="stepper" id="form-stepper" hidden data-active-step="{{ active_step or 1 }}" aria-label="{{ _('Form steps') }}">
+        <ol class="stepper-steps">
+          <li class="stepper-step" data-step="1"><span class="stepper-step-dot" aria-hidden="true"></span><span class="stepper-step-label">{{ _('Basic information') }}</span></li>
+          <li class="stepper-step" data-step="2"><span class="stepper-step-dot" aria-hidden="true"></span><span class="stepper-step-label">{{ _('Transport & endpoint') }}</span></li>
+          <li class="stepper-step" data-step="3"><span class="stepper-step-dot" aria-hidden="true"></span><span class="stepper-step-label">{{ _('Environment') }}</span></li>
+          <li class="stepper-step" data-step="4"><span class="stepper-step-dot" aria-hidden="true"></span><span class="stepper-step-label">{{ _('Options') }}</span></li>
+        </ol>
+        <div class="stepper-actions">
+          <button type="button" class="btn btn-secondary" data-step-prev hidden>{{ _('Previous') }}</button>
+          <button type="button" class="btn btn-primary" data-step-next>{{ _('Next') }}</button>
+        </div>
+      </nav>
+
       <!-- Basic Information Card -->
-      <div class="form-card">
+      <div class="form-card" data-step="1">
         <h2 class="form-card-title">📋 Basic Information</h2>
         
         <div class="form-group">
@@ -37,7 +50,10 @@
             {% if server %}<span class="label-badge">read-only</span>{% endif %}
           </label>
           <input type="text" id="name" name="name" value="{{ server.name if server else (fv.name if fv else '') }}"
-                 {{ 'readonly' if server else '' }} required class="form-control">
+                 {{ 'readonly' if server else '' }} required class="form-control"
+                 data-check-name-url="{{ url_for('admin.server_check_name') }}"
+                 data-server-id="{{ server.id if server else '' }}"
+                 data-msg-taken="{{ _('This name is already used by another server.') }}">
           <small class="form-hint">Used in URLs and API endpoints. Cannot be changed after creation.</small>
         </div>
 
@@ -68,7 +84,7 @@
       </div>
 
       <!-- Transport Configuration Card -->
-      <div class="form-card">
+      <div class="form-card" data-step="2">
         <h2 class="form-card-title">🔌 Transport Configuration</h2>
         
         <div class="form-group">
@@ -92,7 +108,7 @@
       </div>
 
       <!-- Local Command Card -->
-      <div class="form-card">
+      <div class="form-card" data-step="2">
         <h2 class="form-card-title">💻 Local Command (stdio)</h2>
         <p class="form-card-description">
           Configure the command mcprack will spawn on demand, one instance per user. Users never directly access this process — mcprack manages it transparently. If both a command and a URL are set, the command wins.
@@ -116,7 +132,7 @@
       </div>
 
       <!-- Network Endpoint Card -->
-      <div class="form-card">
+      <div class="form-card" data-step="2">
         <h2 class="form-card-title">🌐 Network Endpoint (http/sse)</h2>
         <p class="form-card-description">
           Only configure this section if the backend already speaks HTTP/SSE somewhere mcprack can reach. Leave empty for local stdio servers — do not paste a proxy URL here; clients always receive mcprack's own <code>/proxy/mcp/</code> relay.
@@ -153,13 +169,13 @@
       </div>
 
       <!-- Environment Variables Card -->
-      <div class="form-card">
+      <div class="form-card" data-step="3">
         <h2 class="form-card-title">🔐 Environment Variables</h2>
         <p class="form-card-description">
           Provide secrets and configuration for your server. <strong>Mark as sensitive</strong> if it's a secret — sensitive variables are stored in Vaultwarden or encrypted locally. Others are stored in the database.
         </p>
 
-        <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}" data-missing-label="{{ _('Required value missing — the server cannot start until this is filled in.') }}" data-missing-summary="{{ _('%(n)s required value(s) missing — the MCP server will not start until they are filled in.', n='{n}') }}" class="env-rows-wrapper"></div>
+        <div id="env-rows" data-env-rows-container data-initial='{{ env_rows | tojson }}' data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}" data-missing-label="{{ _('Required value missing — the server cannot start until this is filled in.') }}" data-missing-summary="{{ _('%(n)s required value(s) missing — the MCP server will not start until they are filled in.', n='{n}') }}" data-duplicate-label="{{ _('Duplicate key — each environment variable name must be unique.') }}" data-empty-key-label="{{ _('Key is required when a value is set.') }}" class="env-rows-wrapper"></div>
 
         <div class="env-rows-actions">
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
@@ -173,7 +189,7 @@
       </div>
 
       <!-- Options Card -->
-      <div class="form-card">
+      <div class="form-card" data-step="4">
         <h2 class="form-card-title">⚙️ Options</h2>
         
         <div class="form-group checkbox-group">
@@ -205,5 +221,7 @@
 </section>
 
 <script src="{{ url_for('static', filename='env-rows.js') }}"></script>
+<script src="{{ url_for('static', filename='server-name-check.js') }}"></script>
+<script src="{{ url_for('static', filename='server-form-steps.js') }}"></script>
 
 {% endblock %}

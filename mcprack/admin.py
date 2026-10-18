@@ -188,6 +188,22 @@ def _flash_endpoint_validation(form):
     return bool(errors)
 
 
+@bp.route("/servers/check-name")
+@admin_required
+def server_check_name():
+    """Live uniqueness probe for the server form's name field (the unique
+    slug). GET ?name=...&exclude=<id> → {"available": bool}. The POST
+    handler re-checks on save — this is a UX hint, not the enforcement."""
+    name = (request.args.get("name") or "").strip()
+    if not name:
+        return jsonify({"available": True})
+    query = McpServer.query.filter(McpServer.name == name)
+    exclude_id = request.args.get("exclude", type=int)
+    if exclude_id:
+        query = query.filter(McpServer.id != exclude_id)
+    return jsonify({"available": query.first() is None})
+
+
 @bp.route("/servers/new", methods=["GET", "POST"])
 @admin_required
 def server_new():
@@ -195,12 +211,34 @@ def server_new():
     if blocked:
         return blocked
     if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        if not name:
+            flash("Name is required.", "error")
+            return render_template(
+                "admin/server_form.html",
+                server=None,
+                env_rows=_env_rows_from_form(request.form),
+                form_values=request.form,
+                active_step=1,
+                demo_mode=current_app.config.get("DEMO_MODE", False),
+            )
+        if McpServer.query.filter_by(name=name).first() is not None:
+            flash(f"A server named '{name}' is already registered.", "error")
+            return render_template(
+                "admin/server_form.html",
+                server=None,
+                env_rows=_env_rows_from_form(request.form),
+                form_values=request.form,
+                active_step=1,
+                demo_mode=current_app.config.get("DEMO_MODE", False),
+            )
         if _flash_endpoint_validation(request.form):
             return render_template(
                 "admin/server_form.html",
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
+                active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         server = McpServer(name=request.form["name"])
@@ -250,6 +288,7 @@ def server_edit(server_id):
                 server=server,
                 env_rows=_env_rows_from_form(request.form),
                 icon_url=None,
+                active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         _apply_server_form(server, request.form)

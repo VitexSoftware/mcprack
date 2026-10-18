@@ -1388,6 +1388,25 @@ tr.row-warn {
   box-shadow: 0 0 0 1px var(--color-error);
 }
 
+.env-row-error {
+  border-left: 4px solid var(--color-error);
+  background-color: color-mix(in srgb, var(--color-error) 14%, transparent);
+  padding-left: var(--space-sm);
+  border-radius: var(--border-radius-sm, 4px);
+}
+
+.env-row-error input[name^="env_key__"] {
+  border-color: var(--color-error);
+  box-shadow: 0 0 0 1px var(--color-error);
+}
+
+.env-row-error-hint {
+  display: block;
+  margin: 0 0 var(--space-xs) var(--space-sm);
+  color: var(--color-error);
+  font-weight: 600;
+}
+
 .env-row-missing-hint {
   display: block;
   margin: 0 0 var(--space-xs) var(--space-sm);
@@ -1396,6 +1415,7 @@ tr.row-warn {
 }
 
 .env-row-missing-hint[hidden],
+.env-row-error-hint[hidden],
 .env-missing-summary[hidden] {
   display: none;
 }
@@ -1728,6 +1748,24 @@ ol.wizard {
   opacity: 0;
 }
 
+/* Live field validation (server name uniqueness, env rows) */
+.input-error {
+  border-color: var(--color-error) !important;
+  box-shadow: 0 0 0 1px var(--color-error);
+}
+
+.field-error-hint {
+  display: block;
+  margin-top: var(--space-xs);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+
+.field-error-hint[hidden] {
+  display: none;
+}
+
 .env-row {
   display: flex;
   gap: var(--space-sm);
@@ -1743,6 +1781,68 @@ ol.wizard {
   align-items: center;
   gap: var(--space-xs);
   white-space: nowrap;
+}
+
+/* ========================================
+   SERVER FORM STEPPER
+   ======================================== */
+
+.stepper {
+  margin-bottom: var(--space-lg);
+}
+
+.stepper-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  list-style: none;
+  margin: 0 0 var(--space-md);
+  padding: 0;
+}
+
+.stepper-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-sm);
+}
+
+.stepper-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--color-border);
+}
+
+.stepper-step.active {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.stepper-step.active .stepper-step-dot {
+  background-color: var(--color-primary);
+}
+
+.stepper-step.done {
+  color: var(--color-text-secondary);
+}
+
+.stepper-step.done .stepper-step-dot {
+  background-color: var(--color-success);
+}
+
+.stepper-actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: flex-end;
+}
+
+/* [hidden] must win over any display set by a component class */
+.form-card[hidden],
+.form-actions[hidden],
+.stepper[hidden] {
+  display: none;
 }
 
 /* ========================================

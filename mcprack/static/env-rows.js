@@ -59,6 +59,57 @@ document.addEventListener('DOMContentLoaded', function () {
     return (c && c.dataset.missingLabel) || 'Required value missing — the server cannot start until this is filled in.';
   }
 
+  function duplicateLabel(containerId) {
+    var c = document.getElementById(containerId);
+    return (c && c.dataset.duplicateLabel) || 'Duplicate key — each variable name must be unique.';
+  }
+
+  function emptyKeyLabel(containerId) {
+    var c = document.getElementById(containerId);
+    return (c && c.dataset.emptyKeyLabel) || 'Key is required when a value is set.';
+  }
+
+  // Flags rows whose key is empty (but a value is set) or duplicated
+  // across the container. Server-side parsing silently keeps the last of
+  // duplicate keys, so the admin must see the collision before submitting.
+  function refreshRowErrors(containerId) {
+    var c = document.getElementById(containerId);
+    if (!c) {
+      return;
+    }
+    var counts = {};
+    var rows = c.querySelectorAll('.env-row');
+    rows.forEach(function (row) {
+      var keyInput = row.querySelector('input[name^="env_key__"]');
+      var key = keyInput ? keyInput.value.trim() : '';
+      if (key) {
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    });
+    rows.forEach(function (row) {
+      var wrap = row.parentNode;
+      var keyInput = row.querySelector('input[name^="env_key__"]');
+      var valueInput = row.querySelector('input[name^="env_value__"]');
+      var hint = wrap.querySelector('.env-row-error-hint');
+      var key = keyInput ? keyInput.value.trim() : '';
+      var value = valueInput ? valueInput.value.trim() : '';
+      var message = '';
+      if (key && counts[key] > 1) {
+        message = duplicateLabel(containerId);
+      } else if (!key && value) {
+        message = emptyKeyLabel(containerId);
+      }
+      row.classList.toggle('env-row-error', !!message);
+      if (keyInput) {
+        keyInput.setAttribute('aria-invalid', message ? 'true' : 'false');
+      }
+      if (hint) {
+        hint.hidden = !message;
+        hint.textContent = message;
+      }
+    });
+  }
+
   function updateMissingSummary(containerId) {
     var c = document.getElementById(containerId);
     if (!c) {
@@ -132,6 +183,7 @@ document.addEventListener('DOMContentLoaded', function () {
     removeButton.addEventListener('click', function () {
       wrap.remove();
       updateMissingSummary(containerId);
+      refreshRowErrors(containerId);
     });
 
     row.append(keyInput, valueInput, label, requiredLabelEl, removeButton);
@@ -144,6 +196,12 @@ document.addEventListener('DOMContentLoaded', function () {
     missingHint.hidden = true;
     wrap.appendChild(missingHint);
 
+    // Same for a duplicate or missing key — see refreshRowErrors().
+    var errorHint = document.createElement('small');
+    errorHint.className = 'env-row-error-hint';
+    errorHint.hidden = true;
+    wrap.appendChild(errorHint);
+
     function refreshMissing() {
       var missing = requiredInput.checked && keyInput.value.trim() !== '' && valueInput.value.trim() === '';
       row.classList.toggle('env-row-missing', missing);
@@ -152,9 +210,16 @@ document.addEventListener('DOMContentLoaded', function () {
       missingHint.textContent = missing ? missingLabel(containerId) : '';
       updateMissingSummary(containerId);
     }
-    valueInput.addEventListener('input', refreshMissing);
-    keyInput.addEventListener('input', refreshMissing);
+    valueInput.addEventListener('input', function () {
+      refreshMissing();
+      refreshRowErrors(containerId);
+    });
+    keyInput.addEventListener('input', function () {
+      refreshMissing();
+      refreshRowErrors(containerId);
+    });
     refreshMissing();
+    refreshRowErrors(containerId);
 
     if (meta.source || meta.description) {
       var hint = document.createElement('small');

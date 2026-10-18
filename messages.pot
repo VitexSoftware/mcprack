@@ -1024,3 +1024,42 @@ msgid ""
 "reachable."
 msgstr ""
 
+#: mcprack/templates/admin/server_form.html
+msgid "Form steps"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "Basic information"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "Transport & endpoint"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "Environment"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "Options"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "Previous"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "Next"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html
+msgid "This name is already used by another server."
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html mcprack/templates/admin/install_wizard.html
+msgid "Duplicate key — each environment variable name must be unique."
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html mcprack/templates/admin/install_wizard.html
+msgid "Key is required when a value is set."
+msgstr ""
