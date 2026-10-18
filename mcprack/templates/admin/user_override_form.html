@@ -7,15 +7,15 @@
   <p class="text-muted">{{ _('Set this user\'s personal credentials for this server. These are stored securely and override the admin default for this user only. The user never needs to log in or set these themselves.') }}</p>
 
   {% if not server.allow_user_override %}
-  <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); margin: var(--space-lg) 0; font-size: var(--font-size-sm);">
-    <p style="margin: 0;">ℹ️ {{ _('Self-service override is disabled for this server — this user could not set this themselves even if they logged in. As an admin, you can still set it here.') }}</p>
+  <div class="card-tertiary mt-lg mb-lg">
+    <p class="m-0">ℹ️ {{ _('Self-service override is disabled for this server — this user could not set this themselves even if they logged in. As an admin, you can still set it here.') }}</p>
   </div>
   {% endif %}
 
   {% if server.env_var_names %}
-  <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); margin: var(--space-lg) 0; font-size: var(--font-size-sm);">
-    <p style="margin: 0; font-weight: var(--font-weight-medium); margin-bottom: var(--space-xs);">{{ _('Expected keys:') }}</p>
-    <code style="display: block; margin: 0;">{{ server.env_var_names | join(', ') }}</code>
+  <div class="card-tertiary mt-lg mb-lg">
+    <p class="m-0 mb-xs font-medium">{{ _('Expected keys:') }}</p>
+    <code class="block m-0">{{ server.env_var_names | join(', ') }}</code>
   </div>
   {% endif %}
 
@@ -26,7 +26,7 @@
       <textarea id="env_text" name="env_text" rows="8" placeholder="EXAMPLE_API_KEY=your-key-here&#10;EXAMPLE_PASSWORD=your-password-here">{{ env_text }}</textarea>
     </div>
 
-    <div style="display: flex; gap: var(--space-md); flex-wrap: wrap;">
+    <div class="flex-gap-wrap">
       <button type="submit" name="action" value="save" class="btn btn-primary">
         💾 {{ _('Save') }}
       </button>

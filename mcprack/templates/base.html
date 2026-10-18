@@ -34,9 +34,9 @@
       {% if current_user.is_authenticated %}
         <div class="header-user">
           <div class="language-switcher">
-            <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" style="opacity: {{ '1.0' if session.get('locale', 'en') == 'en' else '0.5' }}">🇬🇧</a>
-            <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" style="opacity: {{ '1.0' if session.get('locale') == 'cs' else '0.5' }}">🇨🇿</a>
-            <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" style="opacity: {{ '1.0' if session.get('locale') == 'sk' else '0.5' }}">🇸🇰</a>
+            <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" class="lang-link {{ 'active' if session.get('locale', 'en') == 'en' }}">🇬🇧</a>
+            <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" class="lang-link {{ 'active' if session.get('locale') == 'cs' }}">🇨🇿</a>
+            <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" class="lang-link {{ 'active' if session.get('locale') == 'sk' }}">🇸🇰</a>
           </div>
           <button type="button" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
             <span class="icon-light" aria-hidden="true">🌙</span>
@@ -70,11 +70,11 @@
           </div>
         </div>
       {% else %}
-        <div style="display: flex; align-items: center; gap: var(--space-md);">
+        <div class="flex-gap flex-center">
           <div class="language-switcher">
-            <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" style="opacity: {{ '1.0' if session.get('locale', 'en') == 'en' else '0.5' }}">🇬🇧</a>
-            <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" style="opacity: {{ '1.0' if session.get('locale') == 'cs' else '0.5' }}">🇨🇿</a>
-            <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" style="opacity: {{ '1.0' if session.get('locale') == 'sk' else '0.5' }}">🇸🇰</a>
+            <a href="{{ url_for('auth.set_locale', locale='en') }}" title="English" class="lang-link {{ 'active' if session.get('locale', 'en') == 'en' }}">🇬🇧</a>
+            <a href="{{ url_for('auth.set_locale', locale='cs') }}" title="Čeština" class="lang-link {{ 'active' if session.get('locale') == 'cs' }}">🇨🇿</a>
+            <a href="{{ url_for('auth.set_locale', locale='sk') }}" title="Slovenčina" class="lang-link {{ 'active' if session.get('locale') == 'sk' }}">🇸🇰</a>
           </div>
           <button type="button" class="theme-toggle" aria-label="Toggle light/dark theme" title="Toggle light/dark theme">
             <span class="icon-light" aria-hidden="true">🌙</span>

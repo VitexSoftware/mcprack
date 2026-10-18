@@ -25,7 +25,7 @@
         <td>{{ template.label }}</td>
         <td>{{ template.description or '—' }}</td>
         <td>{{ template.entries | selectattr('is_allowed') | list | length }} {{ _('allowed') }}, {{ template.entries | selectattr('is_selected') | list | length }} {{ _('pre-selected') }}</td>
-        <td style="white-space: nowrap;">
+        <td class="nowrap">
           <a href="{{ url_for('admin.template_edit', template_id=template.id) }}" class="btn btn-sm btn-secondary">{{ _('Edit') }}</a>
           <form class="inline" method="post" action="{{ url_for('admin.template_delete', template_id=template.id) }}"
                 data-confirm="{{ _('Delete template \"%(name)s\"?', name=template.name) }}">
@@ -36,7 +36,7 @@
       </tr>
       {% else %}
       <tr>
-        <td colspan="5" style="text-align: center; padding: var(--space-lg);">
+        <td colspan="5" class="text-center p-lg">
           <p class="text-muted">{{ _('No templates yet.') }}</p>
         </td>
       </tr>

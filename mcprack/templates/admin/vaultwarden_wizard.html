@@ -37,13 +37,13 @@
   <h2>{{ _('Migrate secrets between local storage and Vaultwarden') }}</h2>
   <p class="text-muted">{{ _("These are deliberate, one-off data moves — not automatic fallbacks. Neither backend is ever chosen silently at request time based on live reachability; which one is authoritative is decided purely by whether <code>BW_SERVER</code> is configured.") }}</p>
 
-  <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin-top: var(--space-md);">
+  <div class="flex-gap-wrap mt-md">
     <form method="post" action="{{ url_for('admin.vaultwarden_migrate_to_vaultwarden') }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="btn btn-primary" {{ "disabled" if not vaultwarden_configured else "" }}>
         ⬆️ {{ _('Move local secrets into Vaultwarden') }}
       </button>
-      <p class="text-muted" style="font-size: var(--font-size-xs); max-width: 32ch;">
+      <p class="text-muted text-xs narrow-hint">
         {{ _('Run this once Vaultwarden has been newly configured, to move over whatever accumulated locally while it was not.') }}
       </p>
     </form>
@@ -53,13 +53,13 @@
       <button type="submit" class="btn btn-secondary" {{ "disabled" if not vaultwarden_configured else "" }}>
         ⬇️ {{ _('Snapshot Vaultwarden secrets locally') }}
       </button>
-      <p class="text-muted" style="font-size: var(--font-size-xs); max-width: 32ch;">
+      <p class="text-muted text-xs narrow-hint">
         {{ _("Run this <em>before</em> a planned Vaultwarden outage. Vaultwarden's copy is left untouched — afterwards you can unset <code>BW_SERVER</code> for the duration and switch back once it's back up.") }}
       </p>
     </form>
   </div>
   {% if not vaultwarden_configured %}
-  <p class="text-muted" style="font-size: var(--font-size-xs);">{{ _('Both actions require <code>BW_SERVER</code> to be configured and reachable.') }}</p>
+  <p class="text-muted text-xs">{{ _('Both actions require <code>BW_SERVER</code> to be configured and reachable.') }}</p>
   {% endif %}
 </section>
 {% endblock %}

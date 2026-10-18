@@ -9,7 +9,7 @@
     {% if retention_days %}{{ _('Entries older than %(days)s days are archived and purged by the <code>flask audit-archive</code> CLI command.', days=retention_days) }}{% endif %}
   </p>
 
-  <form method="get" style="display: flex; gap: var(--space-md); flex-wrap: wrap; align-items: end; margin-bottom: var(--space-lg);">
+  <form method="get" class="flex-gap-wrap items-end mb-lg">
     <div>
       <label for="server_id">{{ _('Server') }}</label><br>
       <select name="server_id" id="server_id">
@@ -48,7 +48,7 @@
     </div>
   </form>
 
-  <div style="overflow-x: auto;">
+  <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -66,7 +66,7 @@
       <tbody>
         {% for e in entries %}
         <tr class="{% if e.result == 'error' %}row-warn{% endif %}">
-          <td style="white-space: nowrap;">{{ e.timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] }}</td>
+          <td class="nowrap">{{ e.timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3] }}</td>
           <td>{{ e.user.username if e.user else ('#' ~ e.user_id if e.user_id else '—') }}</td>
           <td>{{ e.server.name if e.server else (e.server_name or ('#' ~ e.server_id if e.server_id else '—')) }}</td>
           <td><code>{{ e.action }}</code></td>
@@ -88,7 +88,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="9" style="text-align: center; padding: var(--space-lg);">
+          <td colspan="9" class="text-center p-lg">
             <p class="text-muted">{{ _('No audit entries match the current filters.') }}</p>
           </td>
         </tr>
@@ -96,7 +96,7 @@
       </tbody>
     </table>
   </div>
-  <p class="text-muted" style="margin-top: var(--space-md);">{{ _('Showing the most recent %(count)s matching entries (limit 500).', count=entries | length) }}</p>
+  <p class="text-muted mt-md">{{ _('Showing the most recent %(count)s matching entries (limit 500).', count=entries | length) }}</p>
 </section>
 
 {% endblock %}

@@ -339,6 +339,14 @@ header {
   line-height: 1;
 }
 
+.language-switcher a.lang-link {
+  opacity: 0.5;
+}
+
+.language-switcher a.lang-link.active {
+  opacity: 1;
+}
+
 .header-user-avatar {
   width: 36px;
   height: 36px;
@@ -1437,6 +1445,21 @@ tr.row-warn {
   color: var(--color-proxy);
 }
 
+.badge-stdio {
+  background-color: rgba(16, 185, 129, 0.2);
+  color: var(--color-catalog);
+}
+
+.badge-http {
+  background-color: rgba(139, 92, 246, 0.2);
+  color: var(--color-vault);
+}
+
+.badge-users {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: var(--color-primary, #3b82f6);
+}
+
 /* ========================================
    ALERTS / FLASH MESSAGES
    ======================================== */
@@ -1585,6 +1608,141 @@ ol.wizard {
 
 .text-xs {
   font-size: var(--font-size-xs);
+}
+
+/* Spacing & layout utilities (replacements for former inline styles, so
+   the CSP can drop style-src 'unsafe-inline') */
+.m-0 { margin: 0; }
+.mb-0 { margin-bottom: 0; }
+.mt-sm { margin-top: var(--space-sm); }
+.mt-md { margin-top: var(--space-md); }
+.mt-lg { margin-top: var(--space-lg); }
+.mb-xs { margin-bottom: var(--space-xs); }
+.mb-md { margin-bottom: var(--space-md); }
+.mb-lg { margin-bottom: var(--space-lg); }
+.mb-2xl { margin-bottom: var(--space-2xl); }
+.p-lg { padding: var(--space-lg); }
+.w-full { width: 100%; }
+.nowrap { white-space: nowrap; }
+.table-scroll { overflow-x: auto; }
+.flex { display: flex; }
+.flex-wrap { flex-wrap: wrap; }
+.flex-center { display: flex; align-items: center; }
+.flex-gap-sm { display: flex; gap: var(--space-sm); }
+.flex-gap { display: flex; gap: var(--space-md); }
+.flex-gap-wrap { display: flex; gap: var(--space-md); flex-wrap: wrap; }
+.flex-end { display: flex; justify-content: flex-end; gap: var(--space-md); }
+.hidden { display: none; }
+.block { display: block; }
+.inline-flex-center { display: inline-flex; align-items: center; }
+.font-medium { font-weight: var(--font-weight-medium); }
+.items-end { align-items: end; }
+.narrow-hint { max-width: 32ch; }
+
+/* Layout components (same — replacements for former inline styles) */
+.card {
+  background-color: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+}
+
+.card-tertiary {
+  background-color: var(--color-bg-tertiary);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-md);
+  font-size: var(--font-size-sm);
+}
+
+.card-outline {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-md);
+}
+
+.note-box {
+  padding: var(--space-md);
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  font-size: var(--font-size-sm);
+}
+
+.auth-card {
+  max-width: 400px;
+  margin: var(--space-2xl) auto;
+}
+
+.auth-card-header {
+  text-align: center;
+  margin-bottom: var(--space-2xl);
+}
+
+.dialog-card {
+  max-width: 700px;
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-lg);
+}
+
+.modal-scroll {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.fieldset-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--border-radius-lg);
+  padding: var(--space-md);
+}
+
+.grid-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+}
+
+.success-flash {
+  display: none;
+  padding: var(--space-md);
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--color-success);
+  border-radius: var(--border-radius-lg);
+  border-left: 4px solid var(--color-success);
+  font-size: var(--font-size-sm);
+}
+
+.success-flash.show {
+  display: block;
+}
+
+.btn-pending {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Off-screen scratch element for the execCommand copy fallback
+   (copy-connector.js) — must not be visible or focusable. */
+.copy-scratch {
+  position: fixed;
+  opacity: 0;
+}
+
+.env-row {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.env-input-key { flex: 1; }
+.env-input-value { flex: 2; }
+
+.env-row-label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  white-space: nowrap;
 }
 
 /* ========================================

@@ -17,8 +17,7 @@ function copyConnectorValue(value, button) {
   function fallbackCopy() {
     var scratch = document.createElement("textarea");
     scratch.value = value;
-    scratch.style.position = "fixed";
-    scratch.style.opacity = "0";
+    scratch.className = "copy-scratch";
     document.body.appendChild(scratch);
     scratch.focus();
     scratch.select();

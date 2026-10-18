@@ -6,7 +6,7 @@
   <h1>🔷 {{ _('Server subscriptions') }}</h1>
   <p class="text-muted">{{ _('Which users have selected which MCP servers, and whether a live per-user proxy instance is currently running for that pair.') }}</p>
 
-  <div style="overflow-x: auto;">
+  <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -34,7 +34,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="4" style="text-align: center; padding: var(--space-lg);">
+          <td colspan="4" class="text-center p-lg">
             <p class="text-muted">{{ _('No users have selected any servers yet.') }}</p>
           </td>
         </tr>
@@ -48,7 +48,7 @@
   <h2>{{ _('Running per-user proxy instances') }}</h2>
   <p class="text-muted">{{ _('Only stdio servers without a fixed network URL are started here, on demand, one isolated instance per (user, server) pair.') }}</p>
 
-  <div style="overflow-x: auto;">
+  <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -88,7 +88,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="8" style="text-align: center; padding: var(--space-lg);">
+          <td colspan="8" class="text-center p-lg">
             <p class="text-muted">{{ _('No per-user proxy instances running right now.') }}</p>
           </td>
         </tr>
@@ -102,7 +102,7 @@
   <h2>{{ _('System information') }}</h2>
   <p class="text-muted">{{ _('Database engine and connection details mcprack is currently using.') }}</p>
 
-  <div style="overflow-x: auto;">
+  <div class="table-scroll">
     <table>
       <tbody>
         <tr>

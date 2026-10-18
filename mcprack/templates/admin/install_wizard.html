@@ -10,20 +10,20 @@
   (<code>docker run --rm -i</code>) per session — nothing runs permanently in the background.</p>
 
   {% if demo_mode %}
-  <div class="flash-error" style="margin-bottom: var(--space-lg);">
+  <div class="flash-error mb-lg">
     Read-only on this public demo instance — installing new servers is disabled.
   </div>
   {% endif %}
 
-  <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm); margin-bottom: var(--space-lg);">
-    <p style="margin: 0;">
+  <div class="card-tertiary mb-lg">
+    <p class="m-0">
       <strong>Environment:</strong>
       python3/pip {{ "✓ available" if capabilities.pip else "✗ not found" }} &middot;
       npm {{ "✓ available" if capabilities.npm else "✗ not found" }} &middot;
       docker {{ "✓ available" if capabilities.docker else "✗ not usable by the mcprack service account" }}
     </p>
     {% if not capabilities.docker %}
-    <p style="margin: var(--space-sm) 0 0;">
+    <p class="mt-sm">
       Docker requires the <code>mcprack</code> service account to be in the host's <code>docker</code>
       group — equivalent to root access, so this is a deliberate manual step, never done automatically:
       <code>sudo usermod -aG docker mcprack &amp;&amp; systemctl restart mcprack</code>.
@@ -31,9 +31,9 @@
     {% endif %}
   </div>
 
-  <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-lg); margin-bottom: var(--space-xl);">
+  <div class="grid-cards">
 
-    <fieldset {{ "disabled" if demo_mode else "" }} style="border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); padding: var(--space-md);">
+    <fieldset {{ "disabled" if demo_mode else "" }} class="fieldset-card">
       <legend>🐍 Install from PyPI (pip)</legend>
       <form method="post" action="{{ url_for('admin.install_pip') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -56,7 +56,7 @@
         <div class="form-group">
           <label>Expected binary name</label>
           <input type="text" name="expected_binary" placeholder="foo-mcp" required>
-          <p class="text-muted" style="font-size: var(--font-size-xs);">
+          <p class="text-muted text-xs">
             The exact console-script name pip installs into the venv's <code>bin/</code> — often
             differs from the package name. Checked exactly; nothing is guessed.
           </p>
@@ -66,11 +66,11 @@
           <div id="env-rows-pip" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-pip">➕ {{ _('Add row') }}</button>
         </fieldset>
-        <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.pip else "" }}>🐍 Install</button>
+        <button type="submit" class="btn btn-primary mt-md" {{ "disabled" if not capabilities.pip else "" }}>🐍 Install</button>
       </form>
     </fieldset>
 
-    <fieldset {{ "disabled" if demo_mode else "" }} style="border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); padding: var(--space-md);">
+    <fieldset {{ "disabled" if demo_mode else "" }} class="fieldset-card">
       <legend>📦 Install from npm</legend>
       <form method="post" action="{{ url_for('admin.install_npm') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -93,7 +93,7 @@
         <div class="form-group">
           <label>Expected binary name</label>
           <input type="text" name="expected_binary" placeholder="foo-mcp" required>
-          <p class="text-muted" style="font-size: var(--font-size-xs);">
+          <p class="text-muted text-xs">
             The exact name npm links into <code>node_modules/.bin/</code> — checked exactly,
             nothing is guessed.
           </p>
@@ -103,11 +103,11 @@
           <div id="env-rows-npm" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-npm">➕ {{ _('Add row') }}</button>
         </fieldset>
-        <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.npm else "" }}>📦 Install</button>
+        <button type="submit" class="btn btn-primary mt-md" {{ "disabled" if not capabilities.npm else "" }}>📦 Install</button>
       </form>
     </fieldset>
 
-    <fieldset {{ "disabled" if demo_mode else "" }} style="border: 1px solid var(--color-border); border-radius: var(--border-radius-lg); padding: var(--space-md);">
+    <fieldset {{ "disabled" if demo_mode else "" }} class="fieldset-card">
       <legend>🐳 Install from Docker image</legend>
       <form method="post" action="{{ url_for('admin.install_docker') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -126,7 +126,7 @@
         <div class="form-group">
           <label>Docker image</label>
           <input type="text" name="image_ref" placeholder="ghcr.io/org/foo-mcp:latest" required>
-          <p class="text-muted" style="font-size: var(--font-size-xs);">
+          <p class="text-muted text-xs">
             Run ephemerally per session as <code>docker run --rm -i &lt;image&gt;</code> — no
             persistent container. Configured env vars below are forwarded into the container
             automatically via <code>-e NAME</code>, recomputed every time it starts.
@@ -137,14 +137,14 @@
           <div id="env-rows-docker" data-env-rows-container data-sensitive-label="{{ _('sensitive') }}" data-required-label="{{ _('required') }}"></div>
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows-docker">➕ {{ _('Add row') }}</button>
         </fieldset>
-        <button type="submit" class="btn btn-primary" style="margin-top: var(--space-md);" {{ "disabled" if not capabilities.docker else "" }}>🐳 Pull &amp; register</button>
+        <button type="submit" class="btn btn-primary mt-md" {{ "disabled" if not capabilities.docker else "" }}>🐳 Pull &amp; register</button>
       </form>
     </fieldset>
 
   </div>
 
   <h2>Installer-managed servers</h2>
-  <div style="overflow-x: auto;">
+  <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -172,7 +172,7 @@
             {% endif %}
           </td>
           <td>{{ server.installed_version or '—' }}</td>
-          <td style="white-space: nowrap;">
+          <td class="nowrap">
             <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">Edit</a>
             <form class="inline" method="post" action="{{ url_for('admin.install_uninstall', server_id=server.id) }}"
                   data-confirm='Uninstall "{{ server.name }}"? This removes its venv/npm directory from disk.'>
@@ -183,7 +183,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" style="text-align: center; padding: var(--space-lg);">
+          <td colspan="6" class="text-center p-lg">
             <p class="text-muted">No servers installed via mcprack yet.</p>
           </td>
         </tr>

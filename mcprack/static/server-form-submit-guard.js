@@ -11,8 +11,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const submitBtn = form.querySelector('button[type="submit"]');
       if (submitBtn) {
         submitBtn.disabled = true;
-        submitBtn.style.opacity = '0.6';
-        submitBtn.style.cursor = 'not-allowed';
+        submitBtn.classList.add('btn-pending');
       }
     });
   }

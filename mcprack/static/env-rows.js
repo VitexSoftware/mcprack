@@ -88,24 +88,23 @@ document.addEventListener('DOMContentLoaded', function () {
     var row = document.createElement('div');
     row.className = 'env-row' + (required ? ' env-row-required' : '');
     row.dataset.rowId = id;
-    row.style.cssText = 'display: flex; gap: var(--space-sm); align-items: center; margin-bottom: var(--space-xs);';
 
     var keyInput = document.createElement('input');
     keyInput.type = 'text';
     keyInput.name = 'env_key__' + id;
     keyInput.value = key || '';
     keyInput.placeholder = 'KEY';
-    keyInput.style.flex = '1';
+    keyInput.className = 'env-input-key';
 
     var valueInput = document.createElement('input');
     valueInput.type = 'text';
     valueInput.name = 'env_value__' + id;
     valueInput.value = value || '';
     valueInput.placeholder = 'value';
-    valueInput.style.flex = '2';
+    valueInput.className = 'env-input-value';
 
     var label = document.createElement('label');
-    label.style.cssText = 'display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;';
+    label.className = 'env-row-label';
     var sensitiveInput = document.createElement('input');
     sensitiveInput.type = 'checkbox';
     sensitiveInput.name = 'env_sensitive__' + id;
@@ -114,7 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
     label.appendChild(document.createTextNode(' ' + sensitiveLabel));
 
     var requiredLabelEl = document.createElement('label');
-    requiredLabelEl.style.cssText = 'display: flex; align-items: center; gap: var(--space-xs); white-space: nowrap;';
+    requiredLabelEl.className = 'env-row-label';
     var requiredInput = document.createElement('input');
     requiredInput.type = 'checkbox';
     requiredInput.name = 'env_required__' + id;

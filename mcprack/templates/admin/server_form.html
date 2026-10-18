@@ -18,7 +18,7 @@
   </div>
 
   {% if demo_mode %}
-  <div class="flash-error" style="margin-bottom: var(--space-lg);">
+  <div class="flash-error mb-lg">
     Read-only on this public demo instance — you can see how this server is configured, but changes can't be saved.
   </div>
   {% endif %}
@@ -165,9 +165,9 @@
           <button type="button" class="btn btn-secondary btn-sm add-env-row-btn" data-target="env-rows">
             ➕ {{ _('Add row') }}
           </button>
-          <label class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; margin-bottom: 0;">
+          <label class="btn btn-secondary btn-sm inline-flex-center mb-0">
             📥 {{ _('Import .env file') }}
-            <input type="file" data-env-import-input data-target="env-rows" accept=".env,text/plain" style="display: none;">
+            <input type="file" data-env-import-input data-target="env-rows" accept=".env,text/plain" class="hidden">
           </label>
         </div>
       </div>

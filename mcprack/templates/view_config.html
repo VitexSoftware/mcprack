@@ -8,11 +8,11 @@
 
   {% include "_config_paths.html" %}
 
-  <div style="background-color: var(--color-bg-secondary); padding: var(--space-lg); border-radius: var(--border-radius-lg); border: 1px solid var(--color-border); margin: var(--space-lg) 0;">
+  <div class="card mt-lg mb-lg">
     <textarea id="config-json" rows="20" readonly data-copy-fail-message="{{ _('Copy failed — select the text manually.') }}">{{ config_json }}</textarea>
   </div>
 
-  <div style="display: flex; gap: var(--space-md); flex-wrap: wrap; margin: var(--space-lg) 0;">
+  <div class="flex-gap-wrap mt-lg mb-lg">
     <button type="button" id="copy-button" class="btn btn-primary">
       📋 {{ _('Copy to clipboard') }}
     </button>
@@ -24,7 +24,7 @@
     </a>
   </div>
 
-  <div id="copy-status" style="display: none; padding: var(--space-md); background-color: rgba(16, 185, 129, 0.1); color: var(--color-success); border-radius: var(--border-radius-lg); border-left: 4px solid var(--color-success); font-size: var(--font-size-sm);">
+  <div id="copy-status" class="success-flash">
     ✓ {{ _('Copied to clipboard!') }}
   </div>
 </section>

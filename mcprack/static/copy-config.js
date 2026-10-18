@@ -7,9 +7,9 @@ function copyConfig() {
   var failMessage = textarea.dataset.copyFailMessage || "Copy failed — select the text manually.";
 
   function showCopied() {
-    status.style.display = "block";
+    status.classList.add("show");
     setTimeout(function () {
-      status.style.display = "none";
+      status.classList.remove("show");
     }, 3000);
   }
 
@@ -21,7 +21,7 @@ function copyConfig() {
       showCopied();
     } catch (err) {
       status.textContent = failMessage;
-      status.style.display = "block";
+      status.classList.add("show");
     }
   }
 

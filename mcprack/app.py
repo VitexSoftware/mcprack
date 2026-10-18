@@ -120,10 +120,13 @@ def create_app(config_object=Config):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
+        # No 'unsafe-inline' for styles: every style comes from style.css
+        # now (templates and JS set classes, never style attributes), so a
+        # successful XSS cannot inject CSS either.
         response.headers.setdefault(
             "Content-Security-Policy",
             "default-src 'self'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+            "style-src 'self' https://fonts.googleapis.com; "
             "font-src 'self' https://fonts.gstatic.com; "
             "img-src 'self' data:; script-src 'self'",
         )

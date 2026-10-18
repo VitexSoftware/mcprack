@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const serverName = btn.dataset.serverName;
 
       modalTitle.textContent = `🔍 ${serverName} — Tools & Resources`;
-      modalContent.innerHTML = '<p style="color: var(--color-text-muted);">Loading capabilities…</p>';
+      modalContent.innerHTML = '<p class="text-muted">Loading capabilities…</p>';
       modal.showModal();
 
       try {
@@ -26,13 +26,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const data = await response.json();
 
         if (!response.ok) {
-          modalContent.innerHTML = `<div class="alert alert-error" style="margin: 0;"><strong>Error:</strong> ${data.error || 'Unknown error'}</div>`;
+          modalContent.innerHTML = `<div class="alert alert-error m-0"><strong>Error:</strong> ${data.error || 'Unknown error'}</div>`;
           return;
         }
 
         modalContent.innerHTML = renderCapabilities(data);
       } catch (err) {
-        modalContent.innerHTML = `<div class="alert alert-error" style="margin: 0;"><strong>Connection failed:</strong> ${err.message}</div>`;
+        modalContent.innerHTML = `<div class="alert alert-error m-0"><strong>Connection failed:</strong> ${err.message}</div>`;
       }
     });
   });
@@ -43,13 +43,13 @@ function renderCapabilities(data) {
   const resources = data.resources || [];
 
   if (tools.length === 0 && resources.length === 0) {
-    return '<p style="color: var(--color-text-muted);">No tools or resources found.</p>';
+    return '<p class="text-muted">No tools or resources found.</p>';
   }
 
   let html = '';
 
   if (tools.length > 0) {
-    html += '<h3>Tools</h3><ul style="margin: 0;">';
+    html += '<h3>Tools</h3><ul class="m-0">';
     tools.forEach(tool => {
       const name = tool.name || tool;
       const desc = tool.description ? `: ${tool.description}` : '';
@@ -59,7 +59,7 @@ function renderCapabilities(data) {
   }
 
   if (resources.length > 0) {
-    html += '<h3>Resources</h3><ul style="margin: 0;">';
+    html += '<h3>Resources</h3><ul class="m-0">';
     resources.forEach(res => {
       const uri = res.uri || res;
       const desc = res.description ? `: ${res.description}` : '';

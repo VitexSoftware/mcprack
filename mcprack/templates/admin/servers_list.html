@@ -6,7 +6,7 @@
   <h1>🔧 {{ _('MCP Server Registry') }}</h1>
   <p class="text-muted">{{ _('Manage MCP servers available in your catalog. Register new servers, check their health status, and manage credentials.') }}</p>
 
-  <div style="display: flex; gap: var(--space-md); margin-bottom: var(--space-lg); flex-wrap: wrap;">
+  <div class="flex-gap-wrap mb-lg">
     <a href="{{ url_for('admin.server_new') }}" class="btn btn-primary">
       ➕ {{ _('Register New Server') }}
     </a>
@@ -18,11 +18,11 @@
     </form>
   </div>
 
-  <div style="background-color: var(--color-bg-tertiary); padding: var(--space-md); border-radius: var(--border-radius-lg); font-size: var(--font-size-sm); margin-bottom: var(--space-lg);">
-    <p style="margin: 0;"><strong>ℹ️ {{ _('Autodetect:') }}</strong> {{ _("Scans this machine for Claude Desktop config, running mcp-rack-* proxies, and known MCP binaries on PATH. Registers any servers not already in the catalog. Only command and args are imported—you'll need to set default credentials.") }}</p>
+  <div class="card-tertiary mb-lg">
+    <p class="m-0"><strong>ℹ️ {{ _('Autodetect:') }}</strong> {{ _("Scans this machine for Claude Desktop config, running mcp-rack-* proxies, and known MCP binaries on PATH. Registers any servers not already in the catalog. Only command and args are imported—you'll need to set default credentials.") }}</p>
   </div>
 
-  <div style="overflow-x: auto;">
+  <div class="table-scroll">
     <table>
       <thead>
         <tr>
@@ -40,21 +40,21 @@
         {% set h = server_health.get(server.id, {}) %}
         <tr class="{% if h.get('missing_credentials') or h.get('missing_required') or not h.get('reachable', True) %}row-warn{% endif %}">
           <td>
-            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+            <div class="flex-gap-sm flex-center">
               <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24">
               <code>{{ server.name }}</code>
             </div>
           </td>
           <td>{{ server.label }}</td>
           <td>
-            <span class="badge" style="{% if server.transport == 'stdio' %}background-color: rgba(16, 185, 129, 0.2); color: var(--color-catalog);{% else %}background-color: rgba(139, 92, 246, 0.2); color: var(--color-vault);{% endif %}">
+            <span class="badge {{ 'badge-stdio' if server.transport == 'stdio' else 'badge-http' }}">
               {{ server.transport | upper }}
             </span>
           </td>
           <td>{{ server.category or '—' }}</td>
           <td>
             {% set user_count = usage_counts.get(server.id, 0) %}
-            <span class="badge" title="{{ _('%(n)d user(s) have this server selected in their config', n=user_count) }}" style="background-color: rgba(59, 130, 246, 0.2); color: var(--color-primary, #3b82f6);">
+            <span class="badge badge-users" title="{{ _('%(n)d user(s) have this server selected in their config', n=user_count) }}">
               &#128101; {{ user_count }}
             </span>
           </td>
@@ -78,7 +78,7 @@
               <span class="badge badge-success">✓ {{ _('ok') }}</span>
             {% endif %}
           </td>
-          <td style="white-space: nowrap;">
+          <td class="nowrap">
             <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-sm btn-secondary">{{ _('Edit') }}</a>
             {% if not server.url %}
             <form class="inline" method="post" action="{{ url_for('admin.server_test_stdio', server_id=server.id) }}">
@@ -100,7 +100,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="7" style="text-align: center; padding: var(--space-lg);">
+          <td colspan="7" class="text-center p-lg">
             <p class="text-muted">{{ _('No servers registered yet. Use the buttons above to register new servers or autodetect existing ones.') }}</p>
           </td>
         </tr>
@@ -110,10 +110,10 @@
   </div>
 </section>
 
-<dialog id="capabilities-modal" style="max-width: 700px; border-radius: var(--border-radius-lg); padding: var(--space-lg);">
+<dialog id="capabilities-modal" class="dialog-card">
   <h2 id="modal-title">🔍 Tools &amp; Resources</h2>
-  <div id="modal-content" style="max-height: 60vh; overflow-y: auto;"></div>
-  <div style="margin-top: var(--space-lg); display: flex; gap: var(--space-md); justify-content: flex-end;">
+  <div id="modal-content" class="modal-scroll"></div>
+  <div class="mt-lg flex-end">
     <button type="button" data-capabilities-close class="btn btn-secondary">Close</button>
   </div>
 </dialog>
