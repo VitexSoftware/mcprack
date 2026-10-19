@@ -31,6 +31,7 @@ Depends:
  python3-uvicorn (>= 0.34),
  bw-cli,
  gunicorn,
+ logrotate,
  debconf | debconf-2.0,
  dbconfig-common,
  dbconfig-sqlite3 | dbconfig-pgsql | dbconfig-mysql,

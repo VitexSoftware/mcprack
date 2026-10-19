@@ -1,0 +1,26 @@
+# Gunicorn writes its access/error logs straight to these files (see the
+# --access-logfile/--error-logfile flags in mcprack.service) and keeps the
+# file descriptors open, so rotation must run as the mcprack user that owns
+# the log directory (logrotate refuses non-root-owned parents otherwise) and
+# make gunicorn reopen its logs afterwards. Gunicorn reopens on SIGUSR1:
+# the master reopens its own logs and forwards USR1 to its workers
+# (arbiter.handle_usr1 -> kill_workers(SIGUSR1) -> worker handle_usr1 ->
+# log.reopen_files()). The signal must go to the master only
+# (--kill-who=main): a USR1 reaching a per-user fastmcp proxy child would
+# kill it (default disposition) - exactly the mid-relay proxy kill the
+# relay_guard work protects against.
+/var/log/mcprack/*.log {
+    su mcprack mcprack
+    daily
+    rotate 14
+    maxsize 100M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 mcprack mcprack
+    sharedscripts
+    postrotate
+        /usr/bin/systemctl kill -s USR1 --kill-who=main mcprack.service >/dev/null 2>&1 || true
+    endscript
+}

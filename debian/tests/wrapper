@@ -17,4 +17,10 @@ echo "Running: mcprack user --help (as root, via /etc/mcprack/env)"
 # loads that file into its own environment.
 sudo /usr/bin/mcprack user --help
 
+echo "Checking: logrotate config syntax (/etc/logrotate.d/mcprack)"
+# --debug is a dry run: it parses the shipped config and reports what it
+# would rotate, without touching anything. A broken config exits non-zero,
+# which fails this test via set -e.
+/usr/sbin/logrotate --debug /etc/logrotate.d/mcprack > /dev/null
+
 echo "wrapper: OK"
