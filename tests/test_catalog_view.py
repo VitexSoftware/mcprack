@@ -47,6 +47,22 @@ def _add_enabled_server(app, name="icon-test"):
         return server.id
 
 
+def _add_selected_stdio_server(app, user_id, name="retry-stdio"):
+    with app.app_context():
+        stdio = McpServer(
+            name=name,
+            label=name,
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add(stdio)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=stdio.id))
+        db.session.commit()
+        return stdio.id
+
+
 def test_index_renders_copyable_name_and_url_for_each_configured_server(app, client):
     """The catalog page must offer a name+URL pair (with copy buttons) per
     selected server - the friendlier way to add a server to Claude
@@ -497,6 +513,118 @@ def test_forward_to_user_proxy_returns_clean_jsonrpc_error_on_timeout(app, clien
     payload = json.loads(resp.data)
     assert payload["id"] == "abc"
     assert "did not respond within" in payload["error"]["message"]
+
+
+def test_user_proxy_route_retries_relay_once_when_proxy_dies_mid_request(app, client):
+    """The per-user proxy can die between ensure_user_server_proxy and the
+    relay (a cross-worker race with the health re-probe / idle reaper, or
+    a fastmcp crash) - the relay then fails with mcprack's own 502. The
+    route re-ensures (respawning the proxy) and retries the relay once, so
+    the client sees a 200 instead of a spurious 502."""
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 7, "method": "initialize"})
+    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123) as mock_ensure, \
+         patch(
+             "mcprack.catalog._forward_to_user_proxy",
+             side_effect=[
+                 app.response_class("proxy gone", status=502),
+                 app.response_class("ok", status=200),
+             ],
+         ) as mock_forward:
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 200
+    assert resp.data == b"ok"
+    assert mock_ensure.call_count == 2
+    assert mock_forward.call_count == 2
+
+
+def test_user_proxy_route_returns_502_when_relay_retry_also_fails(app, client):
+    """If the retried relay fails too, the client gets the 502 JSON-RPC
+    error as before - the retry must not loop or hang."""
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 8, "method": "initialize"})
+    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123) as mock_ensure, \
+         patch(
+             "mcprack.catalog._forward_to_user_proxy",
+             side_effect=[
+                 app.response_class("gone", status=502),
+                 app.response_class("still gone", status=502),
+             ],
+         ) as mock_forward:
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 502
+    assert mock_ensure.call_count == 2
+    assert mock_forward.call_count == 2
+
+
+def test_user_proxy_route_retry_surfaces_ensure_error(app, client):
+    """When the retry's re-ensure cannot (re)start the proxy, the client
+    gets the UserProxyError as a JSON-RPC 502 - same as a first-attempt
+    failure."""
+    from mcprack import user_proxy
+
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 9, "method": "initialize"})
+    with patch(
+        "mcprack.catalog.user_proxy.ensure_user_server_proxy",
+        side_effect=[35123, user_proxy.UserProxyError("handshake failed again")],
+    ) as mock_ensure, \
+         patch(
+             "mcprack.catalog._forward_to_user_proxy",
+             return_value=app.response_class("gone", status=502),
+         ) as mock_forward:
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 502
+    payload = json.loads(resp.data)
+    assert payload["id"] == 9
+    assert "handshake failed again" in payload["error"]["message"]
+    assert mock_ensure.call_count == 2
+    assert mock_forward.call_count == 1
+
+
+def test_user_proxy_route_does_not_retry_non_502_upstream_status(app, client):
+    """Only mcprack's own relay-failure 502 triggers the retry; a genuine
+    upstream status (e.g. a 500 from the proxy) is passed through
+    untouched."""
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 10, "method": "initialize"})
+    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123) as mock_ensure, \
+         patch(
+             "mcprack.catalog._forward_to_user_proxy",
+             return_value=app.response_class("upstream error", status=500),
+         ) as mock_forward:
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 500
+    assert mock_ensure.call_count == 1
+    assert mock_forward.call_count == 1
 
 
 def test_view_always_uses_user_proxy_urls_for_stdio_servers(app, client):

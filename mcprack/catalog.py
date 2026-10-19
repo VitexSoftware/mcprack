@@ -321,20 +321,38 @@ def user_proxy_mcp(token, server_id):
         )
 
     if server.command:
-        try:
-            port = user_proxy.ensure_user_server_proxy(
-                user_id=user.id,
-                server_id=server.id,
-                server_name=server.name,
-                command=server.command,
-                args=server.args,
-                env=env,
-                server=server,
-            )
-        except user_proxy.UserProxyError as exc:
-            return _jsonrpc_error_response(request_id, str(exc))
+        for attempt in (1, 2):
+            try:
+                port = user_proxy.ensure_user_server_proxy(
+                    user_id=user.id,
+                    server_id=server.id,
+                    server_name=server.name,
+                    command=server.command,
+                    args=server.args,
+                    env=env,
+                    server=server,
+                )
+            except user_proxy.UserProxyError as exc:
+                return _jsonrpc_error_response(request_id, str(exc))
 
-        return _forward_to_user_proxy(port, server_name=server.name)
+            response = _forward_to_user_proxy(port, server_name=server.name)
+            if response.status_code != 502:
+                return response
+            if attempt == 1:
+                # A 502 from _forward_to_user_proxy is mcprack's own
+                # relay-failure response: the per-user proxy died between
+                # ensure and relay (a cross-worker race with the health
+                # re-probe or idle reaper, or a fastmcp crash), not an
+                # upstream answer. Re-ensure — respawning the proxy if it
+                # is gone — and retry the relay once. Clients retry failed
+                # requests anyway; doing it here just hides the crash.
+                logger.warning(
+                    "Relay to user proxy for server '%s' (user %s) failed; "
+                    "re-ensuring the proxy and retrying once",
+                    server.name,
+                    user.id,
+                )
+        return response
 
     # No command to spawn - this server already has a fixed network `url`
     # (a genuinely network-native MCP server, or one of mcp_rack's shared
