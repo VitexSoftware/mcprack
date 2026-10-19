@@ -50,6 +50,11 @@ HANDSHAKE_TIMEOUT = int(os.environ.get("MCP_PROXY_HANDSHAKE_TIMEOUT", "15"))  # 
 # debian/mcprack.service) so a stuck lock surfaces as our own error
 # instead of a bare worker-killed 502.
 LOCK_WAIT_TIMEOUT = int(os.environ.get("MCP_PROXY_LOCK_WAIT_TIMEOUT", "22"))  # seconds
+# How long a relayed request waits for the pair's shared relay guard
+# before proceeding unguarded. The guard only ever contends with a stop
+# path holding the exclusive lock, and a relay itself is bounded by the
+# request timeout, so this only needs to cover a stop cycle, not a spawn.
+RELAY_GUARD_WAIT = int(os.environ.get("MCP_PROXY_RELAY_GUARD_WAIT", "5"))  # seconds
 
 
 class UserProxyError(RuntimeError):
@@ -127,6 +132,59 @@ def _serialized(user_id, server_id, wait_seconds=None):
             fcntl.flock(lock_file, fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def relay_guard(user_id, server_id):
+    """Shared (read) hold on the pair's lock file for the duration of one
+    relayed request, so no stop path — idle reaper, health re-probe
+    restart, server deletion — can SIGTERM/SIGKILL the per-user proxy
+    while a request is in flight against it.
+
+    Every stop path takes the same file's lock exclusively first (via
+    `_serialized`), so a held shared lock makes those paths either skip
+    the pair (cleanup/deletion use wait_seconds=0) or wait for the relay
+    to drain (ensure uses the blocking wait). GET relays are deliberately
+    NOT guarded by the caller: they carry a long-lived SSE stream that
+    would hold the lock for minutes and block reaping.
+
+    Best-effort by design: the guard must never fail a relay. If the
+    lock file cannot be opened, or the shared lock is not acquired
+    within RELAY_GUARD_WAIT, the relay proceeds unguarded (the previous
+    behaviour). A fresh fd is used because ensure_user_server_proxy has
+    already released its own exclusive hold by relay time — taking
+    LOCK_SH on that same fd would self-deadlock. The kernel releases the
+    lock automatically if this worker dies mid-relay, so nothing leaks.
+    """
+    guard_file = None
+    try:
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        guard_file = open(_lock_path(user_id, server_id), "a")
+    except OSError:
+        guard_file = None
+
+    if guard_file is not None:
+        deadline = time.monotonic() + RELAY_GUARD_WAIT
+        while True:
+            try:
+                fcntl.flock(guard_file, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    # Proceed unguarded rather than fail or hang the relay.
+                    guard_file.close()
+                    guard_file = None
+                    break
+                time.sleep(0.05)
+
+    try:
+        yield
+    finally:
+        if guard_file is not None:
+            try:
+                fcntl.flock(guard_file, fcntl.LOCK_UN)
+            finally:
+                guard_file.close()
+
+
 def _parse_key(stem):
     match = _KEY_RE.match(stem)
     if not match:
@@ -166,9 +224,21 @@ def _pid_running(pid):
         return False
     try:
         os.kill(pid, 0)
-        return True
     except OSError:
         return False
+    # A zombie holds no sockets and can never answer a probe, but
+    # kill(pid, 0) alone reports it as "running" — which would waste a
+    # stop cycle's SIGTERM/SIGKILL on a corpse and then probe a dead
+    # port. Treat it as gone so the caller respawns instead. Linux-only
+    # (/proc); anywhere else, fall back to the kill(0) result.
+    try:
+        with open(f"/proc/{pid}/stat", "rb") as stat_file:
+            state = stat_file.read().rsplit(b")", 1)[1].split()[0]
+        if state == b"Z":
+            return False
+    except (OSError, IndexError):
+        pass
+    return True
 
 
 def _stop_pid(pid, timeout=3.0):

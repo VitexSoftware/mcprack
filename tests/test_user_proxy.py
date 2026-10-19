@@ -1,5 +1,6 @@
 import fcntl
 import json
+import os
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -351,6 +352,106 @@ def test_cleanup_skips_busy_lock_without_raising_or_waiting(state_dir):
         user_proxy.cleanup_idle_proxies()
 
     stop_pid.assert_called_once_with(99999)
+
+
+def test_relay_guard_blocks_exclusive_lock(state_dir):
+    """While a relay guard is held, a stop-path caller must not be able to
+    take the pair's exclusive lock — cleanup/deletion skip the pair,
+    ensure waits for the relay to drain. flock locks live on the open
+    file description, so two fds in the same process conflict: no second
+    process needed to prove it."""
+    with user_proxy.relay_guard(1, 11):
+        with pytest.raises(user_proxy.UserProxyError):
+            with user_proxy._serialized(1, 11, wait_seconds=0):
+                pass
+
+    # After the guard is released, the exclusive lock is free again.
+    with user_proxy._serialized(1, 11, wait_seconds=0):
+        pass
+
+
+def test_relay_guard_gives_up_and_proceeds_unguarded_on_contention(state_dir, monkeypatch):
+    """If the exclusive lock is held longer than RELAY_GUARD_WAIT, the
+    guard must neither fail nor hang the relay — it proceeds unguarded
+    (the pre-guard behaviour)."""
+    monkeypatch.setattr(user_proxy, "RELAY_GUARD_WAIT", 0.2)
+    lock_path = user_proxy._lock_path(1, 11)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(lock_path, "w") as holder:
+        fcntl.flock(holder, fcntl.LOCK_EX)
+        started = time.monotonic()
+        with user_proxy.relay_guard(1, 11):
+            waited = time.monotonic() - started
+            # Proceeded unguarded: the other fd's exclusive lock is still
+            # in effect, so a stop path would still be blocked out.
+            with pytest.raises(user_proxy.UserProxyError):
+                with user_proxy._serialized(1, 11, wait_seconds=0):
+                    pass
+        assert 0.15 <= waited < 2, f"guard waited {waited:.2f}s, expected ~0.2s"
+
+
+def test_relay_guard_is_best_effort_when_lock_file_unavailable(tmp_path, monkeypatch):
+    """The guard must never fail a relay: if the lock file cannot even be
+    opened (here: STATE_DIR sits under a regular file), the relay
+    proceeds unguarded."""
+    blocker = tmp_path / "blocker"
+    blocker.write_text("not a directory")
+    monkeypatch.setattr(user_proxy, "STATE_DIR", blocker / "state")
+
+    with user_proxy.relay_guard(1, 11):
+        pass
+
+
+def test_cleanup_skips_pair_with_active_relay(state_dir):
+    """An in-flight relay holds a shared lock on the pair; the idle
+    reaper's non-blocking exclusive grab must then skip the pair instead
+    of SIGTERM-ing the proxy mid-request."""
+    _make_idle_instance(1, 11)
+    with patch("mcprack.user_proxy._pid_running", return_value=True), \
+         patch("mcprack.user_proxy._stop_pid") as stop_pid:
+        with user_proxy.relay_guard(1, 11):
+            user_proxy.cleanup_idle_proxies()
+        stop_pid.assert_not_called()
+
+        # Control: without the guard the idle instance is collected.
+        user_proxy.cleanup_idle_proxies()
+        stop_pid.assert_called_once_with(99999)
+
+
+# The forked child only calls os._exit(0) — no locks are touched, so the
+# multi-threaded-fork DeprecationWarning does not apply here.
+@pytest.mark.filterwarnings("ignore:This process .* is multi-threaded:DeprecationWarning")
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="needs os.fork")
+def test_pid_running_treats_zombie_as_not_running():
+    """A zombie holds no sockets and can never answer a probe, yet
+    kill(pid, 0) reports it alive. _pid_running must treat it as gone so
+    callers respawn instead of SIGTERM-ing a corpse and probing a dead
+    port."""
+    pid = os.fork()
+    if pid == 0:
+        os._exit(0)
+    try:
+        # Wait until the child is really a zombie (it was never
+        # waitpid-ed, so it stays one).
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                with open(f"/proc/{pid}/stat", "rb") as stat_file:
+                    state = stat_file.read().rsplit(b")", 1)[1].split()[0]
+            except OSError:
+                state = b"X"
+            if state == b"Z":
+                break
+            time.sleep(0.01)
+        else:
+            pytest.fail("child never became a zombie")
+        assert user_proxy._pid_running(pid) is False
+    finally:
+        os.waitpid(pid, 0)
+
+    assert user_proxy._pid_running(os.getpid()) is True
+    assert user_proxy._pid_running(99_999_999) is False  # above any pid_max
 
 
 def test_proxy_request_survives_cleanup_failure(app):

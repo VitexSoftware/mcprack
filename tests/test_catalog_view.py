@@ -627,6 +627,72 @@ def test_user_proxy_route_does_not_retry_non_502_upstream_status(app, client):
     assert mock_forward.call_count == 1
 
 
+def test_proxy_route_holds_relay_guard_during_post_relay(app, client, monkeypatch, tmp_path):
+    """POST relays run under the pair's shared relay guard, so a stop
+    path (idle reaper, health re-probe, server deletion) cannot SIGTERM
+    the per-user proxy while a request is in flight against it."""
+    from mcprack import user_proxy
+
+    monkeypatch.setattr(user_proxy, "STATE_DIR", tmp_path / "user-proxies")
+
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    guard_state = {}
+
+    def fake_forward(port, server_name=None):
+        try:
+            with user_proxy._serialized(user_id, server_id, wait_seconds=0):
+                guard_state["held"] = False
+        except user_proxy.UserProxyError:
+            guard_state["held"] = True
+        return app.response_class("ok", status=200)
+
+    body = json.dumps({"jsonrpc": "2.0", "id": 11, "method": "initialize"})
+    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
+         patch("mcprack.catalog._forward_to_user_proxy", side_effect=fake_forward):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
+
+    assert resp.status_code == 200
+    assert guard_state["held"] is True
+
+
+def test_proxy_route_get_relay_not_guarded(app, client, monkeypatch, tmp_path):
+    """GET relays carry a long-lived SSE stream; guarding them would hold
+    the pair lock for minutes and block reaping, so they stay unguarded."""
+    from mcprack import user_proxy
+
+    monkeypatch.setattr(user_proxy, "STATE_DIR", tmp_path / "user-proxies")
+
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    guard_state = {}
+
+    def fake_forward(port, server_name=None):
+        try:
+            with user_proxy._serialized(user_id, server_id, wait_seconds=0):
+                guard_state["held"] = False
+        except user_proxy.UserProxyError:
+            guard_state["held"] = True
+        return app.response_class("stream", status=200)
+
+    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
+         patch("mcprack.catalog._forward_to_user_proxy", side_effect=fake_forward):
+        resp = client.get(f"/proxy/mcp/{token}/{server_id}")
+
+    assert resp.status_code == 200
+    assert guard_state["held"] is False
+
+
 def test_view_always_uses_user_proxy_urls_for_stdio_servers(app, client):
     """Users always connect remotely — a stdio server never gets embedded
     into the config as a raw local spawn command, regardless of the

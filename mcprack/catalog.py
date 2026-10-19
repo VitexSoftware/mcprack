@@ -335,7 +335,19 @@ def user_proxy_mcp(token, server_id):
             except user_proxy.UserProxyError as exc:
                 return _jsonrpc_error_response(request_id, str(exc))
 
-            response = _forward_to_user_proxy(port, server_name=server.name)
+            if request.method == "GET":
+                # A GET relay carries a long-lived SSE stream — holding
+                # the pair lock for its whole lifetime would block reaping
+                # for minutes, so GET relays stay unguarded.
+                response = _forward_to_user_proxy(port, server_name=server.name)
+            else:
+                # Hold the pair's shared relay guard for the relay, so no
+                # stop path (idle reaper, health re-probe, server
+                # deletion) can SIGTERM the proxy mid-request. The guard
+                # is released before a retry's re-ensure takes the
+                # exclusive lock.
+                with user_proxy.relay_guard(user.id, server.id):
+                    response = _forward_to_user_proxy(port, server_name=server.name)
             if response.status_code != 502:
                 return response
             if attempt == 1:
