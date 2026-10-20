@@ -16,11 +16,11 @@ import copy
 import functools
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 import yaml
-from flask import Blueprint, abort, jsonify, request
+from flask import Blueprint, abort, g, jsonify, request
 from flask_login import current_user
 
 from . import admin
@@ -30,6 +30,8 @@ from . import secret_store
 from . import vaultwarden
 from .extensions import db, limiter
 from .models import (
+    API_TOKEN_SCOPES,
+    API_TOKEN_SCOPE_ALL,
     ApiToken,
     AuditLogEntry,
     ConfigTemplate,
@@ -75,8 +77,42 @@ def api_admin_required(view):
     def wrapped(*args, **kwargs):
         if not current_user.is_admin:
             return api_error(403, "forbidden", "Admin privileges required")
+        # A bearer token must additionally carry an admin scope: admin:write
+        # for mutating methods, admin:read (or admin:write) for GETs.
+        # Session-cookie users are interactive and always pass.
+        token = getattr(g, "api_token", None)
+        if token is not None:
+            required = ("admin:write",) if request.method != "GET" else ("admin:read", "admin:write")
+            if not token.allows_any(required):
+                return api_error(
+                    403,
+                    "insufficient_scope",
+                    "This API token is not allowed to call this endpoint "
+                    f"(required scope: {' or '.join(required)})",
+                )
         return view(*args, **kwargs)
     return wrapped
+
+
+def api_scope_required(*required_scopes):
+    """Restrict a route to bearer tokens carrying one of `required_scopes`.
+    Unrestricted tokens (no scope list — every token minted before scopes
+    existed) pass too, and session-cookie users always pass: scopes are a
+    property of API tokens, not of interactive browser sessions."""
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            token = getattr(g, "api_token", None)
+            if token is not None and not token.allows_any(required_scopes):
+                return api_error(
+                    403,
+                    "insufficient_scope",
+                    "This API token is not allowed to call this endpoint "
+                    f"(required scope: {' or '.join(required_scopes)})",
+                )
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
 
 
 @bp.errorhandler(400)
@@ -186,7 +222,62 @@ def _token_summary(token):
         "created_at": _iso(token.created_at),
         "last_used_at": _iso(token.last_used_at),
         "revoked_at": _iso(token.revoked_at),
+        "expires_at": _iso(token.expires_at),
+        "is_expired": token.is_expired,
+        "scopes": token.scope_list if token.scope_list is not None else [API_TOKEN_SCOPE_ALL],
     }
+
+
+def _parse_token_expiry(data):
+    """Optional token expiry from a create payload: either `expires_in_days`
+    (positive int) or `expires_at` (ISO 8601), never both. Returns
+    (expires_at, error_response); both None when no expiry was requested."""
+    expires_in_days = data.get("expires_in_days")
+    expires_at_raw = data.get("expires_at")
+    if expires_in_days is not None and expires_at_raw is not None:
+        return None, api_error(
+            400, "invalid_request", "pass either expires_in_days or expires_at, not both"
+        )
+    if expires_in_days is not None:
+        if isinstance(expires_in_days, bool) or not isinstance(expires_in_days, int) or expires_in_days <= 0:
+            return None, api_error(400, "invalid_request", "expires_in_days must be a positive integer")
+        return datetime.now(timezone.utc) + timedelta(days=expires_in_days), None
+    if expires_at_raw is not None:
+        try:
+            expires_at = datetime.fromisoformat(str(expires_at_raw).replace("Z", "+00:00"))
+        except ValueError:
+            return None, api_error(400, "invalid_request", "expires_at must be an ISO 8601 timestamp")
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            return None, api_error(400, "invalid_request", "expires_at must be in the future")
+        return expires_at, None
+    return None, None
+
+
+def _parse_token_scopes(data):
+    """Optional scope list from a create payload, validated against
+    API_TOKEN_SCOPES. Returns (scopes, error_response); scopes is None for
+    an unrestricted token (omitted, empty, or "*"), else a de-duplicated
+    list of known scope names."""
+    raw = data.get("scopes")
+    if raw is None:
+        return None, None
+    if not isinstance(raw, list) or not all(isinstance(scope, str) for scope in raw):
+        return None, api_error(400, "invalid_request", "scopes must be a list of strings")
+    scopes = list(dict.fromkeys(scope.strip() for scope in raw if scope.strip()))
+    if not scopes:
+        return None, None
+    if API_TOKEN_SCOPE_ALL in scopes:
+        return [API_TOKEN_SCOPE_ALL], None
+    unknown = [scope for scope in scopes if scope not in API_TOKEN_SCOPES]
+    if unknown:
+        return None, api_error(
+            400,
+            "invalid_request",
+            f"unknown scopes: {', '.join(unknown)} (known: {', '.join(API_TOKEN_SCOPES)})",
+        )
+    return scopes, None
 
 
 def _selection_entry(row, names):
@@ -275,6 +366,7 @@ def _server_update_data(server, data):
 
 @bp.route("/me", methods=["GET"])
 @api_login_required
+@api_scope_required("profile:read")
 def me():
     return api_ok(_user_summary(current_user))
 
@@ -283,6 +375,7 @@ def me():
 
 @bp.route("/tokens", methods=["GET"])
 @api_login_required
+@api_scope_required("tokens:manage")
 def tokens_list():
     tokens = ApiToken.query.filter_by(user_id=current_user.id).order_by(ApiToken.created_at.desc()).all()
     return api_ok([_token_summary(t) for t in tokens])
@@ -290,6 +383,7 @@ def tokens_list():
 
 @bp.route("/tokens", methods=["POST"])
 @api_login_required
+@api_scope_required("tokens:manage")
 @limiter.limit("5 per minute")
 def tokens_create():
     data = request.get_json(silent=True) or {}
@@ -297,7 +391,37 @@ def tokens_create():
     if not name:
         return api_error(400, "invalid_request", "name is required")
 
-    raw, token = ApiToken.generate(name, current_user.id)
+    expires_at, error = _parse_token_expiry(data)
+    if error:
+        return error
+    scopes, error = _parse_token_scopes(data)
+    if error:
+        return error
+
+    # A scoped bearer token can only mint tokens no more powerful than
+    # itself: no broader scopes, and no lifetime past its own expiry.
+    # Without this, a config:read-only token could mint an unrestricted
+    # one and the scope restriction would be decorative.
+    creator = getattr(g, "api_token", None)
+    if creator is not None and creator.scope_list is not None:
+        if scopes is None:
+            return api_error(
+                403, "insufficient_scope", "A scoped token cannot create an unrestricted token"
+            )
+        not_held = [scope for scope in scopes if scope not in creator.scope_list]
+        if not_held:
+            return api_error(
+                403,
+                "insufficient_scope",
+                f"Cannot grant scopes this token does not have: {', '.join(not_held)}",
+            )
+        creator_expires_at = creator.expires_at_utc
+        if creator_expires_at is not None and (expires_at is None or expires_at > creator_expires_at):
+            return api_error(
+                403, "insufficient_scope", "Cannot create a token that outlives this token"
+            )
+
+    raw, token = ApiToken.generate(name, current_user.id, expires_at=expires_at, scopes=scopes)
     db.session.add(token)
     db.session.commit()
     audit.log_audit_event(
@@ -311,6 +435,7 @@ def tokens_create():
 
 @bp.route("/tokens/<int:token_id>", methods=["DELETE"])
 @api_login_required
+@api_scope_required("tokens:manage")
 def tokens_delete(token_id):
     token = ApiToken.query.filter_by(id=token_id, user_id=current_user.id).first()
     if token is None:
@@ -328,6 +453,7 @@ def tokens_delete(token_id):
 
 @bp.route("/servers", methods=["GET"])
 @api_login_required
+@api_scope_required("servers:read")
 def servers_list():
     allowed_ids = catalog._allowed_enabled_server_ids(current_user.id)
     servers = (
@@ -461,6 +587,7 @@ def admin_server_delete(server_id):
 
 @bp.route("/me/selections", methods=["GET"])
 @api_login_required
+@api_scope_required("selections:manage")
 def me_selections_list():
     rows = UserServerSelection.query.filter_by(user_id=current_user.id).all()
     server_ids = [row.server_id for row in rows]
@@ -470,6 +597,7 @@ def me_selections_list():
 
 @bp.route("/me/selections", methods=["PUT"])
 @api_login_required
+@api_scope_required("selections:manage")
 def me_selections_set():
     data = request.get_json(silent=True) or {}
     try:
@@ -528,6 +656,7 @@ def _override_target_server(server_id):
 
 @bp.route("/me/overrides/<int:server_id>", methods=["GET"])
 @api_login_required
+@api_scope_required("overrides:manage")
 def me_override_get(server_id):
     server = _override_target_server(server_id)
     reveal = request.args.get("reveal") == "1"
@@ -539,6 +668,7 @@ def me_override_get(server_id):
 
 @bp.route("/me/overrides/<int:server_id>", methods=["PUT"])
 @api_login_required
+@api_scope_required("overrides:manage")
 def me_override_set(server_id):
     server = _override_target_server(server_id)
     data = request.get_json(silent=True) or {}
@@ -557,6 +687,7 @@ def me_override_set(server_id):
 
 @bp.route("/me/overrides/<int:server_id>", methods=["DELETE"])
 @api_login_required
+@api_scope_required("overrides:manage")
 def me_override_delete(server_id):
     server = _override_target_server(server_id)
     try:
@@ -638,6 +769,7 @@ def admin_user_override_delete(user_id, server_id):
 
 @bp.route("/me/config/<client>", methods=["GET"])
 @api_login_required
+@api_scope_required("config:read")
 def me_config(client):
     config_json, filename, error_message = catalog._build_client_config_json(client, user=current_user)
     if config_json is None:

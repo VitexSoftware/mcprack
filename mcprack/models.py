@@ -77,6 +77,26 @@ class User(UserMixin, db.Model):
         return " ".join(parts) if parts else self.username
 
 
+# Scopes a personal API token can be restricted to (see ApiToken.scopes).
+# A token with no scope list — NULL/empty, or containing "*" — is
+# unrestricted: the behaviour every token had before scopes existed, so
+# existing tokens and the client sync utilities keep working unchanged.
+# Scopes only ever *restrict* a token; they never grant anything the
+# owning user could not do interactively (admin endpoints still require
+# an admin user on top of the scope).
+API_TOKEN_SCOPES = (
+    "profile:read",      # GET /api/v1/me
+    "tokens:manage",     # GET/POST/DELETE /api/v1/tokens
+    "servers:read",      # GET /api/v1/servers
+    "selections:manage", # GET/PUT /api/v1/me/selections
+    "overrides:manage",  # GET/PUT/DELETE /api/v1/me/overrides/{serverId}
+    "config:read",       # GET /api/v1/me/config/{client}
+    "admin:read",        # every GET under /api/v1/admin/*
+    "admin:write",       # every non-GET under /api/v1/admin/* (also covers GETs)
+)
+API_TOKEN_SCOPE_ALL = "*"
+
+
 class ApiToken(db.Model):
     """Personal API access token, for scripts/CI to call /api/v1/* without a
     browser session cookie. Only the sha256 hash of the token is ever
@@ -84,7 +104,12 @@ class ApiToken(db.Model):
     be retrieved again. Unsalted sha256 is fine here (unlike a password
     hash) because the token itself already carries 256 bits of `secrets`
     entropy, so it isn't at risk from offline guessing the way a low-entropy
-    secret would be — this also keeps lookup an indexed O(1) query."""
+    secret would be — this also keeps lookup an indexed O(1) query.
+
+    Optionally carries an expiry (`expires_at`; NULL = never expires) and a
+    scope restriction (`scopes`, a JSON-encoded list; NULL/empty/"*" =
+    unrestricted). Both default to "no restriction" so tokens minted before
+    this existed behave exactly as before."""
 
     __tablename__ = "api_tokens"
 
@@ -96,21 +121,74 @@ class ApiToken(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
     last_used_at = db.Column(db.DateTime(timezone=True), nullable=True)
     revoked_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    expires_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    scopes = db.Column(db.Text, nullable=True)
 
     user = db.relationship("User", backref=db.backref("api_tokens", cascade="all, delete-orphan"))
 
     @staticmethod
-    def generate(name, user_id):
+    def generate(name, user_id, expires_at=None, scopes=None):
         """Returns (raw_token, ApiToken) — the ApiToken is not yet added to
-        the session. Raw token format: 'mcpk_' + secrets.token_urlsafe(32)."""
+        the session. Raw token format: 'mcpk_' + secrets.token_urlsafe(32).
+        `scopes` is a list of scope names, or None for an unrestricted token."""
         raw = "mcpk_" + secrets.token_urlsafe(32)
         token_hash = hashlib.sha256(raw.encode()).hexdigest()
-        token = ApiToken(user_id=user_id, name=name, token_hash=token_hash, prefix=raw[:12])
+        token = ApiToken(
+            user_id=user_id,
+            name=name,
+            token_hash=token_hash,
+            prefix=raw[:12],
+            expires_at=expires_at,
+            scopes=json.dumps(scopes) if scopes else None,
+        )
         return raw, token
 
     @property
     def is_revoked(self):
         return self.revoked_at is not None
+
+    @property
+    def expires_at_utc(self):
+        """expires_at normalized to an aware UTC datetime, or None when the
+        token never expires. SQLite and MySQL don't round-trip tzinfo, so a
+        naive value is treated as UTC rather than crashing comparisons."""
+        if self.expires_at is None:
+            return None
+        if self.expires_at.tzinfo is None:
+            return self.expires_at.replace(tzinfo=timezone.utc)
+        return self.expires_at
+
+    @property
+    def is_expired(self):
+        expires_at = self.expires_at_utc
+        if expires_at is None:
+            return False
+        return datetime.now(timezone.utc) >= expires_at
+
+    @property
+    def scope_list(self):
+        """The token's scopes as a list, or None when the token is
+        unrestricted (no scope list, an empty one, or "*")."""
+        if not self.scopes:
+            return None
+        try:
+            data = json.loads(self.scopes)
+        except ValueError:
+            return None
+        if not isinstance(data, list):
+            return None
+        scopes = [str(scope) for scope in data]
+        if not scopes or API_TOKEN_SCOPE_ALL in scopes:
+            return None
+        return scopes
+
+    def allows_any(self, required_scopes):
+        """True when this token may call an endpoint that requires one of
+        `required_scopes`. Unrestricted tokens pass everything."""
+        granted = self.scope_list
+        if granted is None:
+            return True
+        return any(scope in granted for scope in required_scopes)
 
 
 class McpServer(db.Model):

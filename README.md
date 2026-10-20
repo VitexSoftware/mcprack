@@ -324,6 +324,25 @@ The raw token is shown exactly once, at creation — only its hash is stored,
 so it can't be recovered later. Revoke a token with
 `DELETE /api/v1/tokens/{id}`, done as the same user who created it.
 
+Tokens can optionally expire and be scope-restricted at creation
+(`expires_in_days` or `expires_at`, and `scopes`, in the POST body). An
+expired token is rejected with `401`; a token whose scopes don't cover an
+endpoint is rejected with `403 insufficient_scope`. A token created without
+a scope list is unrestricted, so existing tokens keep working unchanged.
+Known scopes: `profile:read`, `tokens:manage`, `servers:read`,
+`selections:manage`, `overrides:manage`, `config:read`, `admin:read`,
+`admin:write` (`admin:write` also covers GETs; scopes never grant admin —
+the token's user must still be an admin). A scoped token can only create
+tokens whose scopes are a subset of its own, and which don't outlive it.
+The client sync utilities only need `config:read`:
+
+```bash
+# a read-only config-sync token, valid for 90 days
+curl -b cookies.txt -X POST http://localhost:5000/api/v1/tokens \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"claude-sync","scopes":["config:read"],"expires_in_days":90}'
+```
+
 **Coverage:** `/me` (profile), `/tokens` (self-service API tokens),
 `/servers` + `/admin/servers` (catalog, admin CRUD), `/me/selections`,
 `/me/overrides/{serverId}`, `/me/config/{client}`, `/admin/users`, and
