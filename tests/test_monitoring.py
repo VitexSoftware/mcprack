@@ -141,6 +141,73 @@ def test_check_servers_resolves_only_cold_and_network_servers(app):
     assert snapshot["total"] == 2 and snapshot["failed"] == 0
 
 
+def _unconfigured_early(server):
+    return (None, {
+        "id": server.id, "name": server.name, "transport": server.transport,
+        "ok": None, "tools": None, "latency_ms": 0, "error": "unconfigured",
+    })
+
+
+def test_check_servers_caches_unconfigured_verdict(app):
+    """A cold server the monitoring user cannot start resolves once, then
+    its unconfigured verdict is served from the negative cache without a
+    Vaultwarden lookup."""
+    cold = McpServer(name="cold", label="Cold", transport="stdio", command="/bin/x",
+                     required_env_keys_json='["PW"]')
+    db.session.add(cold)
+    db.session.commit()
+    user = _user()
+    app.config["MONITORING_USER_ID"] = user.id
+
+    with patch("mcprack.monitoring.resolve_envs",
+               return_value={cold.id: _unconfigured_early(cold)}) as batch:
+        first = monitoring.check_servers(app)
+    batch.assert_called_once()
+    assert first["servers"][0]["ok"] is None and first["servers"][0]["error"] == "unconfigured"
+
+    with patch("mcprack.monitoring.resolve_envs") as batch:
+        second = monitoring.check_servers(app)
+    batch.assert_not_called()
+    assert second["servers"][0]["ok"] is None and second["servers"][0]["error"] == "unconfigured"
+
+
+def test_unconfigured_verdict_invalidated_by_server_edit(app):
+    cold = McpServer(name="cold", label="Cold", transport="stdio", command="/bin/x",
+                     required_env_keys_json='["PW"]')
+    db.session.add(cold)
+    db.session.commit()
+    user = _user()
+    app.config["MONITORING_USER_ID"] = user.id
+    # Verdict recorded against an older config fingerprint (pre-edit).
+    monitoring._write_unconfigured({str(cold.id): {
+        "ts": time.time(), "fp": json.dumps({"command": "/bin/old"}),
+    }})
+
+    with patch("mcprack.monitoring.resolve_envs",
+               return_value={cold.id: _unconfigured_early(cold)}) as batch:
+        result = monitoring.check_servers(app)
+    batch.assert_called_once()
+    assert result["servers"][0]["error"] == "unconfigured"
+
+
+def test_unconfigured_verdict_expires(app):
+    cold = McpServer(name="cold", label="Cold", transport="stdio", command="/bin/x",
+                     required_env_keys_json='["PW"]')
+    db.session.add(cold)
+    db.session.commit()
+    user = _user()
+    app.config["MONITORING_USER_ID"] = user.id
+    monitoring._write_unconfigured({str(cold.id): {
+        "ts": time.time() - monitoring._UNCONFIGURED_TTL - 1, "updated_at": None,
+    }})
+
+    with patch("mcprack.monitoring.resolve_envs",
+               return_value={cold.id: _unconfigured_early(cold)}) as batch:
+        result = monitoring.check_servers(app)
+    batch.assert_called_once()
+    assert result["servers"][0]["error"] == "unconfigured"
+
+
 def test_get_snapshot_is_pending_then_served_from_shared_file(app):
     app.config["MONITORING_USER_ID"] = 1
     with patch("mcprack.monitoring.threading.Thread") as thread:

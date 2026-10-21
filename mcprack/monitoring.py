@@ -14,7 +14,9 @@ file shared by all gunicorn workers; a flock keeps refreshes single-flight.
 Vaultwarden is contacted only where the probe genuinely needs it: a cold
 stdio spawn (a server start) or a network handshake that carries an auth
 header. A warm stdio instance is probed on its running port with no
-credential resolution at all — the refresh runs every couple of minutes and
+credential resolution at all, and a server already known to be unconfigured
+for the monitoring user is answered from a negative cache (invalidated by a
+server edit, expired hourly) — the refresh runs every couple of minutes and
 must not be a periodic Vaultwarden client (a single failing `bw unlock` used
 to mark every credential-backed server broken at once, 2026-10-16).
 """
@@ -36,6 +38,17 @@ from . import vaultwarden
 logger = logging.getLogger(__name__)
 
 _MAX_PARALLEL = 4
+
+# How long an "unconfigured" verdict for a server the monitoring user
+# cannot start is trusted without re-checking Vaultwarden. Such a server is
+# never warm (it can never be spawned), so without this cache the refresh
+# would pay a credential lookup (unlock/list/lock) for it every time, even
+# though its answer cannot change until the admin edits the server or its
+# vault item. Invalidated sooner when the server row changes (config
+# fingerprint), and expired wholesale by this TTL so an out-of-band change
+# (vault item edited directly, monitoring user's override set via API) is
+# picked up within an hour.
+_UNCONFIGURED_TTL = 3600  # seconds
 
 
 def _result(server, ok, tools=None, error=None, latency=0.0):
@@ -181,23 +194,39 @@ def check_servers(app):
         # instances are probed on their running port and never resolve
         # credentials — Vaultwarden is only contacted for a server start
         # or an authenticated network handshake, never merely because the
-        # monitoring refresh runs. Phase 2 (parallel): probes.
+        # monitoring refresh runs. A server already known to be
+        # unconfigured for this user is answered from the negative cache
+        # without a lookup. Phase 2 (parallel): probes.
         results, todo = {}, []
         warm, resolve_needed = [], []
+        unconfigured_cache = _read_unconfigured()
         for server in servers:
             if server.command and user_proxy.running_proxy_port(user.id, server.id) is not None:
                 warm.append((server.id, server.name))
+                continue
+            verdict = _cached_unconfigured_verdict(server, unconfigured_cache)
+            if verdict is not None:
+                results[server.id] = verdict
             else:
                 resolve_needed.append(server)
-        envs = resolve_envs(resolve_needed, user=user)
+        learned = False
+        envs = resolve_envs(resolve_needed, user=user) if resolve_needed else {}
         for server in resolve_needed:
             env, early = envs[server.id]
             if early is not None:
                 results[server.id] = early
+                if early.get("error") == "unconfigured":
+                    unconfigured_cache[str(server.id)] = {
+                        "ts": time.time(),
+                        "fp": _server_fingerprint(server),
+                    }
+                    learned = True
             else:
                 todo.append((server.id, server.name, env))
         todo.extend((server_id, name, None) for server_id, name in warm)
         order = [s.id for s in servers]
+        if learned:
+            _write_unconfigured(unconfigured_cache)
 
     def run(item):
         server_id, name, env = item
@@ -232,6 +261,59 @@ def _snapshot_paths():
     # Next to the per-user proxy state (isolated per test via STATE_DIR).
     base = user_proxy.STATE_DIR.parent
     return base / "monitoring.json", base / "monitoring.lock"
+
+
+def _unconfigured_cache_path():
+    _, lock_path = _snapshot_paths()
+    return lock_path.parent / "monitoring-unconfigured.json"
+
+
+def _read_unconfigured():
+    try:
+        cache = json.loads(_unconfigured_cache_path().read_text())
+    except (OSError, ValueError):
+        return {}
+    return cache if isinstance(cache, dict) else {}
+
+
+def _write_unconfigured(cache):
+    path = _unconfigured_cache_path()
+    tmp = path.with_suffix(".tmp")
+    try:
+        tmp.write_text(json.dumps(cache))
+        os.replace(tmp, path)  # atomic — readers never see a partial file
+    except OSError:
+        logger.exception("monitoring: cannot persist unconfigured-server cache")
+
+
+def _server_fingerprint(server):
+    """The server-row state an 'unconfigured' verdict depends on. Edits to
+    any of these (admin form save) invalidate a cached verdict; pure
+    credential-value changes (vault item edited, user override set) don't
+    touch the row and are picked up via _UNCONFIGURED_TTL instead."""
+    return json.dumps({
+        "command": server.command,
+        "args": list(server.args or []),
+        "env_var_names": list(server.env_var_names or []),
+        "env_config": server.env_config or {},
+        "required_env_keys": list(server.required_env_keys or []),
+        "vault_item": server.vault_item,
+        "auth_env_key": getattr(server, "auth_env_key", None),
+    }, sort_keys=True, default=str)
+
+
+def _cached_unconfigured_verdict(server, cache):
+    """Cached "unconfigured" result for a cold server, or None when the
+    verdict is unknown, stale (_UNCONFIGURED_TTL) or invalidated by a
+    server edit (config fingerprint changed since the verdict)."""
+    entry = cache.get(str(server.id))
+    if not isinstance(entry, dict):
+        return None
+    if time.time() - entry.get("ts", 0) > _UNCONFIGURED_TTL:
+        return None
+    if entry.get("fp") != _server_fingerprint(server):
+        return None
+    return _result(server, None, error="unconfigured")
 
 
 def _read_snapshot():
