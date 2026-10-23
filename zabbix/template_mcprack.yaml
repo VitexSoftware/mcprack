@@ -187,9 +187,17 @@ zabbix_export:
                   name: 'MCP server {#NAME} is broken on {HOST.NAME}'
                   priority: HIGH
                   description: >
-                    The handshake with {#NAME} failed or it serves no tools. Details:
-                    see item "MCP server {#NAME}: last error" and the backend log in
-                    /var/lib/mcprack/user-proxies/.
+                    The server has all required configuration but its handshake failed
+                    or it serves no tools. Details: see item "MCP server {#NAME}: last
+                    error" and the backend log in /var/lib/mcprack/user-proxies/.
+                - uuid: a6541d4817ba45909cbab9ebe19b251b
+                  expression: 'last(/MCPrack by HTTP/mcprack.server.ok[{#SID}])=2'
+                  name: 'MCP server {#NAME} is not configured on {HOST.NAME}'
+                  priority: INFO
+                  description: >
+                    Required configuration of {#NAME} is missing for the monitoring user
+                    (or its credentials cannot be read yet). Informational only; see item
+                    "MCP server {#NAME}: last error" for the reason.
             - uuid: c8b0070a7ad54b7aad6b3c02faefe91a
               name: 'MCP server {#NAME}: tools'
               type: DEPENDENT

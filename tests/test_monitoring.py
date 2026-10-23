@@ -80,7 +80,7 @@ def test_credential_error_keeps_the_cause_in_the_zabbix_item(app):
     with patch("mcprack.monitoring.secret_store.resolve_server_env",
                side_effect=monitoring.vaultwarden.VaultwardenError(cause + " " + "x" * 400)):
         result = monitoring.check_server(server, user)
-    assert result["ok"] is False
+    assert result["ok"] is None
     assert "Rate limit exceeded" in result["error"]
 
 

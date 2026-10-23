@@ -73,7 +73,9 @@ def _env_or_early(server, resolved):
     # latency stays 0 for early results: it is meant to be handshake latency,
     # and a slow Vaultwarden lookup must not raise "server is slow".
     if isinstance(resolved, (vaultwarden.VaultwardenError, secret_store.SecretStoreError)):
-        return None, _result(server, False, error=f"could not resolve credentials: {resolved}"[:_ERROR_MAX])
+        # Vault trouble says nothing about whether the server is broken: its
+        # required configuration cannot be verified, so it is not an error.
+        return None, _result(server, None, error=f"could not resolve credentials: {resolved}"[:_ERROR_MAX])
     if isinstance(resolved, Exception):
         raise resolved
     if [key for key in server.required_env_keys if not resolved.get(key)]:
