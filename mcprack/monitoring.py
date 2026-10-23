@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 _MAX_PARALLEL = 4
 
+# Zabbix "last error" items are TEXT; keep enough of a vault/bw message for
+# the cause (e.g. "Rate limit exceeded") to survive truncation.
+_ERROR_MAX = 1000
+
 # How long an "unconfigured" verdict for a server the monitoring user
 # cannot start is trusted without re-checking Vaultwarden. Such a server is
 # never warm (it can never be spawned), so without this cache the refresh
@@ -69,7 +73,7 @@ def _env_or_early(server, resolved):
     # latency stays 0 for early results: it is meant to be handshake latency,
     # and a slow Vaultwarden lookup must not raise "server is slow".
     if isinstance(resolved, (vaultwarden.VaultwardenError, secret_store.SecretStoreError)):
-        return None, _result(server, False, error=f"could not resolve credentials: {resolved}"[:200])
+        return None, _result(server, False, error=f"could not resolve credentials: {resolved}"[:_ERROR_MAX])
     if isinstance(resolved, Exception):
         raise resolved
     if [key for key in server.required_env_keys if not resolved.get(key)]:
@@ -142,7 +146,7 @@ def check_server(server, user, env=None):
                 server=server,
             )
         except user_proxy.UserProxyError as exc:
-            return done(False, error=str(exc)[:200])
+            return done(False, error=str(exc)[:_ERROR_MAX])
         ok, tools, error = health.probe_tools("127.0.0.1", port, timeout=user_proxy.HANDSHAKE_TIMEOUT)
         return done(ok, tools if ok else 0, error)
 
@@ -240,7 +244,7 @@ def check_servers(app):
                 return {
                     "id": server_id, "name": name, "transport": server.transport,
                     "ok": False, "tools": 0, "latency_ms": 0,
-                    "error": f"probe crashed: {exc}"[:200],
+                    "error": f"probe crashed: {exc}"[:_ERROR_MAX],
                 }
 
     with ThreadPoolExecutor(max_workers=_MAX_PARALLEL) as pool:
@@ -338,7 +342,7 @@ def _refresh(app, lock_file):
                 "servers": [],
                 "total": 0,
                 "failed": 0,
-                "error": str(exc)[:200],
+                "error": str(exc)[:_ERROR_MAX],
             }
         path, _ = _snapshot_paths()
         tmp = path.with_suffix(".tmp")

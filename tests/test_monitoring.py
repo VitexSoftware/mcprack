@@ -74,6 +74,16 @@ def test_check_server_healthy(app):
     assert (result["ok"], result["tools"]) == (True, 18)
 
 
+def test_credential_error_keeps_the_cause_in_the_zabbix_item(app):
+    server, user = _server(), _user()
+    cause = "bw unlock failed: ErrorResponse { message: 'Rate limit exceeded' }"
+    with patch("mcprack.monitoring.secret_store.resolve_server_env",
+               side_effect=monitoring.vaultwarden.VaultwardenError(cause + " " + "x" * 400)):
+        result = monitoring.check_server(server, user)
+    assert result["ok"] is False
+    assert "Rate limit exceeded" in result["error"]
+
+
 def test_check_server_missing_required_env_is_unconfigured_not_failed(app):
     server, user = _server(required_env_keys_json='["IMAP_PASSWORD"]'), _user()
     with patch("mcprack.monitoring.user_proxy.ensure_user_server_proxy") as spawn:
