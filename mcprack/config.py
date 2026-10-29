@@ -169,3 +169,22 @@ class Config:
     # working on its own after a while.
     _proxy_token_max_age_raw = os.environ.get("PROXY_TOKEN_MAX_AGE_SECONDS", "").strip()
     PROXY_TOKEN_MAX_AGE = int(_proxy_token_max_age_raw) if _proxy_token_max_age_raw else None
+
+    # Optional MCP OAuth 2.1 Authorization Server (RFC8414 + RFC9728 + RFC7591).
+    # Off by default: clients keep using the signed path token in
+    # /proxy/mcp/<token>/<server_id>. When true, mcprack also exposes
+    # /proxy/mcp/<server_id> authenticated via Authorization: Bearer
+    # (OAuth access token or an ApiToken with the proxy:access scope),
+    # plus the .well-known discovery / authorize / token / register
+    # endpoints MCP clients need for the standard OAuth dance. Downloaded
+    # configs then emit the tokenless URL so the path secret can be skipped.
+    OAUTH_ENABLED = os.environ.get("OAUTH_ENABLED", "false").lower() in ("true", "1", "yes")
+    # Access-token lifetime for tokens minted by /oauth/token.
+    OAUTH_ACCESS_TOKEN_EXPIRES = int(os.environ.get("OAUTH_ACCESS_TOKEN_EXPIRES", str(3600)))
+    OAUTH_REFRESH_TOKEN_EXPIRES = int(os.environ.get("OAUTH_REFRESH_TOKEN_EXPIRES", str(30 * 86400)))
+    # authlib requires HTTPS for authorize/token. Leave false in production
+    # (terminate TLS at the reverse proxy). Set true only for plain-HTTP
+    # lab installs — never on the public internet.
+    OAUTH_ALLOW_INSECURE_TRANSPORT = os.environ.get(
+        "OAUTH_ALLOW_INSECURE_TRANSPORT", "false"
+    ).lower() in ("true", "1", "yes")

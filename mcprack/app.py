@@ -138,15 +138,22 @@ def create_app(config_object=Config):
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
         # The user-proxy MCP endpoint is bearer-token authenticated via the
-        # signed token in the URL path, not cookies - so, unlike the rest of
-        # the app, it's safe to open up to cross-origin callers. Remote MCP
-        # clients (Claude Desktop, claude.ai) are browser/Electron-based and
+        # signed token in the URL path (or Authorization: Bearer when
+        # OAuth is on), not cookies - so, unlike the rest of the app, it's
+        # safe to open up to cross-origin callers. Remote MCP clients
+        # (Claude Desktop, claude.ai) are browser/Electron-based and
         # enforce CORS: without these headers their preflight OPTIONS - or
         # the browser's post-preflight block of the real request - fails
         # before mcprack's response ever gets read, even though the request
         # itself would have succeeded (curl doesn't enforce CORS, so this is
-        # invisible outside a real browser-based client).
-        if request.path.startswith("/proxy/mcp/"):
+        # invisible outside a real browser-based client). The same CORS
+        # applies to OAuth discovery / token / register so the client's
+        # browser-side OAuth dance can reach them.
+        if (
+            request.path.startswith("/proxy/mcp/")
+            or request.path.startswith("/.well-known/")
+            or request.path.startswith("/oauth/")
+        ):
             response.headers["Access-Control-Allow-Origin"] = "*"
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
             response.headers["Access-Control-Allow-Headers"] = (
@@ -170,6 +177,10 @@ def create_app(config_object=Config):
     # request to exploit, and no browser JS calls into /api/v1/* exist today
     # - see api.py's module docstring for the full rationale.
     csrf.exempt(api_bp)
+
+    from . import oauth
+
+    oauth.init_oauth(app)
 
     from . import api_auth  # noqa: F401 - registers the bearer-token request_loader
 

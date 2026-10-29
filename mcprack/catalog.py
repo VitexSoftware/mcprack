@@ -5,9 +5,13 @@ import socket
 import time
 from urllib.parse import urlsplit
 
+import hashlib
+from datetime import datetime, timezone
+
 from flask import (
     Blueprint,
     abort,
+    current_app,
     flash,
     redirect,
     render_template,
@@ -29,6 +33,7 @@ from . import vaultwarden
 from .config_formats import render_claude_config, render_copilot_config
 from .extensions import csrf, db
 from .models import (
+    ApiToken,
     McpServer,
     User,
     UserServerOverride,
@@ -277,8 +282,65 @@ def server_icon(server_id):
     return send_file(icon_path)
 
 
-@bp.route("/proxy/mcp/<token>/<int:server_id>", methods=["GET", "POST", "DELETE"])
-def user_proxy_mcp(token, server_id):
+def _proxy_relay_url(user, server):
+    """Per-user MCP relay URL for `server`. When OAuth is enabled the
+    path token is omitted — clients authenticate with Authorization:
+    Bearer instead (OAuth access token or an ApiToken with proxy:access).
+    Path-token URLs remain valid either way for clients that still embed
+    them."""
+    if current_app.config.get("OAUTH_ENABLED"):
+        return url_for(
+            "catalog.user_proxy_mcp_oauth",
+            server_id=server.id,
+            _external=True,
+        )
+    token = _make_proxy_token(user.id, server.id)
+    return url_for(
+        "catalog.user_proxy_mcp",
+        token=token,
+        server_id=server.id,
+        _external=True,
+    )
+
+
+def _resolve_bearer_proxy_user():
+    """Authenticate an MCP proxy request from Authorization: Bearer.
+
+    Accepts either an OAuth access token minted by /oauth/token (scope
+    ``mcp``) or a personal ApiToken that allows ``proxy:access`` (or is
+    unrestricted). Returns the User, or None when the header is missing
+    / invalid — callers decide between 401 (OAuth challenge) and 403."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None
+    raw = auth_header[len("Bearer ") :].strip()
+    if not raw:
+        return None
+
+    if current_app.config.get("OAUTH_ENABLED"):
+        from . import oauth
+
+        user = oauth.resolve_oauth_bearer_user(raw)
+        if user is not None:
+            return user
+
+    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    token = ApiToken.query.filter_by(token_hash=token_hash).first()
+    if token is None or token.is_revoked or token.is_expired:
+        return None
+    if not token.allows_any(("proxy:access",)):
+        return None
+    user = db.session.get(User, token.user_id)
+    if user is None or not user.is_active:
+        return None
+    token.last_used_at = datetime.now(timezone.utc)
+    db.session.commit()
+    return user
+
+
+def _serve_user_proxy_mcp(user, server_id):
+    """Shared relay body after the caller has authenticated `user` for
+    `server_id` (path token or Bearer)."""
     # Housekeeping only — a cleanup failure must never take the user's
     # actual proxy request down with it. (It used to: a lock-wait timeout
     # raised out of cleanup_idle_proxies() propagated as a 500 before the
@@ -288,11 +350,6 @@ def user_proxy_mcp(token, server_id):
     except Exception:
         logger.exception("Idle proxy cleanup failed; continuing with the request")
 
-    data = _parse_proxy_token(token)
-    if not data or data.get("s") != server_id:
-        abort(403)
-
-    user = db.get_or_404(User, data.get("u"))
     server = db.get_or_404(McpServer, server_id)
     if not server.enabled or not (server.command or server.url):
         abort(404)
@@ -373,11 +430,48 @@ def user_proxy_mcp(token, server_id):
     return _forward_to_backend_url(server.url, env, server)
 
 
-# Bearer-token authenticated (the signed token in the URL path), not
-# session-cookie authenticated - CSRF protection has nothing to add here
-# since there's no ambient credential for a forged cross-site request to
-# ride on, and remote MCP clients reconnecting to this URL never send one.
+@bp.route("/proxy/mcp/<token>/<int:server_id>", methods=["GET", "POST", "DELETE", "OPTIONS"])
+def user_proxy_mcp(token, server_id):
+    if request.method == "OPTIONS":
+        return Response(status=204)
+
+    data = _parse_proxy_token(token)
+    if not data or data.get("s") != server_id:
+        abort(403)
+
+    user = db.get_or_404(User, data.get("u"))
+    return _serve_user_proxy_mcp(user, server_id)
+
+
+@bp.route("/proxy/mcp/<int:server_id>", methods=["GET", "POST", "DELETE", "OPTIONS"])
+def user_proxy_mcp_oauth(server_id):
+    """Tokenless MCP relay — requires OAUTH_ENABLED and a Bearer credential.
+
+    MCP clients discover the Authorization Server via the 401
+    WWW-Authenticate challenge / Protected Resource Metadata, complete
+    the OAuth dance, then call this URL with Authorization: Bearer."""
+    if request.method == "OPTIONS":
+        return Response(status=204)
+
+    if not current_app.config.get("OAUTH_ENABLED"):
+        abort(404)
+
+    user = _resolve_bearer_proxy_user()
+    if user is None:
+        from . import oauth
+
+        return oauth.oauth_unauthorized_response(server_id)
+
+    return _serve_user_proxy_mcp(user, server_id)
+
+
+# Bearer-token authenticated (signed path token, or Authorization header
+# when OAuth is on), not session-cookie authenticated — CSRF protection
+# has nothing to add here since there's no ambient credential for a
+# forged cross-site request to ride on, and remote MCP clients
+# reconnecting to this URL never send one.
 csrf.exempt(user_proxy_mcp)
+csrf.exempt(user_proxy_mcp_oauth)
 
 
 def set_user_selection(user_id, submitted_ids):
@@ -494,14 +588,12 @@ def _server_connector(user, server):
     server_id, so this works whether or not `server` is currently in the
     user's selection - actually calling the URL still requires the server
     to be selected (see user_proxy_mcp)."""
-    token = _make_proxy_token(user.id, server.id)
-    relay_url = url_for(
-        "catalog.user_proxy_mcp",
-        token=token,
-        server_id=server.id,
-        _external=True,
-    )
-    return {"id": server.id, "name": server.name, "label": server.label, "url": relay_url}
+    return {
+        "id": server.id,
+        "name": server.name,
+        "label": server.label,
+        "url": _proxy_relay_url(user, server),
+    }
 
 
 def _selected_server_connectors(user):
@@ -527,10 +619,10 @@ def _build_client_config_json(client, user=None):
     shared fastmcp proxies (which may live on an entirely different host
     than mcprack, or behind a `127.0.0.1`/private address mcprack itself
     can reach but the end user's own machine cannot) — gets a per-user
-    `/proxy/mcp/<token>/<id>` relay URL instead of its raw backend address.
-    Credentials are resolved lazily at the moment that URL is actually
-    first connected to (see user_proxy_mcp), never embedded in the
-    downloaded config.
+    `/proxy/mcp/<token>/<id>` relay URL (or `/proxy/mcp/<id>` when
+    OAUTH_ENABLED) instead of its raw backend address. Credentials are
+    resolved lazily at the moment that URL is actually first connected
+    to (see user_proxy_mcp), never embedded in the downloaded config.
     """
     if user is None:
         user = current_user
@@ -545,18 +637,11 @@ def _build_client_config_json(client, user=None):
 
     entries = []
     for server in selected:
-        # Never log this URL: the signed token embedded in it is a bearer
-        # credential for user_proxy_mcp (see _make_proxy_token /
-        # _parse_proxy_token above) — writing it to a log file or stderr
-        # would leak a usable access credential outside the config the
-        # user actually asked for.
-        token = _make_proxy_token(user.id, server.id)
-        relay_url = url_for(
-            "catalog.user_proxy_mcp",
-            token=token,
-            server_id=server.id,
-            _external=True,
-        )
+        # Never log this URL when it embeds a path token: that signed
+        # string is a bearer credential for user_proxy_mcp — writing it
+        # to a log file or stderr would leak a usable access credential
+        # outside the config the user actually asked for.
+        relay_url = _proxy_relay_url(user, server)
         entries.append(
             {
                 "name": server.name,

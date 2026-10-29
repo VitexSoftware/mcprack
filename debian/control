@@ -27,6 +27,7 @@ Depends:
  python3-flask-babel,
  python3-yaml,
  python3-ldap3,
+ python3-authlib,
  python3-cryptography,
  python3-uvicorn (>= 0.34),
  bw-cli,

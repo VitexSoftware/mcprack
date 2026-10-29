@@ -35,6 +35,7 @@ dependencies = [
     "flask-babel",
     "PyYAML",
     "python-dotenv",
+    "Authlib>=1.3",
 ]
 
 [project.urls]

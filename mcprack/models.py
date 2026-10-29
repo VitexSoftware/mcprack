@@ -3,6 +3,11 @@ import json
 import secrets
 from datetime import datetime, timezone
 
+from authlib.integrations.sqla_oauth2 import (
+    OAuth2AuthorizationCodeMixin,
+    OAuth2ClientMixin,
+    OAuth2TokenMixin,
+)
 from flask_login import UserMixin
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -76,6 +81,10 @@ class User(UserMixin, db.Model):
         parts = [p for p in (self.first_name, self.last_name) if p]
         return " ".join(parts) if parts else self.username
 
+    def get_user_id(self):
+        """authlib OAuth grants look up the resource owner via this method."""
+        return self.id
+
 
 # Scopes a personal API token can be restricted to (see ApiToken.scopes).
 # A token with no scope list — NULL/empty, or containing "*" — is
@@ -91,10 +100,17 @@ API_TOKEN_SCOPES = (
     "selections:manage", # GET/PUT /api/v1/me/selections
     "overrides:manage",  # GET/PUT/DELETE /api/v1/me/overrides/{serverId}
     "config:read",       # GET /api/v1/me/config/{client}
+    "proxy:access",      # Authorization: Bearer on /proxy/mcp/<server_id>
     "admin:read",        # every GET under /api/v1/admin/*
     "admin:write",       # every non-GET under /api/v1/admin/* (also covers GETs)
 )
 API_TOKEN_SCOPE_ALL = "*"
+
+# Scope issued by mcprack's optional MCP OAuth Authorization Server and
+# required on Bearer tokens that hit the tokenless /proxy/mcp/<server_id>
+# route. Kept deliberately short so MCP clients' default scope requests
+# (often just "mcp") match without a custom scope-selection dance.
+OAUTH_MCP_SCOPE = "mcp"
 
 
 class ApiToken(db.Model):
@@ -189,6 +205,71 @@ class ApiToken(db.Model):
         if granted is None:
             return True
         return any(scope in granted for scope in required_scopes)
+
+
+# --- Optional MCP OAuth Authorization Server (see oauth.py) ---------------
+# Tables only used when OAUTH_ENABLED=true. create_all() still makes them so
+# flipping the flag later doesn't require a migration just to enable OAuth;
+# the Alembic revision keeps packaged installs in sync.
+
+
+class OAuthClient(db.Model, OAuth2ClientMixin):
+    """OAuth 2.1 client registered via Dynamic Client Registration (RFC7591)
+    or pre-seeded for tests. MCP clients (Claude, Copilot, …) typically
+    register themselves as public clients (token_endpoint_auth_method=none)
+    with PKCE before starting the authorize redirect."""
+
+    __tablename__ = "oauth_clients"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    def get_allowed_scope(self, scope):
+        # OAuth2ClientMixin filters requested scopes against the client's
+        # registered scope string. Fresh DCR registrations that omit scope
+        # would otherwise get an empty grant; default to the MCP proxy scope.
+        from authlib.oauth2.rfc6749 import list_to_scope, scope_to_list
+
+        registered = self.scope or OAUTH_MCP_SCOPE
+        if not scope:
+            return registered
+        allowed = set(registered.split())
+        return list_to_scope([s for s in scope_to_list(scope) if s in allowed])
+
+    def check_client_secret(self, client_secret):
+        # Public clients store an empty secret; compare_digest rejects None.
+        stored = self.client_secret or ""
+        provided = client_secret or ""
+        return secrets.compare_digest(stored, provided)
+
+
+class OAuthAuthorizationCode(db.Model, OAuth2AuthorizationCodeMixin):
+    __tablename__ = "oauth_authorization_codes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+
+    @property
+    def user(self):
+        return db.session.get(User, self.user_id)
+
+
+class OAuthToken(db.Model, OAuth2TokenMixin):
+    __tablename__ = "oauth_tokens"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    user = db.relationship("User", backref=db.backref("oauth_tokens", cascade="all, delete-orphan"))
+
+    def is_refresh_token_active(self):
+        return not self.refresh_token_revoked_at
+
+    def get_user(self):
+        return self.user
 
 
 class McpServer(db.Model):

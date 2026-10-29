@@ -189,7 +189,8 @@ Users always connect remotely — mcprack never expects its own web UI and a
 user's MCP client to be on the same machine. So a stdio-implemented server
 is never handed to a client as a raw local spawn command; the downloaded
 config always points at a per-user proxy URL instead
-(`/proxy/mcp/<token>/<server_id>`, served by `mcprack.service` itself, no
+(`/proxy/mcp/<token>/<server_id>` by default, or `/proxy/mcp/<server_id>`
+when `OAUTH_ENABLED=true`, served by `mcprack.service` itself, no
 separate proxy service to install or enable).
 
 The first time a user's client actually connects to that URL, mcprack spawns

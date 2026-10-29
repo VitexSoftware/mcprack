@@ -9,3 +9,4 @@ gunicorn
 fastmcp>=4.0.0a2
 flask-babel
 PyYAML
+Authlib>=1.3

@@ -131,11 +131,12 @@ configuration. Two risks remain that configuration alone doesn't close:
   login, and rely on the systemd hardening in `debian/mcprack.service` as
   the containment boundary — it isn't a full per-command sandbox.
 
-**Future improvement worth considering**: optional OAuth/OIDC login for
-users (e.g. via `authlib`) alongside the existing local/LDAP auth would
-further reduce brute-force exposure and enable SSO. It's a larger, separate
-feature (client registration, redirect flow, mapping external identities
-onto the `User` model) and isn't implemented yet.
+**Optional MCP OAuth** (off by default): set `OAUTH_ENABLED=true` to expose
+a built-in OAuth 2.1 Authorization Server so MCP clients can authenticate
+with `Authorization: Bearer` against the stable `/proxy/mcp/<server_id>`
+URL instead of embedding a signed path token. See
+[Optional MCP OAuth](#optional-mcp-oauth) below. (Web-UI SSO / OIDC login
+for humans is still a separate future improvement.)
 
 ## Key Features
 
@@ -330,10 +331,12 @@ expired token is rejected with `401`; a token whose scopes don't cover an
 endpoint is rejected with `403 insufficient_scope`. A token created without
 a scope list is unrestricted, so existing tokens keep working unchanged.
 Known scopes: `profile:read`, `tokens:manage`, `servers:read`,
-`selections:manage`, `overrides:manage`, `config:read`, `admin:read`,
-`admin:write` (`admin:write` also covers GETs; scopes never grant admin —
-the token's user must still be an admin). A scoped token can only create
-tokens whose scopes are a subset of its own, and which don't outlive it.
+`selections:manage`, `overrides:manage`, `config:read`, `proxy:access`,
+`admin:read`, `admin:write` (`proxy:access` authenticates the tokenless
+`/proxy/mcp/<server_id>` route when OAuth is enabled; `admin:write` also
+covers GETs; scopes never grant admin — the token's user must still be an
+admin). A scoped token can only create tokens whose scopes are a subset of
+its own, and which don't outlive it.
 The client sync utilities only need `config:read`:
 
 ```bash
@@ -825,6 +828,31 @@ it stays valid before the proxy starts rejecting it with `403`:
 - A positive integer (e.g. `86400` for 24h) — re-enables time-limited
   tokens, for an internet-facing instance where a leaked config URL should
   stop working on its own after a while.
+
+### Optional MCP OAuth
+
+Set `OAUTH_ENABLED=true` in `/etc/mcprack/env` (and restart) to let MCP
+clients skip the path token entirely:
+
+1. Config download / connector copy then emit `/proxy/mcp/<server_id>`
+   (no signed segment).
+2. An unauthenticated call gets `401` with
+   `WWW-Authenticate: Bearer … resource_metadata="…/.well-known/oauth-protected-resource/…"`.
+3. The client discovers this AS (`/.well-known/oauth-authorization-server`),
+   optionally registers via `/oauth/register` (RFC7591 DCR), and completes
+   the authorization-code + PKCE flow at `/oauth/authorize` (user logs in
+   and consents).
+4. Subsequent MCP requests send `Authorization: Bearer <access_token>`.
+
+Personal API tokens with the `proxy:access` scope (or unrestricted tokens)
+also work as Bearer credentials on the tokenless URL — useful for scripts
+that already hold an `mcpk_…` token. Path-token URLs keep working either
+way.
+
+Requires HTTPS in production (authlib enforces it). For a plain-HTTP lab
+only, set `OAUTH_ALLOW_INSECURE_TRANSPORT=true`. Also set `PUBLIC_BASE_URL`
+to the externally-reachable origin so discovery metadata advertises the
+correct issuer.
 
 Separately from those two, each *already-established* request forwarded to a
 running proxy instance has a fixed 10s ceiling (`_PROXY_REQUEST_TIMEOUT` in

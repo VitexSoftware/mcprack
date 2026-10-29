@@ -3,15 +3,18 @@
 ## Architecture (current)
 
 Every selected MCP server is exposed to AI clients as an HTTP relay URL
-under `/proxy/mcp/<token>/<server_id>`. Clients never spawn stdio binaries
-themselves and never receive raw backend URLs or credentials.
+under `/proxy/mcp/<token>/<server_id>` (default) or `/proxy/mcp/<server_id>`
+when optional MCP OAuth is enabled (`OAUTH_ENABLED=true`). Clients never
+spawn stdio binaries themselves and never receive raw backend URLs or
+credentials.
 
 ```
 AI client (Claude / Copilot / …)
         │
         ▼
-  /proxy/mcp/<token>/<id>     ← signed bearer in the path
-        │
+  /proxy/mcp/<token>/<id>     ← signed bearer in the path (default)
+  /proxy/mcp/<id>             ← Authorization: Bearer when OAUTH_ENABLED
+        │                         (OAuth access token or ApiToken proxy:access)
         ├─ server.command set  → spawn per-user process via user_proxy
         │                         (fastmcp streamable-HTTP on a local port)
         │                         then relay the request
@@ -20,10 +23,15 @@ AI client (Claude / Copilot / …)
                                  (inject auth header from secret_store)
 ```
 
+With `OAUTH_ENABLED`, mcprack also serves MCP Authorization Spec discovery
+(`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`)
+plus `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`.
+Path-token URLs remain valid either way.
+
 Config download (`/download/<client>`, `/view/<client>`) always fills
-`url` with the per-user relay. `config_formats.py` still has a stdio
-fallback for unit tests / direct calls with no url — production catalog
-paths never exercise it.
+`url` with the per-user relay (tokenless when OAuth is on).
+`config_formats.py` still has a stdio fallback for unit tests / direct
+calls with no url — production catalog paths never exercise it.
 
 ### Field meaning on `McpServer`
 

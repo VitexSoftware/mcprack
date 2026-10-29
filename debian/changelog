@@ -1,5 +1,11 @@
 mcprack (1.5.9-1) UNRELEASED; urgency=medium
 
+  * Optional MCP OAuth (OAUTH_ENABLED): built-in OAuth 2.1 Authorization
+    Server so clients can use /proxy/mcp/<server_id> with Authorization:
+    Bearer instead of a signed path token. Serves RFC9728 / RFC8414
+    discovery, DCR, authorize (PKCE), token, and revoke. ApiTokens gain
+    a proxy:access scope for the same Bearer path. Depends on
+    python3-authlib.
   * Monitoring: new token-protected GET /health/servers runs a real MCP
     handshake (initialize + tools/list) against every enabled server and
     reports per-server status, so a crashed backend (200 OK, empty tool

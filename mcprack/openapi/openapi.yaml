@@ -114,7 +114,8 @@ paths:
                   description: >
                     Optional scope restriction. Known scopes: profile:read,
                     tokens:manage, servers:read, selections:manage,
-                    overrides:manage, config:read, admin:read, admin:write.
+                    overrides:manage, config:read, proxy:access, admin:read,
+                    admin:write.
                     An omitted/empty list or "*" means unrestricted. A scoped
                     bearer token can only create tokens whose scopes are a
                     subset of its own, and which do not outlive it.
