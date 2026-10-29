@@ -19,9 +19,11 @@ Exit status is 0 only when every step succeeded, so this is safe to use
 from monitoring or a smoke test. Deliberately stdlib-only: it has to run
 on a plain mcprack host with no extra packages installed.
 
-Proxy URLs embed a signed access token in their path, so the token is
-redacted in all output - the whole point is to be able to paste probe
-output into a bug report or chat without leaking credentials.
+Default proxy URLs embed a signed access token in their path; that segment
+is redacted in all output so probe results can be pasted into a bug report.
+With OAUTH_ENABLED the downloaded config is tokenless (/proxy/mcp/<id>) and
+expects Authorization: Bearer — this probe does not send a Bearer header,
+so use a path-token URL (still valid) when diagnosing those installs.
 """
 
 import argparse
@@ -117,10 +119,10 @@ def main():
 
 URL is a per-user proxy URL from a downloaded client config
 (/view/claude, /view/copilot), e.g.
-https://mcprack.example.com/proxy/mcp/<token>/7 - it already carries that
-user's signed token, so the probe exercises their credentials and
-permissions. The token is redacted from all output. Exit status is 0 only
-if every step succeeded.
+https://mcprack.example.com/proxy/mcp/<token>/7 - the path token is
+redacted from all output. With OAUTH_ENABLED prefer a path-token URL for
+probing (tokenless /proxy/mcp/<id> needs Authorization: Bearer, which this
+tool does not send). Exit status is 0 only if every step succeeded.
 """,
     )
     parser.add_argument("url", help="MCP endpoint URL")

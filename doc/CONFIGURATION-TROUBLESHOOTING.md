@@ -31,8 +31,12 @@ Refusing to start: SECRET_KEY is unset or still the insecure default
 ### Root Cause
 The SECRET_KEY configuration is missing or not properly set in `/etc/mcprack/env`. This key is critical for:
 - Signing Flask sessions
-- Protecting per-user proxy tokens
+- Signing per-user proxy path tokens (`/proxy/mcp/<token>/<server_id>`)
 - Production security
+
+(When `OAUTH_ENABLED=true`, MCP clients can instead use Bearer tokens from
+mcprack's Authorization Server; those do not depend on the path-token
+signer, but sessions and remaining path-token URLs still do.)
 
 ### Solution (Automated)
 
@@ -278,6 +282,35 @@ sudo chmod 0600 /var/lib/mcprack/mcprack.db 2>/dev/null || true
 ### "Failed to connect to Vaultwarden"
 → Verify VAULTWARDEN_URL and VAULTWARDEN_ADMIN_TOKEN in `/etc/mcprack/env`
 → Test: `curl -H "Authorization: Bearer <token>" https://vault.example.com/admin/users`
+
+---
+
+## MCP OAuth (optional)
+
+### Symptom: `insecure_transport` / "OAuth 2 MUST utilize https"
+
+authlib refuses authorize/token over plain HTTP. Terminate TLS at the reverse
+proxy (and set `X-Forwarded-Proto: https`), or for a lab-only HTTP install set
+`OAUTH_ALLOW_INSECURE_TRANSPORT=true`. Never enable that on the public internet.
+
+### Symptom: clients discover the wrong issuer / redirect host
+
+Set `PUBLIC_BASE_URL` to the exact origin clients use (e.g.
+`https://mcprack.example.com`). It is the OAuth issuer in
+`/.well-known/oauth-authorization-server` and Protected Resource Metadata.
+
+### Symptom: tokenless `/proxy/mcp/<id>` returns 404
+
+`OAUTH_ENABLED` is off (default). Path-token URLs
+(`/proxy/mcp/<token>/<id>`) still work. Enable OAuth and restart to expose
+the tokenless route and discovery endpoints.
+
+### Symptom: `401` with `WWW-Authenticate: Bearer … resource_metadata=…`
+
+Expected for an unauthenticated call when OAuth is on — the client should
+complete discovery + authorize. For scripts, send
+`Authorization: Bearer` with an OAuth access token or an ApiToken that has
+the `proxy:access` scope (or is unrestricted).
 
 ---
 

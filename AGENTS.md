@@ -25,8 +25,15 @@ AI client (Claude / Copilot / …)
 
 With `OAUTH_ENABLED`, mcprack also serves MCP Authorization Spec discovery
 (`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`)
-plus `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`.
-Path-token URLs remain valid either way.
+plus `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`
+(see `mcprack/oauth.py`). Path-token URLs remain valid either way.
+
+| Env | Default | Role |
+|---|---|---|
+| `OAUTH_ENABLED` | `false` | Turn on AS + tokenless `/proxy/mcp/<id>` |
+| `PUBLIC_BASE_URL` | empty | Issuer / absolute URLs (required for OAuth metadata + CLI configs) |
+| `OAUTH_ACCESS_TOKEN_EXPIRES` | `3600` | Access-token lifetime (seconds) |
+| `OAUTH_ALLOW_INSECURE_TRANSPORT` | `false` | Allow http:// authorize/token (lab only) |
 
 Config download (`/download/<client>`, `/view/<client>`) always fills
 `url` with the per-user relay (tokenless when OAuth is on).

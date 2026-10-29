@@ -140,7 +140,11 @@ Every command and subcommand accepts
 .TP
 .I /etc/mcprack/env
 Runtime configuration (database URI, secret key, Vaultwarden/LDAP
-settings). Sourced before running
+settings, optional
+.BR OAUTH_ENABLED
+for MCP client Bearer auth on
+.IR /proxy/mcp/<server_id> ).
+Sourced before running
 .B mcprack
 as the
 .B mcprack

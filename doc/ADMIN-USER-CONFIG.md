@@ -42,7 +42,10 @@ consistent and either can be scripted or clicked through interchangeably.
 3. If this particular user needs a personal API key/token for one of the
    servers, set their individual credentials for just that server.
 4. Hand them their config file, or point their MCP client at the config
-   URL — they never need to log in.
+   URL — they never need to log in. (If the instance has
+   `OAUTH_ENABLED=true`, downloaded configs use `/proxy/mcp/<server_id>`
+   and the client will open a browser login/consent the first time it
+   connects; path-token configs remain available if you leave OAuth off.)
 
 ## Web UI
 
@@ -138,4 +141,7 @@ PUBLIC_BASE_URL=https://mcprack.example.com
 
 Without it, the command fails with a clear error instead of producing a
 config with a broken URL. Servers with a real `http`/`sse` URL of their
-own don't need this at all.
+own don't need this at all for the CLI — but when `OAUTH_ENABLED=true`,
+set `PUBLIC_BASE_URL` anyway: it is also the OAuth issuer advertised in
+`/.well-known/oauth-authorization-server` and Protected Resource Metadata,
+so clients must see the same origin they will call.

@@ -15,8 +15,9 @@ same host.
 ## Setup
 
 1. Provide an `env` file here with mcprack's usual `/etc/mcprack/env`
-   variables (see main `README.md` / `debian/README.Debian`) — for a demo
-   instance this normally means `DEMO_MODE=true` and no real Vaultwarden
+   variables (see main `README.md` / `debian/README.Debian`, including
+   optional `OAUTH_ENABLED` / `PUBLIC_BASE_URL`) — for a demo instance
+   this normally means `DEMO_MODE=true` and no real Vaultwarden
    credentials.
 2. `docker compose build && docker compose up -d`
 3. Point the host's existing reverse proxy (Apache/nginx) at

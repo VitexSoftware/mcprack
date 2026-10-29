@@ -49,8 +49,9 @@
   <text x="430" y="450" text-anchor="middle" class="bullet" fill="#ea580c">user downloads config</text>
 
   <!-- Network entry -->
-  <rect x="230" y="495" width="400" height="45" class="box proxy-box"/>
-  <text x="430" y="522" text-anchor="middle" class="bullet" fill="#0891b2">network entry: /proxy/mcp/&lt;token&gt;/&lt;server_id&gt;</text>
+  <rect x="200" y="490" width="460" height="55" class="box proxy-box"/>
+  <text x="430" y="512" text-anchor="middle" class="bullet" fill="#0891b2">network entry: /proxy/mcp/&lt;token&gt;/&lt;server_id&gt;</text>
+  <text x="430" y="530" text-anchor="middle" class="bullet" fill="#0891b2" font-size="11">or /proxy/mcp/&lt;server_id&gt; + Bearer (OAUTH_ENABLED)</text>
 
   <!-- Spawn instance -->
   <rect x="180" y="565" width="500" height="45" class="box app-box"/>

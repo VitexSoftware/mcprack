@@ -84,8 +84,11 @@ otherwise, so it can't leak a real password into browser history or access
 logs.
 
 See also the "Security considerations for public-internet deployments"
-section in the main README for known limitations (proxy-token revocation,
+section in the main README for known limitations (path-token revocation,
 admin-account compromise) that aren't fully closed by configuration alone.
+Internet-facing installs should prefer `OAUTH_ENABLED=true` (below) so
+proxy credentials are revocable Bearer tokens instead of signed URL path
+secrets.
 
 ### Authentication (optional, LDAP disabled by default)
 
@@ -213,6 +216,38 @@ even though the registered command is fine, the fresh interpreter + import
 cost is likely just exceeding `MCP_PROXY_HANDSHAKE_TIMEOUT` — raise it (and
 `MCP_PROXY_LOCK_WAIT_TIMEOUT` along with it, keeping both comfortably under
 gunicorn's own 30s worker timeout in `debian/mcprack.service`).
+
+### Optional MCP OAuth (off by default)
+
+When enabled, downloaded configs use the stable `/proxy/mcp/<server_id>`
+URL and MCP clients authenticate with `Authorization: Bearer` after the
+standard MCP Authorization Spec discovery + OAuth dance. Path-token URLs
+remain valid.
+
+    OAUTH_ENABLED=true
+    PUBLIC_BASE_URL=https://mcprack.example.com
+    # OAUTH_ACCESS_TOKEN_EXPIRES=3600
+    # OAUTH_ALLOW_INSECURE_TRANSPORT=true   # plain-HTTP lab only
+
+Requires `python3-authlib` (Depends) and HTTPS in production (authlib
+refuses non-HTTPS authorize/token URLs unless
+`OAUTH_ALLOW_INSECURE_TRANSPORT=true`). `PUBLIC_BASE_URL` is also used as
+the OAuth issuer in discovery metadata — set it to the origin clients
+actually reach. After enabling, restart `mcprack.service`; the
+`add_oauth_tables` migration runs via the usual postinst `db upgrade`.
+
+Endpoints served when enabled:
+
+    GET  /.well-known/oauth-authorization-server
+    GET  /.well-known/oauth-protected-resource
+    GET  /.well-known/oauth-protected-resource/proxy/mcp/<id>
+    POST /oauth/register
+    GET/POST /oauth/authorize
+    POST /oauth/token
+    POST /oauth/revoke
+    *    /proxy/mcp/<server_id>     # Bearer: OAuth access token or ApiToken with proxy:access
+
+See the main README "Optional MCP OAuth" section for the full client flow.
 
 
 ## OpenTelemetry (optional — packaging gap on Debian, read before enabling)

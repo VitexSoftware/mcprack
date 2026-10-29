@@ -75,6 +75,11 @@ A logged-in local user can change their own password from the user menu
 ("Change Password"). LDAP-authenticated users can't — their password is
 managed by the directory, not mcprack.
 
+MCP *clients* talking to the proxy are separate from this web login: by
+default they use a signed path token in `/proxy/mcp/<token>/<id>`; with
+`OAUTH_ENABLED=true` they use Bearer tokens via the MCP Authorization Spec
+flow (see [Optional MCP OAuth](#optional-mcp-oauth)).
+
 ### Forgot-password email
 
 The "Forgot your password?" link on the login page only works if outbound
@@ -117,12 +122,15 @@ and a sample TLS-terminating reverse proxy — see `debian/README.Debian`'s
 "Exposing mcprack to the public internet" section for the concrete
 configuration. Two risks remain that configuration alone doesn't close:
 
-- **Proxy token revocation**: the per-user MCP proxy URLs handed to clients
-  (`catalog.py`'s `_make_proxy_token`) are signed, time-limited bearer
-  tokens (24h) with no revocation list — a leaked token (e.g. a shared
-  config file) stays valid until it expires or an admin manually stops that
-  proxy instance from Admin → Proxy instances. Treat a downloaded client
-  config file as a credential.
+- **Proxy path-token revocation**: the default per-user MCP proxy URLs
+  (`/proxy/mcp/<token>/<server_id>`, minted by `catalog.py`'s
+  `_make_proxy_token`) are signed bearers with **no revocation list**. By
+  default they never expire (`PROXY_TOKEN_MAX_AGE_SECONDS` empty); a leaked
+  config stays valid until the user's config is regenerated or `SECRET_KEY`
+  rotates (or an admin stops that proxy instance from Admin → Proxy
+  instances). Treat a downloaded client config as a credential. Prefer
+  [Optional MCP OAuth](#optional-mcp-oauth) on internet-facing installs —
+  OAuth access tokens and ApiTokens are revocable.
 - **Admin account compromise = code execution**: a registered MCP server's
   `command` runs as-is (see Demo mode above) as the `mcprack` OS account, so
   a compromised admin account is equivalent to arbitrary code execution as
@@ -132,9 +140,9 @@ configuration. Two risks remain that configuration alone doesn't close:
   the containment boundary — it isn't a full per-command sandbox.
 
 **Optional MCP OAuth** (off by default): set `OAUTH_ENABLED=true` to expose
-a built-in OAuth 2.1 Authorization Server so MCP clients can authenticate
-with `Authorization: Bearer` against the stable `/proxy/mcp/<server_id>`
-URL instead of embedding a signed path token. See
+a built-in OAuth 2.1 Authorization Server so MCP clients authenticate with
+`Authorization: Bearer` against the stable `/proxy/mcp/<server_id>` URL
+instead of embedding a signed path token. See
 [Optional MCP OAuth](#optional-mcp-oauth) below. (Web-UI SSO / OIDC login
 for humans is still a separate future improvement.)
 
@@ -146,6 +154,7 @@ for humans is still a separate future improvement.)
 - **Client sync utilities** — Companion packages `mcprack-sync-claude`, `mcprack-sync-cursor`, and `mcprack-sync-vscode` pull `/api/v1/me/config/<client>` with a personal API token and keep the local IDE/desktop config files up to date (optional systemd user timers)
 - **Admin config hand-off** — Admins can view and download any user's client config from Admin → Users, for users who never log into the web UI themselves
 - **Per-user proxy** — Every user connects remotely; stdio servers are spawned on demand, one isolated instance per (user, server) pair, with credentials resolved at spawn time — never embedded in a downloaded config
+- **Optional MCP OAuth** — When `OAUTH_ENABLED=true`, clients use `/proxy/mcp/<server_id>` with a Bearer token (OAuth access token or ApiToken `proxy:access`) instead of a signed path secret; discovery + DCR + PKCE included
 - **Vaultwarden integration** — Leverages the same `bw-cli` / Secure Note pattern used by the `mcp_rack` Ansible role
 - **Works without Vaultwarden too** — If it's not configured, sensitive values fall back to a local Fernet-encrypted column instead; admins can migrate between the two deliberately from Admin → Vaultwarden diagnostics
 - **LDAP/AD support** — Optional directory authentication for enterprise deployments
@@ -153,11 +162,11 @@ for humans is still a separate future improvement.)
 
 ## Architecture
 
-![mcprack architecture](static/mcprack-architecture.svg?raw=true)
+![mcprack architecture](mcprack/static/mcprack-architecture.svg?raw=true)
 
 **Components:**
-- **Flask App**: Core web service, handles auth, server management, config generation, and the per-user proxy
-- **Database**: Server registry, users, selections, and non-secret server config (SQLite, PostgreSQL, or MySQL)
+- **Flask App**: Core web service, handles auth, server management, config generation, and the per-user proxy (plus the optional MCP OAuth Authorization Server)
+- **Database**: Server registry, users, selections, non-secret server config, and (when OAuth is used) OAuth clients / codes / tokens (SQLite, PostgreSQL, or MySQL)
 - **Vaultwarden**: Stores sensitive credentials only, when configured — see `secret_store.py`
 - **Local encrypted fallback**: Used instead of Vaultwarden when it isn't configured; never both at once for the same value
 
@@ -184,10 +193,6 @@ for humans is still a separate future improvement.)
 - Some users prefer Claude Desktop, others use GitHub Copilot
 - Different clients have different config formats
 - Solution: mcprack generates client-specific configs automatically
-
-## Authentication
-
-**Local accounts** are always available. **LDAP/Active Directory** is optional and disabled by default — enable it during installation if you want users to authenticate with AD credentials instead.
 
 ## Quick start (development)
 
@@ -789,8 +794,10 @@ post-install configuration steps.
 Users always connect remotely — mcprack never assumes a user's Claude/Copilot
 client runs on the same machine as mcprack itself. So a stdio server is never
 handed to a client as a raw local spawn command: the downloaded config always
-points at a per-user proxy URL (`/proxy/mcp/<token>/<server_id>`), served by
-`mcprack.service` itself — no separate proxy service to install or enable.
+points at a per-user proxy URL (`/proxy/mcp/<token>/<server_id>` by default,
+or `/proxy/mcp/<server_id>` when [Optional MCP OAuth](#optional-mcp-oauth) is
+on), served by `mcprack.service` itself — no separate proxy service to
+install or enable.
 
 The first time a user's client connects to that URL, mcprack spawns a
 dedicated `fastmcp` subprocess for that (user, server) pair on demand,
@@ -831,28 +838,51 @@ it stays valid before the proxy starts rejecting it with `403`:
 
 ### Optional MCP OAuth
 
-Set `OAUTH_ENABLED=true` in `/etc/mcprack/env` (and restart) to let MCP
-clients skip the path token entirely:
+Set `OAUTH_ENABLED=true` in `/etc/mcprack/env`, set `PUBLIC_BASE_URL` to the
+externally-reachable origin, run migrations if needed, and restart:
 
-1. Config download / connector copy then emit `/proxy/mcp/<server_id>`
-   (no signed segment).
+```bash
+# /etc/mcprack/env
+OAUTH_ENABLED=true
+PUBLIC_BASE_URL=https://mcprack.example.com
+# OAUTH_ACCESS_TOKEN_EXPIRES=3600          # seconds (default 1h)
+# OAUTH_REFRESH_TOKEN_EXPIRES=2592000      # seconds (default 30d; stored for refresh)
+# OAUTH_ALLOW_INSECURE_TRANSPORT=true      # lab HTTP only — never on the public internet
+
+sudo systemctl restart mcprack
+```
+
+That turns on a built-in OAuth 2.1 Authorization Server so MCP clients can
+skip the path token:
+
+| Endpoint | Role |
+|---|---|
+| `GET /.well-known/oauth-protected-resource` | RFC9728 Protected Resource Metadata |
+| `GET /.well-known/oauth-protected-resource/proxy/mcp/<id>` | Per-server resource metadata |
+| `GET /.well-known/oauth-authorization-server` | RFC8414 AS metadata |
+| `POST /oauth/register` | RFC7591 Dynamic Client Registration (open) |
+| `GET/POST /oauth/authorize` | Authorization-code + PKCE (S256); user logs in and consents |
+| `POST /oauth/token` | Access + refresh tokens (`scope=mcp`) |
+| `POST /oauth/revoke` | Token revocation |
+| `GET/POST/DELETE /proxy/mcp/<server_id>` | Tokenless MCP relay (Bearer required) |
+
+Flow:
+
+1. Config download / connector copy emit `/proxy/mcp/<server_id>` (no signed
+   segment).
 2. An unauthenticated call gets `401` with
    `WWW-Authenticate: Bearer … resource_metadata="…/.well-known/oauth-protected-resource/…"`.
-3. The client discovers this AS (`/.well-known/oauth-authorization-server`),
-   optionally registers via `/oauth/register` (RFC7591 DCR), and completes
-   the authorization-code + PKCE flow at `/oauth/authorize` (user logs in
-   and consents).
+3. The client discovers the AS, optionally registers via `/oauth/register`,
+   and completes the authorization-code + PKCE flow at `/oauth/authorize`.
 4. Subsequent MCP requests send `Authorization: Bearer <access_token>`.
 
 Personal API tokens with the `proxy:access` scope (or unrestricted tokens)
 also work as Bearer credentials on the tokenless URL — useful for scripts
 that already hold an `mcpk_…` token. Path-token URLs keep working either
-way.
+way, so existing configs do not break when you flip the flag.
 
-Requires HTTPS in production (authlib enforces it). For a plain-HTTP lab
-only, set `OAUTH_ALLOW_INSECURE_TRANSPORT=true`. Also set `PUBLIC_BASE_URL`
-to the externally-reachable origin so discovery metadata advertises the
-correct issuer.
+Requires HTTPS in production (authlib enforces it). `PUBLIC_BASE_URL` must
+match what clients see, or discovery metadata advertises the wrong issuer.
 
 Separately from those two, each *already-established* request forwarded to a
 running proxy instance has a fixed 10s ceiling (`_PROXY_REQUEST_TIMEOUT` in
@@ -891,11 +921,14 @@ mcprack-mcp-probe --method resources/list URL
 ```
 
 Take the URL straight from a downloaded client config (`/view/claude`,
-`/view/copilot`): it already carries that user's signed token, so the probe
-exercises exactly what that user's client would do, with their credentials
-and permissions.
+`/view/copilot`). With the default path-token configs the URL already
+carries that user's signed token, so the probe exercises exactly what that
+user's client would do. When OAuth is enabled, downloaded configs are
+tokenless (`/proxy/mcp/<id>`) — mint a path-token URL from Admin → Users →
+Config while testing, or temporarily turn OAuth off for the probe; the
+probe does not yet send `Authorization: Bearer`.
 
-The token embedded in the URL is redacted from all output, so probe results
+Any path-token segment is redacted from all output, so probe results
 can be pasted into a bug report as-is. Exit status is `0` only when every
 step succeeded, so it also works as a smoke test from monitoring or CI. It's
 stdlib-only, so it runs on any mcprack host with nothing extra installed.

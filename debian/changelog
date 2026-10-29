@@ -5,7 +5,8 @@ mcprack (1.5.9-1) UNRELEASED; urgency=medium
     Bearer instead of a signed path token. Serves RFC9728 / RFC8414
     discovery, DCR, authorize (PKCE), token, and revoke. ApiTokens gain
     a proxy:access scope for the same Bearer path. Depends on
-    python3-authlib.
+    python3-authlib. Documented in README, debian/README.Debian,
+    AGENTS.md, man page, .env.example, and troubleshooting.
   * Monitoring: new token-protected GET /health/servers runs a real MCP
     handshake (initialize + tools/list) against every enabled server and
     reports per-server status, so a crashed backend (200 OK, empty tool
