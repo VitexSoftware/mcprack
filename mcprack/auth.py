@@ -30,12 +30,18 @@ def _safe_next_url(fallback=None):
     candidate = (request.values.get("next") or request.args.get("next") or "").strip()
     if not candidate:
         return fallback
+    # Browsers drop tab/CR/LF from URLs, so "/\t/evil.example" would become
+    # "//evil.example"; reject any control character or whitespace outright.
+    if any(ord(c) < 0x21 or c == "\x7f" for c in candidate):
+        return fallback
     # Protocol-relative and schemeless host tricks: //evil.example
     if candidate.startswith("//") or "\\" in candidate:
         return fallback
-    if candidate.startswith("/"):
-        return candidate
     parsed = urlparse(candidate)
+    if candidate.startswith("/"):
+        if not parsed.scheme and not parsed.netloc:
+            return candidate
+        return fallback
     if parsed.scheme in ("http", "https") and parsed.netloc == request.host:
         return candidate
     return fallback

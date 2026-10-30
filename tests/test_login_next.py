@@ -57,6 +57,22 @@ def test_login_rejects_protocol_relative_next(app, client):
     assert "evil.example" not in resp.headers["Location"]
 
 
+def test_login_rejects_control_char_next(app, client):
+    """Browsers strip tab/CR/LF, so "/\t/evil.example" must not be honored."""
+    with app.app_context():
+        _make_user()
+
+    for bad in ("/\t/evil.example/x", "/\n/evil.example/x", "/\r/evil.example/x", " /\t/evil.example"):
+        resp = client.post(
+            "/login",
+            data={"username": "alice", "password": "secret", "next": bad},
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303)
+        assert "evil.example" not in resp.headers["Location"]
+        client.get("/logout")
+
+
 def test_login_form_preserves_next_query(client):
     resp = client.get("/login?next=%2Foauth%2Fauthorize%3Fclient_id%3Dx")
     assert resp.status_code == 200
