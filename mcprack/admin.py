@@ -137,11 +137,14 @@ def _compute_server_health(servers):
         # the page.
         try:
             with vaultwarden.session() as sess:
+                # One `bw list items` round trip for every server, instead of a
+                # `bw get notes` (several seconds each) per server: with six or
+                # more secret-bearing servers the per-server loop outlasted the
+                # 30 s gunicorn worker timeout and the page returned HTTP 500.
+                vault_notes = vaultwarden.list_notes(sess)
                 for server in needing_secrets:
-                    try:
-                        vault_values = vaultwarden.get_notes(sess, server.vault_item)
-                    except vaultwarden.VaultwardenError:
-                        vault_values = {}
+                    entry = vault_notes.get(server.vault_item)
+                    vault_values = vaultwarden.parse_notes(entry[1]) if entry else {}
                     health_by_id[server.id]["missing_credentials"] = vaultwarden.missing_credential_keys(
                         server, vault_values
                     )

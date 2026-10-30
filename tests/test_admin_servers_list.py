@@ -35,7 +35,7 @@ def test_servers_list_flags_missing_credentials_and_unreachable(app, client):
 
     with patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
          patch("mcprack.admin.vaultwarden.lock"), \
-         patch("mcprack.admin.vaultwarden.get_notes", return_value={}), \
+         patch("mcprack.admin.vaultwarden.list_notes", return_value={}), \
          patch("mcprack.admin.health.check_reachable", side_effect=lambda s: s.name == "healthy-stdio"):
         resp = client.get("/admin/servers")
 
@@ -440,9 +440,39 @@ def test_servers_list_uses_default_vault_item_when_name_unset(app, client):
     with patch("mcprack.admin._health_cache_time", None), \
          patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
          patch("mcprack.admin.vaultwarden.lock"), \
-         patch("mcprack.admin.vaultwarden.get_notes", return_value={}) as get_notes, \
+         patch("mcprack.admin.vaultwarden.list_notes",
+               return_value={"MCP-no-item-name": ("item-id", "SOME_API_KEY=secret")}), \
          patch("mcprack.admin.health.check_reachable", return_value=True):
         resp = client.get("/admin/servers")
 
     assert resp.status_code == 200
-    assert get_notes.call_args.args[1] == "MCP-no-item-name"
+    assert b"missing: SOME_API_KEY" not in resp.data
+
+
+def test_servers_list_makes_one_vault_round_trip_for_many_servers(app, client):
+    """Per-server `bw get notes` calls (several seconds each) outlasted the 30 s
+    gunicorn worker timeout once six servers declared secrets; the listing must
+    resolve them all with a single list_notes() call."""
+    _login_admin(client)
+
+    with app.app_context():
+        for i in range(6):
+            server = McpServer(
+                name=f"srv-{i}", label=f"Srv {i}", transport="stdio",
+                command="/bin/true", enabled=True,
+            )
+            server.env_var_names = ["TOKEN"]
+            db.session.add(server)
+        db.session.commit()
+
+    with patch("mcprack.admin._health_cache_time", None), \
+         patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.list_notes", return_value={}) as list_notes, \
+         patch("mcprack.admin.vaultwarden.get_notes") as get_notes, \
+         patch("mcprack.admin.health.check_reachable", return_value=True):
+        resp = client.get("/admin/servers")
+
+    assert resp.status_code == 200
+    assert list_notes.call_count == 1
+    get_notes.assert_not_called()
