@@ -417,3 +417,32 @@ def test_server_create_rejects_http_without_url(app, client):
     )
     assert resp.status_code == 200
     assert b"http transport requires a network URL" in resp.data
+
+
+def test_servers_list_uses_default_vault_item_when_name_unset(app, client):
+    """A server that declares secret keys but has no vaultwarden_item_name must
+    be looked up under the default 'MCP-<name>' item, never with None (which
+    made the whole /admin/servers page return HTTP 500)."""
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="no-item-name", label="No Item Name", transport="stdio",
+            command="/bin/true", enabled=True,
+        )
+        server.env_var_names = ["SOME_API_KEY"]
+        assert server.vaultwarden_item_name is None
+        db.session.add(server)
+        db.session.commit()
+
+    # _compute_server_health memoizes per server-id tuple at module level; drop a
+    # result cached by an earlier test so this request really queries the vault.
+    with patch("mcprack.admin._health_cache_time", None), \
+         patch("mcprack.admin.vaultwarden.unlock", return_value="sess"), \
+         patch("mcprack.admin.vaultwarden.lock"), \
+         patch("mcprack.admin.vaultwarden.get_notes", return_value={}) as get_notes, \
+         patch("mcprack.admin.health.check_reachable", return_value=True):
+        resp = client.get("/admin/servers")
+
+    assert resp.status_code == 200
+    assert get_notes.call_args.args[1] == "MCP-no-item-name"

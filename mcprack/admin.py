@@ -139,7 +139,7 @@ def _compute_server_health(servers):
             with vaultwarden.session() as sess:
                 for server in needing_secrets:
                     try:
-                        vault_values = vaultwarden.get_notes(sess, server.vaultwarden_item_name)
+                        vault_values = vaultwarden.get_notes(sess, server.vault_item)
                     except vaultwarden.VaultwardenError:
                         vault_values = {}
                     health_by_id[server.id]["missing_credentials"] = vaultwarden.missing_credential_keys(
