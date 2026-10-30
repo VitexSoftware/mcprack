@@ -1023,6 +1023,25 @@ def otel_wizard():
     return render_template("admin/otel_wizard.html", state=state)
 
 
+@bp.route("/oauth/wizard")
+@admin_required
+def oauth_wizard():
+    """Read-only status for the optional MCP OAuth Authorization Server."""
+    from flask import current_app, request
+
+    enabled = bool(current_app.config.get("OAUTH_ENABLED"))
+    public_base = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
+    issuer = public_base or request.url_root.rstrip("/")
+    state = {
+        "enabled": enabled,
+        "public_base_url": public_base,
+        "insecure_transport": bool(current_app.config.get("OAUTH_ALLOW_INSECURE_TRANSPORT")),
+        "as_metadata_url": f"{issuer}/.well-known/oauth-authorization-server",
+        "prm_url": f"{issuer}/.well-known/oauth-protected-resource",
+    }
+    return render_template("admin/oauth_wizard.html", state=state)
+
+
 @bp.route("/otel/wizard/test", methods=["POST"])
 @admin_required
 def otel_wizard_test():

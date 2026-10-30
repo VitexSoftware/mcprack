@@ -2,32 +2,40 @@
 {% block title %}{{ _('Authorize application') }} — mcprack{% endblock %}
 {% block content %}
 
-<div class="auth-card">
+<div class="auth-card auth-card-wide">
   <div class="auth-card-header">
     <h1 class="mb-md">{{ _('Authorize application') }}</h1>
     <p class="text-muted">
-      {{ _('An MCP client is asking to access your selected servers through mcprack.') }}
+      {{ _('An MCP client wants to use your selected servers through mcprack. Only allow clients you trust.') }}
     </p>
   </div>
 
   <div class="form-card p-lg">
     <p>
-      <strong>{{ client.client_name or client.client_id }}</strong>
-      {{ _('wants permission to use your MCP proxy as') }}
+      <strong>{{ client.client_name or _('Unknown client') }}</strong>
+      {{ _('will connect as') }}
       <code>{{ current_user.username }}</code>.
     </p>
-    {% if scopes %}
-    <p class="text-muted mt-md">{{ _('Requested scopes:') }}
-      {% for scope in scopes %}<code>{{ scope }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
-    </p>
-    {% endif %}
+
+    <ul class="consent-details text-muted mt-md">
+      <li>{{ _('Access is limited to MCP servers you have selected in the catalog.') }}</li>
+      <li>{{ _('Backend credentials stay on the server — they are never sent to the client.') }}</li>
+      {% if scopes %}
+      <li>{{ _('Requested scopes:') }}
+        {% for scope in scopes %}<code>{{ scope }}</code>{% if not loop.last %}, {% endif %}{% endfor %}
+      </li>
+      {% endif %}
+      {% if client.client_id %}
+      <li>{{ _('Client id:') }} <code class="text-xs">{{ client.client_id }}</code></li>
+      {% endif %}
+    </ul>
 
     <form method="post" class="mt-lg">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" name="confirm" value="yes" class="btn btn-primary w-full">
         {{ _('Allow') }}
       </button>
-      <button type="submit" name="confirm" value="no" class="btn w-full mt-md">
+      <button type="submit" name="confirm" value="no" class="btn btn-secondary w-full">
         {{ _('Deny') }}
       </button>
     </form>

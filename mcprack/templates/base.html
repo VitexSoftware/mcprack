@@ -58,6 +58,7 @@
                 <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">{{ _('Proxy Instances') }}</a>
                 <a href="{{ url_for('admin.audit_log') }}" class="header-user-menu-item">{{ _('Audit Log') }}</a>
                 <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">{{ _('Vaultwarden Setup') }}</a>
+                <a href="{{ url_for('admin.oauth_wizard') }}" class="header-user-menu-item">{{ _('OAuth Diagnostics') }}</a>
                 <a href="{{ url_for('admin.otel_wizard') }}" class="header-user-menu-item">{{ _('OTEL Diagnostics') }}</a>
               {% endif %}
               {% if current_user.auth_type == 'local' %}

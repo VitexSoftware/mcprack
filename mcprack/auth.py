@@ -1,4 +1,5 @@
 from functools import wraps
+from urllib.parse import urlparse
 
 import ldap3
 from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
@@ -15,6 +16,29 @@ from .models import User
 bp = Blueprint("auth", __name__)
 
 _RESET_TOKEN_SALT = "password-reset"
+
+
+def _safe_next_url(fallback=None):
+    """Return a same-host next URL from the request, or `fallback`
+    (default: catalog). Honors Flask-Login's ``?next=`` (e.g. returning to
+    ``/oauth/authorize?...`` after login) without allowing open redirects.
+
+    Accepts relative paths starting with a single ``/`` (not ``//``) or
+    absolute http(s) URLs whose host matches ``request.host``."""
+    if fallback is None:
+        fallback = url_for("catalog.index")
+    candidate = (request.values.get("next") or request.args.get("next") or "").strip()
+    if not candidate:
+        return fallback
+    # Protocol-relative and schemeless host tricks: //evil.example
+    if candidate.startswith("//") or "\\" in candidate:
+        return fallback
+    if candidate.startswith("/"):
+        return candidate
+    parsed = urlparse(candidate)
+    if parsed.scheme in ("http", "https") and parsed.netloc == request.host:
+        return candidate
+    return fallback
 
 # Applied to both self-service change and email-reset completion — a
 # password this short isn't worth generating a reset link for.
@@ -110,8 +134,10 @@ def _ldap_authenticate(username, password):
 @bp.route("/login", methods=["GET", "POST"])
 @limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
 def login():
+    next_url = _safe_next_url()
+
     if current_user.is_authenticated:
-        return redirect(url_for("catalog.index"))
+        return redirect(next_url)
 
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -123,7 +149,7 @@ def login():
             if user.check_password(password) and user.is_active:
                 login_user(user)
                 audit.log_audit_event("login", "success", user=user)
-                return redirect(url_for("catalog.index"))
+                return redirect(next_url)
             audit.log_audit_event(
                 "login_failed",
                 "error",
@@ -131,7 +157,7 @@ def login():
                 error_message=f"local auth failed for '{username}'",
             )
             flash(_("Invalid username or password."), "error")
-            return render_template("login.html")
+            return render_template("login.html", next=next_url)
 
         if current_app.config["LDAP_ENABLED"]:
             attrs = _ldap_authenticate(username, password)
@@ -151,10 +177,10 @@ def login():
                     "login_failed", "error", user=user, error_message="account deactivated"
                 )
                 flash(_("This account has been deactivated."), "error")
-                return render_template("login.html")
+                return render_template("login.html", next=next_url)
             login_user(user)
             audit.log_audit_event("login", "success", user=user)
-            return redirect(url_for("catalog.index"))
+            return redirect(next_url)
 
         audit.log_audit_event(
             "login_failed",
@@ -163,7 +189,7 @@ def login():
             error_message=f"invalid credentials for '{username}'",
         )
         flash(_("Invalid username or password."), "error")
-        return render_template("login.html")
+        return render_template("login.html", next=next_url)
 
     # The GET query-param prefill only exists for the public demo link
     # (README's "Demo mode" section) - honoring it outside DEMO_MODE would
@@ -183,6 +209,7 @@ def login():
         "login.html",
         prefill_username=prefill_username,
         prefill_password=prefill_password,
+        next=next_url,
     )
 
 

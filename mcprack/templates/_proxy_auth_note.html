@@ -1,0 +1,18 @@
+{# Explains whether downloaded/copied relay URLs embed a path token or
+   expect OAuth Bearer auth. Included on catalog + config view pages. #}
+{% if config.OAUTH_ENABLED %}
+<div class="note-box mt-md mb-md">
+  <p class="m-0">
+    {{ _('MCP OAuth is enabled: relay URLs look like <code>/proxy/mcp/&lt;id&gt;</code> with no secret in the path. Your client will open a browser login the first time it connects.') }}
+  </p>
+  <p class="m-0 text-xs text-muted mt-sm">
+    {{ _('Signed path-token URLs still work if you need them (e.g. for <code>mcprack-mcp-probe</code>).') }}
+  </p>
+</div>
+{% else %}
+<div class="note-box mt-md mb-md">
+  <p class="m-0 text-muted">
+    {{ _('Each relay URL embeds a personal access token — treat a downloaded or copied config like a password.') }}
+  </p>
+</div>
+{% endif %}

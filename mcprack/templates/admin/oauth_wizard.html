@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{{ _('OAuth diagnostics') }} — mcprack{% endblock %}
+{% block content %}
+<h1>{{ _('MCP OAuth diagnostics') }}</h1>
+<p>{{ _('Status of the optional MCP Authorization Server — see') }}
+<a href="https://github.com/VitexSoftware/mcprack#optional-mcp-oauth">{{ _('README "Optional MCP OAuth"') }}</a>
+{{ _('for how to configure this.') }}</p>
+
+<ol class="wizard">
+  <li class="wizard-step wizard-{{ 'ok' if state.enabled else 'skipped' }}">
+    <span class="wizard-icon">{% if state.enabled %}&#10003;{% else %}&#8213;{% endif %}</span>
+    <div class="wizard-body">
+      <div class="wizard-label">OAUTH_ENABLED</div>
+      <div class="wizard-detail">
+        {% if state.enabled %}
+          {{ _('Enabled — clients get tokenless <code>/proxy/mcp/&lt;id&gt;</code> URLs and authenticate with Bearer tokens.') }}
+        {% else %}
+          {{ _('Disabled — configs embed a signed path token. Set <code>OAUTH_ENABLED=true</code> in <code>/etc/mcprack/env</code> and restart to turn this on.') }}
+        {% endif %}
+      </div>
+    </div>
+  </li>
+
+  <li class="wizard-step wizard-{{ 'ok' if state.public_base_url else 'fail' if state.enabled else 'skipped' }}">
+    <span class="wizard-icon">{% if state.public_base_url %}&#10003;{% elif state.enabled %}&#10007;{% else %}&#8213;{% endif %}</span>
+    <div class="wizard-body">
+      <div class="wizard-label">PUBLIC_BASE_URL</div>
+      <div class="wizard-detail">
+        {% if state.public_base_url %}
+          <code>{{ state.public_base_url }}</code>
+          {{ _('— used as the OAuth issuer in discovery metadata.') }}
+        {% elif state.enabled %}
+          {{ _('Not set. Clients may discover the wrong issuer behind a reverse proxy — set this to the externally-reachable origin.') }}
+        {% else %}
+          {{ _('Not set (only required when OAuth is on, or for CLI config generation).') }}
+        {% endif %}
+      </div>
+    </div>
+  </li>
+
+  <li class="wizard-step wizard-{{ 'warn' if state.insecure_transport else 'ok' if state.enabled else 'skipped' }}">
+    <span class="wizard-icon">{% if state.insecure_transport %}&#9888;{% elif state.enabled %}&#10003;{% else %}&#8213;{% endif %}</span>
+    <div class="wizard-body">
+      <div class="wizard-label">OAUTH_ALLOW_INSECURE_TRANSPORT</div>
+      <div class="wizard-detail">
+        {% if state.insecure_transport %}
+          {{ _('On — authlib will accept plain HTTP authorize/token. Lab only; never on the public internet.') }}
+        {% else %}
+          {{ _('Off (default) — authorize/token require HTTPS.') }}
+        {% endif %}
+      </div>
+    </div>
+  </li>
+
+  {% if state.enabled %}
+  <li class="wizard-step wizard-ok">
+    <span class="wizard-icon">&#10003;</span>
+    <div class="wizard-body">
+      <div class="wizard-label">{{ _('Discovery') }}</div>
+      <div class="wizard-detail">
+        <a href="{{ state.as_metadata_url }}" target="_blank" rel="noopener noreferrer"><code>{{ state.as_metadata_url }}</code></a><br>
+        <a href="{{ state.prm_url }}" target="_blank" rel="noopener noreferrer"><code>{{ state.prm_url }}</code></a>
+      </div>
+    </div>
+  </li>
+  {% endif %}
+</ol>
+
+{% endblock %}

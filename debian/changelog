@@ -1,4 +1,4 @@
-mcprack (1.5.9-1) UNRELEASED; urgency=medium
+mcprack (1.5.9-1) unstable; urgency=medium
 
   * Optional MCP OAuth (OAUTH_ENABLED): built-in OAuth 2.1 Authorization
     Server so clients can use /proxy/mcp/<server_id> with Authorization:
@@ -7,6 +7,9 @@ mcprack (1.5.9-1) UNRELEASED; urgency=medium
     a proxy:access scope for the same Bearer path. Depends on
     python3-authlib. Documented in README, debian/README.Debian,
     AGENTS.md, man page, .env.example, and troubleshooting.
+  * UX: honor login ?next= (fixes OAuth authorize after login), richer
+    consent page, catalog/config notes for path-token vs OAuth mode, and
+    Admin → OAuth Diagnostics.
   * Monitoring: new token-protected GET /health/servers runs a real MCP
     handshake (initialize + tools/list) against every enabled server and
     reports per-server status, so a crashed backend (200 OK, empty tool

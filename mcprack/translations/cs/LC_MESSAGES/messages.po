@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-08-07 19:50+0200\n"
+"POT-Creation-Date: 2026-10-30 07:26+0100\n"
 "PO-Revision-Date: 2026-08-01 11:21+0000\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: cs <LL@li.org>\n"
@@ -18,42 +18,42 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: mcprack/auth.py:133 mcprack/auth.py:165
+#: mcprack/auth.py:159 mcprack/auth.py:191
 msgid "Invalid username or password."
 msgstr "Neplatné uživatelské jméno nebo heslo."
 
-#: mcprack/auth.py:153
+#: mcprack/auth.py:179
 msgid "This account has been deactivated."
 msgstr "Tento účet byl deaktivován."
 
-#: mcprack/auth.py:191
+#: mcprack/auth.py:227
 msgid ""
 "Your account is managed externally (LDAP) — its password can't be changed "
 "here."
 msgstr "Váš účet je spravován externě (LDAP) — jeho heslo zde nelze změnit."
 
-#: mcprack/auth.py:200
+#: mcprack/auth.py:236
 msgid "Current password is incorrect."
 msgstr "Aktuální heslo je nesprávné."
 
-#: mcprack/auth.py:202 mcprack/auth.py:271
+#: mcprack/auth.py:238 mcprack/auth.py:307
 #, python-format
 msgid "New password must be at least %(n)d characters."
 msgstr "Nové heslo musí mít alespoň %(n)d znaků."
 
-#: mcprack/auth.py:204 mcprack/auth.py:273
+#: mcprack/auth.py:240 mcprack/auth.py:309
 msgid "New password and confirmation don't match."
 msgstr "Nové heslo a jeho potvrzení se neshodují."
 
-#: mcprack/auth.py:211
+#: mcprack/auth.py:247
 msgid "Password changed."
 msgstr "Heslo bylo změněno."
 
-#: mcprack/auth.py:237
+#: mcprack/auth.py:273
 msgid "mcprack password reset"
 msgstr "Obnovení hesla pro mcprack"
 
-#: mcprack/auth.py:239
+#: mcprack/auth.py:275
 #, python-format
 msgid ""
 "Someone (hopefully you) requested a password reset for the mcprack account '%(username)s'.\n"
@@ -70,20 +70,120 @@ msgstr ""
 "\n"
 "Pokud jste o to nežádali, tento e-mail ignorujte — vaše heslo nebylo změněno."
 
-#: mcprack/auth.py:251
+#: mcprack/auth.py:287
 msgid ""
 "If that account exists and has an email on file, a reset link has been sent."
 msgstr ""
 "Pokud tento účet existuje a má nastavený e-mail, byl odeslán odkaz pro "
 "obnovení hesla."
 
-#: mcprack/auth.py:263
+#: mcprack/auth.py:299
 msgid "This password reset link is invalid or has expired."
 msgstr "Tento odkaz pro obnovení hesla je neplatný nebo vypršel."
 
-#: mcprack/auth.py:280
+#: mcprack/auth.py:316
 msgid "Password reset. You can now log in."
 msgstr "Heslo bylo obnoveno. Nyní se můžete přihlásit."
+
+#: mcprack/templates/_config_paths.html:4
+#: mcprack/templates/_config_paths.html:27
+#: mcprack/templates/_config_paths.html:42
+msgid "Where to put this file"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:6
+msgid "Claude Desktop app — replace the whole file at:"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:9
+#: mcprack/templates/_config_paths.html:32
+#: mcprack/templates/_config_paths.html:47
+msgid "Linux"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:10
+#: mcprack/templates/_config_paths.html:33
+#: mcprack/templates/_config_paths.html:48
+#, fuzzy
+msgid "macOS"
+msgstr "Akce"
+
+#: mcprack/templates/_config_paths.html:11
+#: mcprack/templates/_config_paths.html:19
+#: mcprack/templates/_config_paths.html:34
+#: mcprack/templates/_config_paths.html:49
+msgid "Windows"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:15
+msgid ""
+"Claude Code (the CLI) — this file also holds other settings, so merge the "
+"\"mcpServers\" key into it instead of overwriting it:"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:18
+msgid "Linux / macOS"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:23
+msgid ""
+"Or install <code>mcprack-sync-claude</code> and run <code>mcprack-sync-"
+"claude sync</code> to keep this file up to date automatically."
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:29
+msgid ""
+"VS Code (user profile — applies to every workspace). If the file already "
+"exists, merge the \"servers\" key into it instead of overwriting it:"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:38
+msgid ""
+"Or install <code>mcprack-sync-vscode</code> and run <code>mcprack-sync-"
+"vscode sync</code> to keep this file up to date automatically."
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:44
+msgid ""
+"Cursor (user profile). If the file already exists, merge the \"mcpServers\" "
+"key into it instead of overwriting it:"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:50
+msgid "Also checked"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:54
+msgid ""
+"Or install <code>mcprack-sync-cursor</code> and run <code>mcprack-sync-"
+"cursor sync</code> to keep this file up to date automatically."
+msgstr ""
+
+#: mcprack/templates/_proxy_auth_note.html:6
+msgid ""
+"MCP OAuth is enabled: relay URLs look like "
+"<code>/proxy/mcp/&lt;id&gt;</code> with no secret in the path. Your client "
+"will open a browser login the first time it connects."
+msgstr ""
+"MCP OAuth je zapnuté: relay URL vypadají jako "
+"<code>/proxy/mcp/&lt;id&gt;</code> bez tajemství v cestě. Klient při prvním "
+"připojení otevře přihlášení v prohlížeči."
+
+#: mcprack/templates/_proxy_auth_note.html:9
+msgid ""
+"Signed path-token URLs still work if you need them (e.g. for <code>mcprack-"
+"mcp-probe</code>)."
+msgstr ""
+"Podepsané URL s tokenem v cestě fungují dál (např. pro <code>mcprack-mcp-"
+"probe</code>)."
+
+#: mcprack/templates/_proxy_auth_note.html:15
+msgid ""
+"Each relay URL embeds a personal access token — treat a downloaded or copied"
+" config like a password."
+msgstr ""
+"Každá relay URL obsahuje osobní přístupový token — stažený nebo zkopírovaný "
+"config berte jako heslo."
 
 #: mcprack/templates/account_password.html:2
 #: mcprack/templates/account_password.html:26
@@ -109,72 +209,67 @@ msgid "Confirm new password"
 msgstr "Potvrďte nové heslo"
 
 #: mcprack/templates/base.html:29
-msgid "Servers"
-msgstr "Servery"
+msgid "View on GitHub"
+msgstr ""
 
-#: mcprack/templates/base.html:30
-msgid "Install"
-msgstr "Instalace"
+#: mcprack/templates/base.html:29
+msgid "View mcprack on GitHub"
+msgstr ""
 
-#: mcprack/templates/admin/users_list.html:2
-#: mcprack/templates/admin/users_list.html:4 mcprack/templates/base.html:31
-msgid "Users"
-msgstr "Uživatelé"
+#: mcprack/templates/base.html:51
+msgid "Catalog"
+msgstr "Katalog"
 
-#: mcprack/templates/base.html:32
-msgid "Proxy"
-msgstr "Proxy"
+#: mcprack/templates/base.html:54
+msgid "All Servers"
+msgstr "Všechny servery"
+
+#: mcprack/templates/base.html:55
+msgid "Install New Server"
+msgstr "Instalovat nový server"
+
+#: mcprack/templates/base.html:56
+msgid "All Users"
+msgstr "Všichni uživatelé"
+
+#: mcprack/templates/base.html:57
+msgid "Config Templates"
+msgstr ""
+
+#: mcprack/templates/base.html:58
+msgid "Proxy Instances"
+msgstr "Instance proxy"
 
 #: mcprack/templates/admin/audit_log.html:2
 #: mcprack/templates/admin/audit_log.html:6
 #: mcprack/templates/admin/audit_log_detail.html:2
-#: mcprack/templates/base.html:33 mcprack/templates/base.html:62
+#: mcprack/templates/base.html:59
 msgid "Audit Log"
 msgstr "Auditní log"
 
-#: mcprack/templates/base.html:34
-msgid "Diagnostics"
-msgstr "Diagnostika"
-
-#: mcprack/templates/base.html:35
-msgid "OTEL"
-msgstr "OTEL"
-
-#: mcprack/templates/base.html:55
-msgid "Catalog"
-msgstr "Katalog"
-
-#: mcprack/templates/base.html:58
-msgid "All Servers"
-msgstr "Všechny servery"
-
-#: mcprack/templates/base.html:59
-msgid "Install New Server"
-msgstr "Instalovat nový server"
-
 #: mcprack/templates/base.html:60
-msgid "All Users"
-msgstr "Všichni uživatelé"
-
-#: mcprack/templates/base.html:61
-msgid "Proxy Instances"
-msgstr "Instance proxy"
-
-#: mcprack/templates/base.html:63
 msgid "Vaultwarden Setup"
 msgstr "Nastavení Vaultwardenu"
 
-#: mcprack/templates/base.html:64
+#: mcprack/templates/base.html:61
+msgid "OAuth Diagnostics"
+msgstr "Diagnostika OAuth"
+
+#: mcprack/templates/base.html:62
 msgid "OTEL Diagnostics"
 msgstr "OTEL diagnostika"
 
-#: mcprack/templates/base.html:68
+#: mcprack/templates/base.html:66
 msgid "Change Password"
 msgstr "Změnit heslo"
 
-#: mcprack/templates/base.html:71
+#: mcprack/templates/base.html:69
 msgid "Log out"
 msgstr "Odhlásit se"
+
+#: mcprack/templates/base.html:114
+msgid "Loading..."
+msgstr ""
 
 #: mcprack/templates/catalog.html:2 mcprack/templates/catalog.html:6
 msgid "MCP Server Catalog"
@@ -202,54 +297,95 @@ msgstr ""
 "Jakmile vyberete potřebné servery, stáhněte nebo zkopírujte konfiguraci pro "
 "svého AI klienta:"
 
-#: mcprack/templates/catalog.html:17
+#: mcprack/templates/catalog.html:18
 msgid "Works with Claude for Desktop application."
 msgstr "Funguje s aplikací Claude pro počítač."
 
-#: mcprack/templates/catalog.html:20 mcprack/templates/catalog.html:33
+#: mcprack/templates/catalog.html:21 mcprack/templates/catalog.html:36
+#: mcprack/templates/catalog.html:51
 msgid "Download Config"
 msgstr "Stáhnout konfiguraci"
 
-#: mcprack/templates/catalog.html:23 mcprack/templates/catalog.html:36
+#: mcprack/templates/catalog.html:24 mcprack/templates/catalog.html:39
+#: mcprack/templates/catalog.html:54
 msgid "View & Copy"
 msgstr "Zobrazit a kopírovat"
 
-#: mcprack/templates/catalog.html:30
+#: mcprack/templates/catalog.html:33
 msgid "Works with VS Code Copilot and other GitHub Copilot clients."
 msgstr "Funguje s VS Code Copilot a dalšími klienty GitHub Copilot."
 
-#: mcprack/templates/catalog.html:46
+#: mcprack/templates/catalog.html:48
+msgid "Works with the Cursor IDE MCP settings."
+msgstr ""
+
+#: mcprack/templates/catalog.html:65
+msgid "Add as Individual Connectors"
+msgstr ""
+
+#: mcprack/templates/catalog.html:66
+msgid ""
+"Claude Desktop's \"Add custom connector\" dialog (and claude.ai) asks for a "
+"name and a URL — copy each one below instead of using a JSON config file."
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:29
+#: mcprack/templates/admin/templates_list.html:14
+#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:81
+#: mcprack/templates/catalog.html:159
+msgid "Name"
+msgstr "Název"
+
+#: mcprack/templates/catalog.html:84 mcprack/templates/catalog.html:91
+#: mcprack/templates/catalog.html:162 mcprack/templates/catalog.html:169
+msgid "Copy"
+msgstr ""
+
+#: mcprack/templates/catalog.html:88 mcprack/templates/catalog.html:166
+msgid "URL"
+msgstr ""
+
+#: mcprack/templates/catalog.html:105
 msgid "Available Servers"
 msgstr "Dostupné servery"
 
-#: mcprack/templates/catalog.html:55
+#: mcprack/templates/catalog.html:114
 #, python-format
 msgid "Select %(label)s"
 msgstr "Vybrat %(label)s"
 
-#: mcprack/templates/catalog.html:69
+#: mcprack/templates/catalog.html:129
+#, fuzzy
+msgid "Connector"
+msgstr "Připojovací řetězec"
+
+#: mcprack/templates/catalog.html:134
 msgid "Using Custom Credentials"
 msgstr "Používají se vlastní přihlašovací údaje"
 
-#: mcprack/templates/catalog.html:71
+#: mcprack/templates/catalog.html:136
 msgid "Use My Own Credentials"
 msgstr "Použít vlastní přihlašovací údaje"
 
-#: mcprack/templates/catalog.html:80
+#: mcprack/templates/catalog.html:145
 msgid "No servers available yet. Ask an admin to register some."
 msgstr ""
 "Zatím nejsou dostupné žádné servery. Požádejte administrátora, aby nějaké "
 "zaregistroval."
 
-#: mcprack/templates/catalog.html:85
+#: mcprack/templates/catalog.html:150
 msgid "Save Selection"
 msgstr "Uložit výběr"
+
+#: mcprack/templates/catalog.html:173
+msgid "Close"
+msgstr ""
 
 #: mcprack/templates/forgot_password.html:2
 msgid "Forgot password"
 msgstr "Zapomenuté heslo"
 
-#: mcprack/templates/forgot_password.html:7 mcprack/templates/login.html:29
+#: mcprack/templates/forgot_password.html:7 mcprack/templates/login.html:32
 msgid "Forgot your password?"
 msgstr "Zapomněli jste heslo?"
 
@@ -294,26 +430,76 @@ msgid "MCP Self-Service Catalog & Config Generator"
 msgstr "MCP samoobslužný katalog & generátor konfigurace"
 
 #: mcprack/templates/admin/user_form.html:8
-#: mcprack/templates/admin/users_list.html:8 mcprack/templates/login.html:15
+#: mcprack/templates/admin/users_list.html:8 mcprack/templates/login.html:18
 msgid "Username"
 msgstr "Uživatelské jméno"
 
-#: mcprack/templates/admin/user_form.html:14 mcprack/templates/login.html:20
+#: mcprack/templates/admin/user_form.html:14 mcprack/templates/login.html:23
 msgid "Password"
 msgstr "Heslo"
 
-#: mcprack/templates/login.html:25
+#: mcprack/templates/login.html:28
 msgid "Log In"
 msgstr "Přihlásit se"
 
-#: mcprack/templates/login.html:35
+#: mcprack/templates/login.html:38
 msgid "Use your local mcprack account, or your Active Directory credentials."
 msgstr ""
 "Použijte svůj místní účet mcprack nebo přihlašovací údaje Active Directory."
 
-#: mcprack/templates/login.html:37
+#: mcprack/templates/login.html:40
 msgid "Use your local mcprack account."
 msgstr "Použijte svůj místní účet mcprack."
+
+#: mcprack/templates/oauth_consent.html:2
+#: mcprack/templates/oauth_consent.html:7
+msgid "Authorize application"
+msgstr "Autorizovat aplikaci"
+
+#: mcprack/templates/oauth_consent.html:9
+msgid ""
+"An MCP client wants to use your selected servers through mcprack. Only allow"
+" clients you trust."
+msgstr ""
+"Klient MCP chce používat vaše vybrané servery přes mcprack. Povolte jen "
+"klienty, kterým důvěřujete."
+
+#: mcprack/templates/oauth_consent.html:15
+msgid "Unknown client"
+msgstr "Neznámý klient"
+
+#: mcprack/templates/oauth_consent.html:16
+msgid "will connect as"
+msgstr "se připojí jako"
+
+#: mcprack/templates/oauth_consent.html:21
+msgid "Access is limited to MCP servers you have selected in the catalog."
+msgstr "Přístup je omezen na MCP servery, které máte vybrané v katalogu."
+
+#: mcprack/templates/oauth_consent.html:22
+msgid ""
+"Backend credentials stay on the server — they are never sent to the client."
+msgstr ""
+"Přihlašovací údaje backendu zůstávají na serveru — klientovi se nikdy "
+"neposílají."
+
+#: mcprack/templates/oauth_consent.html:24
+msgid "Requested scopes:"
+msgstr "Požadované scope:"
+
+#: mcprack/templates/oauth_consent.html:29
+msgid "Client id:"
+msgstr "ID klienta:"
+
+#: mcprack/templates/admin/user_form.html:58
+#: mcprack/templates/oauth_consent.html:36
+msgid "Allow"
+msgstr "Povolit"
+
+#: mcprack/templates/admin/user_form.html:62
+#: mcprack/templates/oauth_consent.html:39
+msgid "Deny"
+msgstr "Zakázat"
 
 #: mcprack/templates/override.html:2
 #, python-format
@@ -334,10 +520,12 @@ msgstr ""
 "pro konfigurace, které si stáhnete. Přepisují výchozí přihlašovací údaje "
 "administrátora."
 
+#: mcprack/templates/admin/user_override_form.html:17
 #: mcprack/templates/override.html:11
 msgid "Expected keys:"
 msgstr "Očekávané klíče:"
 
+#: mcprack/templates/admin/user_override_form.html:25
 #: mcprack/templates/override.html:19
 msgid "Credentials (KEY=value format, one per line)"
 msgstr "Přihlašovací údaje (formát KLÍČ=hodnota, jeden na řádek)"
@@ -354,11 +542,12 @@ msgstr ""
 msgid "Save My Credentials"
 msgstr "Uložit mé přihlašovací údaje"
 
+#: mcprack/templates/admin/user_override_form.html:36
 #: mcprack/templates/override.html:31
 msgid "Reset to Default"
 msgstr "Obnovit výchozí"
 
-#: mcprack/templates/override.html:36 mcprack/templates/view_config.html:21
+#: mcprack/templates/override.html:36 mcprack/templates/view_config.html:24
 msgid "Back to Catalog"
 msgstr "Zpět do katalogu"
 
@@ -379,29 +568,32 @@ msgstr ""
 "Zkopírujte níže uvedenou konfiguraci do konfiguračního souboru svého "
 "klienta, nebo si ji přímo stáhněte."
 
-#: mcprack/templates/admin/user_config_view.html:10
-#: mcprack/templates/view_config.html:10
+#: mcprack/templates/admin/user_config_view.html:13
+#: mcprack/templates/view_config.html:13
 msgid "Copy failed — select the text manually."
 msgstr "Kopírování selhalo — vyberte text ručně."
 
-#: mcprack/templates/admin/user_config_view.html:15
-#: mcprack/templates/view_config.html:15
+#: mcprack/templates/admin/user_config_view.html:18
+#: mcprack/templates/view_config.html:18
 msgid "Copy to clipboard"
 msgstr "Kopírovat do schránky"
 
-#: mcprack/templates/admin/user_config_view.html:18
-#: mcprack/templates/view_config.html:18
+#: mcprack/templates/admin/user_config_view.html:21
+#: mcprack/templates/view_config.html:21
 msgid "Download File"
 msgstr "Stáhnout soubor"
 
-#: mcprack/templates/admin/user_config_view.html:26
-#: mcprack/templates/view_config.html:26
+#: mcprack/templates/admin/user_config_view.html:29
+#: mcprack/templates/view_config.html:29
 msgid "Copied to clipboard!"
 msgstr "Zkopírováno do schránky!"
 
 #: mcprack/templates/admin/audit_log.html:2
 #: mcprack/templates/admin/servers_list.html:2
+#: mcprack/templates/admin/template_form.html:2
+#: mcprack/templates/admin/templates_list.html:2
 #: mcprack/templates/admin/user_form.html:30
+#: mcprack/templates/admin/user_override_form.html:2
 #: mcprack/templates/admin/users_list.html:8
 msgid "Admin"
 msgstr "Administrace"
@@ -428,7 +620,9 @@ msgstr ""
 #: mcprack/templates/admin/audit_log_detail.html:23
 #: mcprack/templates/admin/proxy_instances.html:14
 #: mcprack/templates/admin/proxy_instances.html:56
-#: mcprack/templates/admin/user_form.html:39
+#: mcprack/templates/admin/proxy_instances.html:113
+#: mcprack/templates/admin/template_form.html:25
+#: mcprack/templates/admin/user_form.html:44
 msgid "Server"
 msgstr "Server"
 
@@ -551,23 +745,118 @@ msgstr "Pro toto ID požadavku nebyly nalezeny žádné záznamy."
 #: mcprack/templates/admin/install_wizard.html:65
 #: mcprack/templates/admin/install_wizard.html:102
 #: mcprack/templates/admin/install_wizard.html:136
-#: mcprack/templates/admin/server_form.html:93
 msgid "Environment variables"
 msgstr "Proměnné prostředí"
 
 #: mcprack/templates/admin/install_wizard.html:66
 #: mcprack/templates/admin/install_wizard.html:103
 #: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:98
+#: mcprack/templates/admin/server_form.html:178
 msgid "sensitive"
 msgstr "citlivé"
+
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+#, fuzzy
+msgid "required"
+msgstr "Požadavek"
+
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+msgid "Duplicate key — each environment variable name must be unique."
+msgstr "Duplicitní klíč — každý název proměnné prostředí musí být jedinečný."
+
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+msgid "Key is required when a value is set."
+msgstr "Když je zadána hodnota, je povinný i klíč."
 
 #: mcprack/templates/admin/install_wizard.html:67
 #: mcprack/templates/admin/install_wizard.html:104
 #: mcprack/templates/admin/install_wizard.html:138
-#: mcprack/templates/admin/server_form.html:101
+#: mcprack/templates/admin/server_form.html:182
 msgid "Add row"
 msgstr "Přidat řádek"
+
+#: mcprack/templates/admin/oauth_wizard.html:2
+msgid "OAuth diagnostics"
+msgstr "Diagnostika OAuth"
+
+#: mcprack/templates/admin/oauth_wizard.html:4
+msgid "MCP OAuth diagnostics"
+msgstr "Diagnostika MCP OAuth"
+
+#: mcprack/templates/admin/oauth_wizard.html:5
+msgid "Status of the optional MCP Authorization Server — see"
+msgstr "Stav volitelného MCP Authorization Serveru — viz"
+
+#: mcprack/templates/admin/oauth_wizard.html:6
+msgid "README \"Optional MCP OAuth\""
+msgstr "README „Optional MCP OAuth“"
+
+#: mcprack/templates/admin/oauth_wizard.html:7
+#: mcprack/templates/admin/otel_wizard.html:7
+msgid "for how to configure this."
+msgstr "jak toto nakonfigurovat."
+
+#: mcprack/templates/admin/oauth_wizard.html:16
+msgid ""
+"Enabled — clients get tokenless <code>/proxy/mcp/&lt;id&gt;</code> URLs and "
+"authenticate with Bearer tokens."
+msgstr ""
+"Zapnuto — klienti dostávají URL bez tokenu "
+"(<code>/proxy/mcp/&lt;id&gt;</code>) a autentizují se Bearer tokeny."
+
+#: mcprack/templates/admin/oauth_wizard.html:18
+msgid ""
+"Disabled — configs embed a signed path token. Set "
+"<code>OAUTH_ENABLED=true</code> in <code>/etc/mcprack/env</code> and restart"
+" to turn this on."
+msgstr ""
+"Vypnuto — konfigurace obsahují podepsaný token v cestě. Pro zapnutí nastavte"
+" <code>OAUTH_ENABLED=true</code> v <code>/etc/mcprack/env</code> a "
+"restartujte službu."
+
+#: mcprack/templates/admin/oauth_wizard.html:31
+msgid "— used as the OAuth issuer in discovery metadata."
+msgstr "— používá se jako OAuth issuer v discovery metadatech."
+
+#: mcprack/templates/admin/oauth_wizard.html:33
+msgid ""
+"Not set. Clients may discover the wrong issuer behind a reverse proxy — set "
+"this to the externally-reachable origin."
+msgstr ""
+"Není nastaveno. Klienti mohou za reverse proxy objevit špatný issuer — "
+"nastavte na veřejně dostupný origin."
+
+#: mcprack/templates/admin/oauth_wizard.html:35
+msgid ""
+"Not set (only required when OAuth is on, or for CLI config generation)."
+msgstr ""
+"Není nastaveno (potřeba jen při zapnutém OAuth nebo pro CLI generování "
+"configu)."
+
+#: mcprack/templates/admin/oauth_wizard.html:47
+msgid ""
+"On — authlib will accept plain HTTP authorize/token. Lab only; never on the "
+"public internet."
+msgstr ""
+"Zapnuto — authlib přijme authorize/token přes prosté HTTP. Jen pro lab; "
+"nikdy na veřejném internetu."
+
+#: mcprack/templates/admin/oauth_wizard.html:49
+msgid "Off (default) — authorize/token require HTTPS."
+msgstr "Vypnuto (výchozí) — authorize/token vyžadují HTTPS."
+
+#: mcprack/templates/admin/oauth_wizard.html:59
+msgid "Discovery"
+msgstr "Discovery"
 
 #: mcprack/templates/admin/otel_wizard.html:2
 msgid "OTEL diagnostics"
@@ -585,15 +874,20 @@ msgstr "Stav exportu trasování/metrik a testovací signál na vyžádání —
 msgid "README \"Observability\""
 msgstr "README „Observabilita“"
 
-#: mcprack/templates/admin/otel_wizard.html:7
-msgid "for how to configure this."
-msgstr "jak toto nakonfigurovat."
-
 #: mcprack/templates/admin/otel_wizard.html:16
 msgid "Enabled — traces and metrics are being exported."
 msgstr "Povoleno — trasování a metriky se exportují."
 
 #: mcprack/templates/admin/otel_wizard.html:18
+msgid "OTEL_ENABLED=true, but initialization failed — telemetry is inactive."
+msgstr ""
+
+#: mcprack/templates/admin/otel_wizard.html:19
+#, python-format
+msgid "Last initialization error: %(error)s"
+msgstr "Poslední chyba inicializace: %(error)s"
+
+#: mcprack/templates/admin/otel_wizard.html:21
 msgid ""
 "Disabled (no-op) — set <code>OTEL_ENABLED=true</code> in "
 "<code>/etc/mcprack/env</code> and restart the service to turn this on."
@@ -601,30 +895,25 @@ msgstr ""
 "Zakázáno (bez efektu) — nastavte <code>OTEL_ENABLED=true</code> v "
 "<code>/etc/mcprack/env</code> a restartujte službu pro zapnutí."
 
-#: mcprack/templates/admin/otel_wizard.html:19
-#, python-format
-msgid "Last initialization error: %(error)s"
-msgstr "Poslední chyba inicializace: %(error)s"
-
-#: mcprack/templates/admin/otel_wizard.html:30
+#: mcprack/templates/admin/otel_wizard.html:32
 msgid "Not set."
 msgstr "Nenastaveno."
 
-#: mcprack/templates/admin/otel_wizard.html:38
+#: mcprack/templates/admin/otel_wizard.html:40
 msgid "Protocol"
 msgstr "Protokol"
 
-#: mcprack/templates/admin/otel_wizard.html:41
+#: mcprack/templates/admin/otel_wizard.html:43
 #, python-format
 msgid "Using <code>%(protocol)s</code>"
 msgstr "Používá se <code>%(protocol)s</code>"
 
-#: mcprack/templates/admin/otel_wizard.html:43
+#: mcprack/templates/admin/otel_wizard.html:45
 #, python-format
 msgid "— fell back from requested <code>%(protocol)s</code>."
 msgstr "— záložní řešení místo požadovaného <code>%(protocol)s</code>."
 
-#: mcprack/templates/admin/otel_wizard.html:45
+#: mcprack/templates/admin/otel_wizard.html:47
 msgid ""
 "The Python OTLP exporter has no <code>http/json</code> transport (unlike the"
 " JS SDK) — only <code>grpc</code> and <code>http/protobuf</code> are "
@@ -634,19 +923,19 @@ msgstr ""
 "SDK) — podporovány jsou pouze <code>grpc</code> a "
 "<code>http/protobuf</code>."
 
-#: mcprack/templates/admin/otel_wizard.html:49
+#: mcprack/templates/admin/otel_wizard.html:51
 msgid "Not initialized."
 msgstr "Neinicializováno."
 
-#: mcprack/templates/admin/otel_wizard.html:58
+#: mcprack/templates/admin/otel_wizard.html:60
 msgid "Service name"
 msgstr "Název služby"
 
-#: mcprack/templates/admin/otel_wizard.html:65
+#: mcprack/templates/admin/otel_wizard.html:67
 msgid "Test connectivity"
 msgstr "Test připojení"
 
-#: mcprack/templates/admin/otel_wizard.html:66
+#: mcprack/templates/admin/otel_wizard.html:68
 #, python-format
 msgid ""
 "Sends one test span and one test metric point and force-flushes them — this "
@@ -660,19 +949,28 @@ msgstr ""
 "Collector data skutečně uložil (tato cesta exportu na pozadí chyby "
 "synchronně nezobrazuje)."
 
-#: mcprack/templates/admin/otel_wizard.html:66
+#: mcprack/templates/admin/otel_wizard.html:68
 msgid "(no endpoint configured)"
 msgstr "(není nakonfigurován žádný endpoint)"
 
-#: mcprack/templates/admin/otel_wizard.html:70
+#: mcprack/templates/admin/otel_wizard.html:69
+msgid ""
+"If several mcprack instances share this Collector, the test signal is tagged"
+" <code>server_name=\"otel-diagnostics@&lt;this-"
+"host&apos;s-hostname&gt;\"</code> so you can tell them apart in Grafana/your"
+" trace UI even if the Collector's own resource-attribute handling "
+"(service.name/host.name) is misconfigured."
+msgstr ""
+
+#: mcprack/templates/admin/otel_wizard.html:73
 msgid "Send test span + metric"
 msgstr "Odeslat testovací span + metriku"
 
-#: mcprack/templates/admin/otel_wizard.html:74
+#: mcprack/templates/admin/otel_wizard.html:77
 msgid "Requires OTEL_ENABLED=true."
 msgstr "Vyžaduje OTEL_ENABLED=true."
 
-#: mcprack/templates/admin/otel_wizard.html:78
+#: mcprack/templates/admin/otel_wizard.html:81
 #: mcprack/templates/admin/vaultwarden_wizard.html:31
 msgid "Re-run diagnostics"
 msgstr "Spustit diagnostiku znovu"
@@ -735,11 +1033,12 @@ msgid "PID"
 msgstr "PID"
 
 #: mcprack/templates/admin/proxy_instances.html:58
+#: mcprack/templates/admin/proxy_instances.html:117
 msgid "Port"
 msgstr "Port"
 
 #: mcprack/templates/admin/proxy_instances.html:59
-#: mcprack/templates/admin/servers_list.html:33
+#: mcprack/templates/admin/servers_list.html:34
 msgid "Status"
 msgstr "Stav"
 
@@ -752,7 +1051,7 @@ msgid "Log"
 msgstr "Log"
 
 #: mcprack/templates/admin/proxy_instances.html:62
-#: mcprack/templates/admin/servers_list.html:34
+#: mcprack/templates/admin/servers_list.html:35
 msgid "Actions"
 msgstr "Akce"
 
@@ -773,16 +1072,74 @@ msgstr "Zastavit"
 msgid "No per-user proxy instances running right now."
 msgstr "Momentálně neběží žádné instance proxy pro jednotlivé uživatele."
 
-#: mcprack/templates/admin/server_form.html:95
-msgid ""
-"Mark a row <strong>sensitive</strong> if it's a secret — those go to "
-"Vaultwarden (or an encrypted local fallback if Vaultwarden isn't "
-"configured). Everything else is stored directly in mcprack's own database."
+#: mcprack/templates/admin/proxy_instances.html:102
+msgid "System information"
+msgstr "Systémové informace"
+
+#: mcprack/templates/admin/proxy_instances.html:103
+msgid "Database engine and connection details mcprack is currently using."
 msgstr ""
-"Označte řádek jako <strong>citlivé</strong>, pokud se jedná o tajný klíč — "
-"ty se ukládají do Vaultwardenu (nebo do šifrovaného místního záložního "
-"úložiště, pokud Vaultwarden není nakonfigurován). Vše ostatní se ukládá "
-"přímo do vlastní databáze mcprack."
+"Databázový server a připojovací údaje, které mcprack aktuálně používá."
+
+#: mcprack/templates/admin/proxy_instances.html:109
+msgid "Database engine"
+msgstr "Databázový server"
+
+#: mcprack/templates/admin/proxy_instances.html:121
+msgid "Database name"
+msgstr "Název databáze"
+
+#: mcprack/templates/admin/proxy_instances.html:125
+msgid "Connection string"
+msgstr "Připojovací řetězec"
+
+#: mcprack/templates/admin/server_form.html:30
+msgid "Form steps"
+msgstr "Kroky formuláře"
+
+#: mcprack/templates/admin/server_form.html:32
+msgid "Basic information"
+msgstr "Základní informace"
+
+#: mcprack/templates/admin/server_form.html:33
+msgid "Transport & endpoint"
+msgstr "Transport a endpoint"
+
+#: mcprack/templates/admin/server_form.html:34
+msgid "Environment"
+msgstr "Prostředí"
+
+#: mcprack/templates/admin/server_form.html:35
+msgid "Options"
+msgstr "Možnosti"
+
+#: mcprack/templates/admin/server_form.html:38
+msgid "Previous"
+msgstr "Předchozí"
+
+#: mcprack/templates/admin/server_form.html:39
+msgid "Next"
+msgstr "Další"
+
+#: mcprack/templates/admin/server_form.html:56
+msgid "This name is already used by another server."
+msgstr "Tento název už používá jiný server."
+
+#: mcprack/templates/admin/server_form.html:178
+msgid ""
+"Required value missing — the server cannot start until this is filled in."
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:178
+#, python-format
+msgid ""
+"%(n)s required value(s) missing — the MCP server will not start until they "
+"are filled in."
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:185
+msgid "Import .env file"
+msgstr ""
 
 #: mcprack/templates/admin/servers_list.html:2
 msgid "MCP Servers"
@@ -824,12 +1181,9 @@ msgstr ""
 "které ještě nejsou v katalogu. Importují se pouze příkaz a argumenty — "
 "výchozí přihlašovací údaje bude třeba nastavit ručně."
 
-#: mcprack/templates/admin/servers_list.html:29
-#: mcprack/templates/admin/users_list.html:8
-msgid "Name"
-msgstr "Název"
-
 #: mcprack/templates/admin/servers_list.html:30
+#: mcprack/templates/admin/template_form.html:14
+#: mcprack/templates/admin/templates_list.html:15
 msgid "Label"
 msgstr "Popisek"
 
@@ -841,42 +1195,65 @@ msgstr "Transport"
 msgid "Category"
 msgstr "Kategorie"
 
-#: mcprack/templates/admin/servers_list.html:56
+#: mcprack/templates/admin/servers_list.html:33
+#: mcprack/templates/admin/users_list.html:2
+#: mcprack/templates/admin/users_list.html:4
+msgid "Users"
+msgstr "Uživatelé"
+
+#: mcprack/templates/admin/servers_list.html:57
+#, python-format
+msgid "%(n)d user(s) have this server selected in their config"
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:63
 msgid "Command not found on PATH"
 msgstr "Příkaz nebyl nalezen v PATH"
 
-#: mcprack/templates/admin/servers_list.html:56
+#: mcprack/templates/admin/servers_list.html:63
 msgid "Host/port not reachable"
 msgstr "Host/port nedostupný"
 
-#: mcprack/templates/admin/servers_list.html:57
+#: mcprack/templates/admin/servers_list.html:64
 msgid "won't start"
 msgstr "nespustí se"
 
-#: mcprack/templates/admin/servers_list.html:57
+#: mcprack/templates/admin/servers_list.html:64
 msgid "unreachable"
 msgstr "nedostupné"
 
-#: mcprack/templates/admin/servers_list.html:61
+#: mcprack/templates/admin/servers_list.html:68
 #, python-format
 msgid "Missing in Vaultwarden: %(keys)s"
 msgstr "Chybí ve Vaultwardenu: %(keys)s"
 
-#: mcprack/templates/admin/servers_list.html:62
+#: mcprack/templates/admin/servers_list.html:69
 #, python-format
 msgid "missing: %(keys)s"
 msgstr "chybí: %(keys)s"
 
-#: mcprack/templates/admin/servers_list.html:66
+#: mcprack/templates/admin/servers_list.html:73
+msgid ""
+"No admin default value set — a user can only use this server if "
+"allow_user_override lets them supply their own."
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:74
+#, python-format
+msgid "%(n)d required value(s) missing"
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:78
 msgid "ok"
 msgstr "ok"
 
-#: mcprack/templates/admin/servers_list.html:70
+#: mcprack/templates/admin/servers_list.html:82
+#: mcprack/templates/admin/templates_list.html:29
 #: mcprack/templates/admin/users_list.html:18
 msgid "Edit"
 msgstr "Upravit"
 
-#: mcprack/templates/admin/servers_list.html:74
+#: mcprack/templates/admin/servers_list.html:86
 msgid ""
 "Actually start the command briefly to catch runtime-broken registrations "
 "(e.g. a missing dependency) that 'file exists and is executable' alone "
@@ -886,26 +1263,122 @@ msgstr ""
 "(např. chybějící závislost), které samotná kontrola „soubor existuje a je "
 "spustitelný“ neodhalí."
 
-#: mcprack/templates/admin/servers_list.html:75
+#: mcprack/templates/admin/servers_list.html:87
 msgid "Test"
 msgstr "Test"
 
-#: mcprack/templates/admin/servers_list.html:80
+#: mcprack/templates/admin/servers_list.html:92
+#, fuzzy
+msgid "Tools"
+msgstr "Protokol"
+
+#: mcprack/templates/admin/servers_list.html:95
 #, python-format
 msgid "Delete \"%(name)s\"?"
 msgstr "Smazat „%(name)s“?"
 
-#: mcprack/templates/admin/servers_list.html:82
+#: mcprack/templates/admin/servers_list.html:97
+#: mcprack/templates/admin/templates_list.html:33
 msgid "Delete"
 msgstr "Smazat"
 
-#: mcprack/templates/admin/servers_list.html:89
+#: mcprack/templates/admin/servers_list.html:104
 msgid ""
 "No servers registered yet. Use the buttons above to register new servers or "
 "autodetect existing ones."
 msgstr ""
 "Zatím nejsou zaregistrovány žádné servery. Použijte tlačítka výše k "
 "registraci nových serverů nebo k automatickému rozpoznání existujících."
+
+#: mcprack/templates/admin/template_form.html:2
+#: mcprack/templates/admin/template_form.html:4
+msgid "Edit template"
+msgstr ""
+
+#: mcprack/templates/admin/template_form.html:2
+#: mcprack/templates/admin/template_form.html:4
+#: mcprack/templates/admin/templates_list.html:9
+msgid "New template"
+msgstr ""
+
+#: mcprack/templates/admin/template_form.html:8
+msgid "Name (stable identifier, used by the CLI)"
+msgstr ""
+
+#: mcprack/templates/admin/template_form.html:17
+#: mcprack/templates/admin/templates_list.html:16
+#, fuzzy
+msgid "Description"
+msgstr "Odběry serverů"
+
+#: mcprack/templates/admin/template_form.html:20
+#: mcprack/templates/admin/templates_list.html:17
+msgid "Servers"
+msgstr "Servery"
+
+#: mcprack/templates/admin/template_form.html:21
+msgid ""
+"Tick \"Allowed\" for every server users of this template may use, and \"Pre-"
+"selected\" for the subset that should already be included in their generated"
+" config."
+msgstr ""
+
+#: mcprack/templates/admin/template_form.html:25
+#, fuzzy
+msgid "Allowed"
+msgstr "Povolit"
+
+#: mcprack/templates/admin/template_form.html:25
+#, fuzzy
+msgid "Pre-selected"
+msgstr "Vybráno"
+
+#: mcprack/templates/admin/template_form.html:39
+#: mcprack/templates/admin/user_form.html:84
+msgid "No enabled servers available."
+msgstr "Nejsou dostupné žádné povolené servery."
+
+#: mcprack/templates/admin/template_form.html:42
+#: mcprack/templates/admin/user_form.html:96
+#: mcprack/templates/admin/user_override_form.html:31
+msgid "Save"
+msgstr "Uložit"
+
+#: mcprack/templates/admin/template_form.html:43
+msgid "Cancel"
+msgstr ""
+
+#: mcprack/templates/admin/templates_list.html:2
+#: mcprack/templates/admin/templates_list.html:6
+msgid "Configuration templates"
+msgstr ""
+
+#: mcprack/templates/admin/templates_list.html:7
+msgid ""
+"A template is a reusable preset of allowed/denied servers and which of them "
+"are pre-selected. Apply it to a user from their edit page to configure them "
+"in one step, then fine-tune individually if needed."
+msgstr ""
+
+#: mcprack/templates/admin/templates_list.html:27
+#, fuzzy
+msgid "allowed"
+msgstr "Povolit"
+
+#: mcprack/templates/admin/templates_list.html:27
+#, fuzzy
+msgid "pre-selected"
+msgstr "Vybráno"
+
+#: mcprack/templates/admin/templates_list.html:31
+#, fuzzy, python-format
+msgid "Delete template \"%(name)s\"?"
+msgstr "Smazat „%(name)s“?"
+
+#: mcprack/templates/admin/templates_list.html:40
+#, fuzzy
+msgid "No templates yet."
+msgstr "Zatím žádní uživatelé."
 
 #: mcprack/templates/admin/user_config_view.html:2
 #, python-format
@@ -921,7 +1394,8 @@ msgstr ""
 "Konfigurace pro <strong>%(name)s</strong> (%(username)s). Zkopírujte níže "
 "uvedenou konfiguraci nebo si ji přímo stáhněte a poté ji odešlete uživateli."
 
-#: mcprack/templates/admin/user_config_view.html:21
+#: mcprack/templates/admin/user_config_view.html:24
+#: mcprack/templates/admin/user_override_form.html:41
 #, python-format
 msgid "Back to %(username)s"
 msgstr "Zpět k %(username)s"
@@ -952,38 +1426,59 @@ msgstr "Nové heslo (nechte prázdné pro zachování současného)"
 msgid "Active"
 msgstr "Aktivní"
 
-#: mcprack/templates/admin/user_form.html:34
-msgid "Server access"
-msgstr "Přístup k serverům"
-
 #: mcprack/templates/admin/user_form.html:35
-msgid ""
-"Explicitly allow or deny each currently available MCP server for this user."
+#, python-format
+msgid "Last based on template: %(label)s"
 msgstr ""
-"Explicitně povolte nebo zakažte tomuto uživateli každý aktuálně dostupný MCP"
-" server."
+
+#: mcprack/templates/admin/user_form.html:38
+msgid "Server access &amp; config selection"
+msgstr ""
 
 #: mcprack/templates/admin/user_form.html:39
+msgid ""
+"Allow or deny each server for this user, and tick which allowed servers "
+"should actually be included in their generated config — the admin decides "
+"this on their behalf, no login required."
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:45
 msgid "Access"
 msgstr "Přístup"
 
-#: mcprack/templates/admin/user_form.html:49
-msgid "Allow"
-msgstr "Povolit"
+#: mcprack/templates/admin/user_form.html:46
+#, fuzzy
+msgid "Included in config"
+msgstr "Konfigurace klientů"
 
-#: mcprack/templates/admin/user_form.html:53
-msgid "Deny"
-msgstr "Zakázat"
+#: mcprack/templates/admin/user_form.html:47
+#, fuzzy
+msgid "Individual credentials"
+msgstr "Používají se vlastní přihlašovací údaje"
 
-#: mcprack/templates/admin/user_form.html:61
-msgid "No enabled servers available."
-msgstr "Nejsou dostupné žádné povolené servery."
+#: mcprack/templates/admin/user_form.html:68
+msgid "Included"
+msgstr ""
 
-#: mcprack/templates/admin/user_form.html:64
+#: mcprack/templates/admin/user_form.html:73
+#, fuzzy
+msgid "Edit values"
+msgstr "Upravit uživatele"
+
+#: mcprack/templates/admin/user_form.html:73
+#, fuzzy
+msgid "set"
+msgstr "Obnovit"
+
+#: mcprack/templates/admin/user_form.html:76
+msgid "self-service override disabled — admin only"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:87
 msgid "Client configs"
 msgstr "Konfigurace klientů"
 
-#: mcprack/templates/admin/user_form.html:65
+#: mcprack/templates/admin/user_form.html:88
 msgid ""
 "View or download this user's MCP client config directly — useful for users "
 "who never log in themselves."
@@ -991,9 +1486,52 @@ msgstr ""
 "Zobrazte nebo stáhněte konfiguraci MCP klienta tohoto uživatele přímo — "
 "užitečné pro uživatele, kteří se sami nikdy nepřihlašují."
 
-#: mcprack/templates/admin/user_form.html:73
-msgid "Save"
-msgstr "Uložit"
+#: mcprack/templates/admin/user_form.html:100
+msgid "Apply a configuration template"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:101
+msgid ""
+"Replaces this user's access and selection with the template's. Individual "
+"credentials already set for this user are kept."
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:105
+#, fuzzy
+msgid "Choose a template…"
+msgstr "Zvolte nové heslo"
+
+#: mcprack/templates/admin/user_form.html:110
+msgid "Apply template"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:112
+msgid "Manage templates"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:2
+#, fuzzy, python-format
+msgid "%(username)s — %(label)s credentials"
+msgstr "Vaše přihlašovací údaje pro %(label)s"
+
+#: mcprack/templates/admin/user_override_form.html:6
+#, fuzzy, python-format
+msgid "Individual credentials for %(username)s — %(label)s"
+msgstr "Vaše přihlašovací údaje pro %(label)s"
+
+#: mcprack/templates/admin/user_override_form.html:7
+msgid ""
+"Set this user's personal credentials for this server. These are stored "
+"securely and override the admin default for this user only. The user never "
+"needs to log in or set these themselves."
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:11
+msgid ""
+"Self-service override is disabled for this server — this user could not set "
+"this themselves even if they logged in. As an admin, you can still set it "
+"here."
+msgstr ""
 
 #: mcprack/templates/admin/users_list.html:5
 msgid "Create local account"
@@ -1102,61 +1640,33 @@ msgid ""
 msgstr ""
 "Obě akce vyžadují, aby byl <code>BW_SERVER</code> nakonfigurován a dostupný."
 
-#: mcprack/templates/admin/proxy_instances.html
-msgid "System information"
-msgstr "Systémové informace"
+#~ msgid "Install"
+#~ msgstr "Instalace"
 
-#: mcprack/templates/admin/proxy_instances.html
-msgid "Database engine and connection details mcprack is currently using."
-msgstr "Databázový server a připojovací údaje, které mcprack aktuálně používá."
+#~ msgid "Proxy"
+#~ msgstr "Proxy"
 
-#: mcprack/templates/admin/proxy_instances.html
-msgid "Database engine"
-msgstr "Databázový server"
+#~ msgid "Diagnostics"
+#~ msgstr "Diagnostika"
 
-#: mcprack/templates/admin/proxy_instances.html
-msgid "Database name"
-msgstr "Název databáze"
+#~ msgid "OTEL"
+#~ msgstr "OTEL"
 
-#: mcprack/templates/admin/proxy_instances.html
-msgid "Connection string"
-msgstr "Připojovací řetězec"
-#: mcprack/templates/admin/server_form.html
-msgid "Form steps"
-msgstr "Kroky formuláře"
+#~ msgid ""
+#~ "Mark a row <strong>sensitive</strong> if it's a secret — those go to "
+#~ "Vaultwarden (or an encrypted local fallback if Vaultwarden isn't "
+#~ "configured). Everything else is stored directly in mcprack's own database."
+#~ msgstr ""
+#~ "Označte řádek jako <strong>citlivé</strong>, pokud se jedná o tajný klíč — "
+#~ "ty se ukládají do Vaultwardenu (nebo do šifrovaného místního záložního "
+#~ "úložiště, pokud Vaultwarden není nakonfigurován). Vše ostatní se ukládá "
+#~ "přímo do vlastní databáze mcprack."
 
-#: mcprack/templates/admin/server_form.html
-msgid "Basic information"
-msgstr "Základní informace"
+#~ msgid "Server access"
+#~ msgstr "Přístup k serverům"
 
-#: mcprack/templates/admin/server_form.html
-msgid "Transport & endpoint"
-msgstr "Transport a endpoint"
-
-#: mcprack/templates/admin/server_form.html
-msgid "Environment"
-msgstr "Prostředí"
-
-#: mcprack/templates/admin/server_form.html
-msgid "Options"
-msgstr "Možnosti"
-
-#: mcprack/templates/admin/server_form.html
-msgid "Previous"
-msgstr "Předchozí"
-
-#: mcprack/templates/admin/server_form.html
-msgid "Next"
-msgstr "Další"
-
-#: mcprack/templates/admin/server_form.html
-msgid "This name is already used by another server."
-msgstr "Tento název už používá jiný server."
-
-#: mcprack/templates/admin/server_form.html mcprack/templates/admin/install_wizard.html
-msgid "Duplicate key — each environment variable name must be unique."
-msgstr "Duplicitní klíč — každý název proměnné prostředí musí být jedinečný."
-
-#: mcprack/templates/admin/server_form.html mcprack/templates/admin/install_wizard.html
-msgid "Key is required when a value is set."
-msgstr "Když je zadána hodnota, je povinný i klíč."
+#~ msgid ""
+#~ "Explicitly allow or deny each currently available MCP server for this user."
+#~ msgstr ""
+#~ "Explicitně povolte nebo zakažte tomuto uživateli každý aktuálně dostupný MCP"
+#~ " server."

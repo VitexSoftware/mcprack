@@ -6,6 +6,7 @@
   <h1>{{ filename }}</h1>
   <p class="text-muted">{{ _('Config for <strong>%(name)s</strong> (%(username)s). Copy the configuration below or download it directly, then send it to the user.', name=target_user.display_name, username=target_user.username) }}</p>
 
+  {% include "_proxy_auth_note.html" %}
   {% include "_config_paths.html" %}
 
   <div class="card mt-lg mb-lg">
