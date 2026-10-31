@@ -4,12 +4,12 @@
 
 <section class="section">
   <h1>{{ _('MCP Server Catalog') }}</h1>
-  <p class="text-muted">{{ _('Select the AI tools and services you want to use, save your selection, then download or copy the config for your client. You can change your selection anytime.') }}</p>
+  <p class="text-muted mb-0">{{ _('Select servers, save, then download or copy a client config. You can change the selection anytime.') }}</p>
 </section>
 
 <section class="section">
   <h2>{{ _('Download Your Config') }}</h2>
-  <p class="text-muted">{{ _("Once you've selected the servers you need, download or copy the config for your AI client:") }}</p>
+  <p class="text-muted">{{ _('Download or copy the config for your AI client:') }}</p>
   {% include "_proxy_auth_note.html" %}
 
   <div class="action-links">
@@ -63,8 +63,7 @@
 {% if connectors %}
 <section class="section">
   <h2>{{ _('Add as Individual Connectors') }}</h2>
-  <p class="text-muted">{{ _("Claude Desktop's \"Add custom connector\" dialog (and claude.ai) asks for a name and a URL — copy each one below instead of using a JSON config file.") }}</p>
-  {% include "_proxy_auth_note.html" %}
+  <p class="text-muted">{{ _('For Claude Desktop / claude.ai custom connectors — copy name + URL below.') }}</p>
 
   <div class="connector-list">
     {% for connector in connectors %}
@@ -74,7 +73,7 @@
         <div class="connector-icon-wrap">
           <img src="{{ url_for('catalog.server_icon', server_id=connector.id) }}"
                alt="" class="connector-icon" loading="lazy"
-               width="96" height="96">
+               width="48" height="48">
         </div>
         <div class="connector-fields">
           <div class="connector-field">

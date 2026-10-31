@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 07:26+0100\n"
+"POT-Creation-Date: 2026-10-31 13:26+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,42 +17,42 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: mcprack/auth.py:159 mcprack/auth.py:191
+#: mcprack/auth.py:165 mcprack/auth.py:197
 msgid "Invalid username or password."
 msgstr ""
 
-#: mcprack/auth.py:179
+#: mcprack/auth.py:185
 msgid "This account has been deactivated."
 msgstr ""
 
-#: mcprack/auth.py:227
+#: mcprack/auth.py:233
 msgid ""
 "Your account is managed externally (LDAP) — its password can't be changed"
 " here."
 msgstr ""
 
-#: mcprack/auth.py:236
+#: mcprack/auth.py:242
 msgid "Current password is incorrect."
 msgstr ""
 
-#: mcprack/auth.py:238 mcprack/auth.py:307
+#: mcprack/auth.py:244 mcprack/auth.py:313
 #, python-format
 msgid "New password must be at least %(n)d characters."
 msgstr ""
 
-#: mcprack/auth.py:240 mcprack/auth.py:309
+#: mcprack/auth.py:246 mcprack/auth.py:315
 msgid "New password and confirmation don't match."
 msgstr ""
 
-#: mcprack/auth.py:247
+#: mcprack/auth.py:253
 msgid "Password changed."
 msgstr ""
 
-#: mcprack/auth.py:273
+#: mcprack/auth.py:279
 msgid "mcprack password reset"
 msgstr ""
 
-#: mcprack/auth.py:275
+#: mcprack/auth.py:281
 #, python-format
 msgid ""
 "Someone (hopefully you) requested a password reset for the mcprack "
@@ -65,17 +65,17 @@ msgid ""
 " changed."
 msgstr ""
 
-#: mcprack/auth.py:287
+#: mcprack/auth.py:293
 msgid ""
 "If that account exists and has an email on file, a reset link has been "
 "sent."
 msgstr ""
 
-#: mcprack/auth.py:299
+#: mcprack/auth.py:305
 msgid "This password reset link is invalid or has expired."
 msgstr ""
 
-#: mcprack/auth.py:316
+#: mcprack/auth.py:322
 msgid "Password reset. You can now log in."
 msgstr ""
 
@@ -263,9 +263,8 @@ msgstr ""
 
 #: mcprack/templates/catalog.html:7
 msgid ""
-"Select the AI tools and services you want to use, save your selection, "
-"then download or copy the config for your client. You can change your "
-"selection anytime."
+"Select servers, save, then download or copy a client config. You can "
+"change the selection anytime."
 msgstr ""
 
 #: mcprack/templates/catalog.html:11
@@ -273,9 +272,7 @@ msgid "Download Your Config"
 msgstr ""
 
 #: mcprack/templates/catalog.html:12
-msgid ""
-"Once you've selected the servers you need, download or copy the config "
-"for your AI client:"
+msgid "Download or copy the config for your AI client:"
 msgstr ""
 
 #: mcprack/templates/catalog.html:18
@@ -305,58 +302,55 @@ msgid "Add as Individual Connectors"
 msgstr ""
 
 #: mcprack/templates/catalog.html:66
-msgid ""
-"Claude Desktop's \"Add custom connector\" dialog (and claude.ai) asks for"
-" a name and a URL — copy each one below instead of using a JSON config "
-"file."
+msgid "For Claude Desktop / claude.ai custom connectors — copy name + URL below."
 msgstr ""
 
 #: mcprack/templates/admin/servers_list.html:29
 #: mcprack/templates/admin/templates_list.html:14
-#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:81
-#: mcprack/templates/catalog.html:159
+#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:80
+#: mcprack/templates/catalog.html:158
 msgid "Name"
 msgstr ""
 
-#: mcprack/templates/catalog.html:84 mcprack/templates/catalog.html:91
-#: mcprack/templates/catalog.html:162 mcprack/templates/catalog.html:169
+#: mcprack/templates/catalog.html:83 mcprack/templates/catalog.html:90
+#: mcprack/templates/catalog.html:161 mcprack/templates/catalog.html:168
 msgid "Copy"
 msgstr ""
 
-#: mcprack/templates/catalog.html:88 mcprack/templates/catalog.html:166
+#: mcprack/templates/catalog.html:87 mcprack/templates/catalog.html:165
 msgid "URL"
 msgstr ""
 
-#: mcprack/templates/catalog.html:105
+#: mcprack/templates/catalog.html:104
 msgid "Available Servers"
 msgstr ""
 
-#: mcprack/templates/catalog.html:114
+#: mcprack/templates/catalog.html:113
 #, python-format
 msgid "Select %(label)s"
 msgstr ""
 
-#: mcprack/templates/catalog.html:129
+#: mcprack/templates/catalog.html:128
 msgid "Connector"
 msgstr ""
 
-#: mcprack/templates/catalog.html:134
+#: mcprack/templates/catalog.html:133
 msgid "Using Custom Credentials"
 msgstr ""
 
-#: mcprack/templates/catalog.html:136
+#: mcprack/templates/catalog.html:135
 msgid "Use My Own Credentials"
 msgstr ""
 
-#: mcprack/templates/catalog.html:145
+#: mcprack/templates/catalog.html:144
 msgid "No servers available yet. Ask an admin to register some."
 msgstr ""
 
-#: mcprack/templates/catalog.html:150
+#: mcprack/templates/catalog.html:149
 msgid "Save Selection"
 msgstr ""
 
-#: mcprack/templates/catalog.html:173
+#: mcprack/templates/catalog.html:172
 msgid "Close"
 msgstr ""
 

@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-30 07:26+0100\n"
+"POT-Creation-Date: 2026-10-31 13:26+0100\n"
 "PO-Revision-Date: 2026-08-01 11:21+0000\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: cs <LL@li.org>\n"
@@ -18,42 +18,42 @@ msgstr ""
 "Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: mcprack/auth.py:159 mcprack/auth.py:191
+#: mcprack/auth.py:165 mcprack/auth.py:197
 msgid "Invalid username or password."
 msgstr "Neplatné uživatelské jméno nebo heslo."
 
-#: mcprack/auth.py:179
+#: mcprack/auth.py:185
 msgid "This account has been deactivated."
 msgstr "Tento účet byl deaktivován."
 
-#: mcprack/auth.py:227
+#: mcprack/auth.py:233
 msgid ""
 "Your account is managed externally (LDAP) — its password can't be changed "
 "here."
 msgstr "Váš účet je spravován externě (LDAP) — jeho heslo zde nelze změnit."
 
-#: mcprack/auth.py:236
+#: mcprack/auth.py:242
 msgid "Current password is incorrect."
 msgstr "Aktuální heslo je nesprávné."
 
-#: mcprack/auth.py:238 mcprack/auth.py:307
+#: mcprack/auth.py:244 mcprack/auth.py:313
 #, python-format
 msgid "New password must be at least %(n)d characters."
 msgstr "Nové heslo musí mít alespoň %(n)d znaků."
 
-#: mcprack/auth.py:240 mcprack/auth.py:309
+#: mcprack/auth.py:246 mcprack/auth.py:315
 msgid "New password and confirmation don't match."
 msgstr "Nové heslo a jeho potvrzení se neshodují."
 
-#: mcprack/auth.py:247
+#: mcprack/auth.py:253
 msgid "Password changed."
 msgstr "Heslo bylo změněno."
 
-#: mcprack/auth.py:273
+#: mcprack/auth.py:279
 msgid "mcprack password reset"
 msgstr "Obnovení hesla pro mcprack"
 
-#: mcprack/auth.py:275
+#: mcprack/auth.py:281
 #, python-format
 msgid ""
 "Someone (hopefully you) requested a password reset for the mcprack account '%(username)s'.\n"
@@ -70,18 +70,18 @@ msgstr ""
 "\n"
 "Pokud jste o to nežádali, tento e-mail ignorujte — vaše heslo nebylo změněno."
 
-#: mcprack/auth.py:287
+#: mcprack/auth.py:293
 msgid ""
 "If that account exists and has an email on file, a reset link has been sent."
 msgstr ""
 "Pokud tento účet existuje a má nastavený e-mail, byl odeslán odkaz pro "
 "obnovení hesla."
 
-#: mcprack/auth.py:299
+#: mcprack/auth.py:305
 msgid "This password reset link is invalid or has expired."
 msgstr "Tento odkaz pro obnovení hesla je neplatný nebo vypršel."
 
-#: mcprack/auth.py:316
+#: mcprack/auth.py:322
 msgid "Password reset. You can now log in."
 msgstr "Heslo bylo obnoveno. Nyní se můžete přihlásit."
 
@@ -277,25 +277,19 @@ msgstr "Katalog MCP serverů"
 
 #: mcprack/templates/catalog.html:7
 msgid ""
-"Select the AI tools and services you want to use, save your selection, then "
-"download or copy the config for your client. You can change your selection "
-"anytime."
+"Select servers, save, then download or copy a client config. You can change "
+"the selection anytime."
 msgstr ""
-"Vyberte si AI nástroje a služby, které chcete používat, uložte svůj výběr a "
-"poté stáhněte nebo zkopírujte konfiguraci pro svého klienta. Výběr můžete "
-"kdykoli změnit."
+"Vyberte servery, uložte a stáhněte nebo zkopírujte config klienta. Výběr "
+"můžete kdykoli změnit."
 
 #: mcprack/templates/catalog.html:11
 msgid "Download Your Config"
 msgstr "Stáhnout vaši konfiguraci"
 
 #: mcprack/templates/catalog.html:12
-msgid ""
-"Once you've selected the servers you need, download or copy the config for "
-"your AI client:"
-msgstr ""
-"Jakmile vyberete potřebné servery, stáhněte nebo zkopírujte konfiguraci pro "
-"svého AI klienta:"
+msgid "Download or copy the config for your AI client:"
+msgstr "Stáhněte nebo zkopírujte config pro svého AI klienta:"
 
 #: mcprack/templates/catalog.html:18
 msgid "Works with Claude for Desktop application."
@@ -325,59 +319,60 @@ msgstr ""
 
 #: mcprack/templates/catalog.html:66
 msgid ""
-"Claude Desktop's \"Add custom connector\" dialog (and claude.ai) asks for a "
-"name and a URL — copy each one below instead of using a JSON config file."
+"For Claude Desktop / claude.ai custom connectors — copy name + URL below."
 msgstr ""
+"Pro vlastní konektory Claude Desktop / claude.ai — zkopírujte níže název + "
+"URL."
 
 #: mcprack/templates/admin/servers_list.html:29
 #: mcprack/templates/admin/templates_list.html:14
-#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:81
-#: mcprack/templates/catalog.html:159
+#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:80
+#: mcprack/templates/catalog.html:158
 msgid "Name"
 msgstr "Název"
 
-#: mcprack/templates/catalog.html:84 mcprack/templates/catalog.html:91
-#: mcprack/templates/catalog.html:162 mcprack/templates/catalog.html:169
+#: mcprack/templates/catalog.html:83 mcprack/templates/catalog.html:90
+#: mcprack/templates/catalog.html:161 mcprack/templates/catalog.html:168
 msgid "Copy"
 msgstr ""
 
-#: mcprack/templates/catalog.html:88 mcprack/templates/catalog.html:166
+#: mcprack/templates/catalog.html:87 mcprack/templates/catalog.html:165
 msgid "URL"
 msgstr ""
 
-#: mcprack/templates/catalog.html:105
+#: mcprack/templates/catalog.html:104
 msgid "Available Servers"
 msgstr "Dostupné servery"
 
-#: mcprack/templates/catalog.html:114
+#: mcprack/templates/catalog.html:113
 #, python-format
 msgid "Select %(label)s"
 msgstr "Vybrat %(label)s"
 
-#: mcprack/templates/catalog.html:129
+#: mcprack/templates/catalog.html:128
 #, fuzzy
 msgid "Connector"
 msgstr "Připojovací řetězec"
 
-#: mcprack/templates/catalog.html:134
+#: mcprack/templates/catalog.html:133
 msgid "Using Custom Credentials"
 msgstr "Používají se vlastní přihlašovací údaje"
 
-#: mcprack/templates/catalog.html:136
+#: mcprack/templates/catalog.html:135
 msgid "Use My Own Credentials"
 msgstr "Použít vlastní přihlašovací údaje"
 
-#: mcprack/templates/catalog.html:145
+#: mcprack/templates/catalog.html:144
 msgid "No servers available yet. Ask an admin to register some."
 msgstr ""
 "Zatím nejsou dostupné žádné servery. Požádejte administrátora, aby nějaké "
 "zaregistroval."
 
-#: mcprack/templates/catalog.html:150
+#: mcprack/templates/catalog.html:149
 msgid "Save Selection"
 msgstr "Uložit výběr"
 
-#: mcprack/templates/catalog.html:173
+#: mcprack/templates/catalog.html:172
 msgid "Close"
 msgstr ""
 
@@ -1670,3 +1665,8 @@ msgstr ""
 #~ msgstr ""
 #~ "Explicitně povolte nebo zakažte tomuto uživateli každý aktuálně dostupný MCP"
 #~ " server."
+
+#~ msgid ""
+#~ "Claude Desktop's \"Add custom connector\" dialog (and claude.ai) asks for a "
+#~ "name and a URL — copy each one below instead of using a JSON config file."
+#~ msgstr ""
