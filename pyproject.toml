@@ -31,7 +31,7 @@ dependencies = [
     "flask-limiter>=3.5.0",
     "ldap3",
     "gunicorn",
-    "fastmcp>=4.0.0a2",
+    "fastmcp>=4.1.4",
     "flask-babel",
     "PyYAML",
     "python-dotenv",

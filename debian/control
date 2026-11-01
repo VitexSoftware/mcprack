@@ -37,7 +37,7 @@ Depends:
  dbconfig-common,
  dbconfig-sqlite3 | dbconfig-pgsql | dbconfig-mysql,
 Recommends:
- python3-fastmcp (>= 4.0.0),
+ python3-fastmcp (>= 4.1.4),
 # Vaultwarden backend for the secret store. Older Vaultwarden lacks the
 # user-key-id endpoint that bw-cli (>= 2026.9) posts during unlock, which
 # crashed every unlock (2026-10-16 incident); 1.37.3-1.5 is the first
@@ -74,6 +74,8 @@ Suggests:
  mcp-server-redmine,
  mcp-server-semaphore,
  mcp-server-zabbix,
+ mcp-server-graylog,
+ mcp-server-wazuh,
  mcp-server-cc-token-saver,
  mcp-server-warden,
  mcp-server-blender,
@@ -95,6 +97,8 @@ Suggests:
  mcprack-mcp-server-semaphore,
  mcprack-mcp-server-warden,
  mcprack-mcp-server-zabbix,
+ mcprack-mcp-server-graylog,
+ mcprack-mcp-server-wazuh,
  mcprack-mcp-server-webdriver,
  mcprack-mcp-server-cc-token-saver,
  mcprack-mcp-server-ms-365,

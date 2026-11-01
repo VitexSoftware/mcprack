@@ -1072,6 +1072,7 @@ the catalog on `apt install`.
 - [InvokeAI](https://github.com/Vitexus/mcp-server-invokeai) (`mcp-server-invokeai` + companion)
 - [Email](https://github.com/Vitexus/mcp-server-email) (`mcp-server-email` + companion)
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) (+ companion)
+- [Graylog](https://github.com/VitexSoftware/mcp-server-graylog) (`mcp-server-graylog` + companion)
 - [LinkedIn](https://github.com/Vitexus/mcp-server-linkedin) (`mcp-server-linkedin` + companion)
 - [Magento 2](https://github.com/Vitexus/mcp-server-magento) (`mcp-server-magento` + companion)
 - [Mastodon](https://github.com/VitexSoftware/mcp-server-mastodon) (+ companion)
@@ -1087,4 +1088,5 @@ the catalog on `apt install`.
 - [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg) (+ companion)
 - [Vaultwarden/Bitwarden](https://github.com/Vitexus/mcp-server-warden) (`mcp-server-warden` + companion)
 - [WakaTime](https://github.com/Vitexus/mcp-server-wakatime) (`mcp-server-wakatime` + companion)
+- [Wazuh](https://github.com/VitexSoftware/mcp-server-wazuh) (`mcp-server-wazuh` + companion)
 - [Zabbix](https://github.com/Vitexus/mcp-server-zabbix) (+ companion)
