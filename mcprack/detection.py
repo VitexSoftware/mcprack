@@ -49,7 +49,7 @@ import subprocess
 # in order of preference; the first one found on PATH wins.
 KNOWN_STDIO_SERVERS = {
     "mastodon-mcp": {"label": "Mastodon MCP", "binaries": ["mastodon-mcp"], "args": []},
-    "ollama": {"label": "Ollama MCP", "binaries": ["ollama-mcp-server", "mcp-client-for-ollama"], "args": []},
+    "ollama": {"label": "Ollama MCP", "binaries": ["ollama-mcp-server", "mcp-ollama-python", "mcp-client-for-ollama"], "args": []},
     "abraflexi-mcp": {"label": "AbraFlexi MCP", "binaries": ["abraflexi-mcp", "abraflexi-mcp-server"], "args": []},
     "cc-token-saver": {"label": "CC Token Saver MCP", "binaries": ["cc-token-saver-mcp"], "args": []},
     "webdriver": {"label": "WebDriver MCP", "binaries": ["mcp-server-webdriver", "selenium-webdriver-mcp"], "args": []},

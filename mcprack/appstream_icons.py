@@ -88,12 +88,12 @@ def _resolve_icon_file(icon_name):
     if os.path.isabs(icon_name) and os.path.isfile(icon_name):
         return icon_name
 
-    base, ext = os.path.splitext(icon_name)
+    # Icon names are often dotted reverse-DNS ids (cz.vitexsoftware.foo), so
+    # splitext() would wrongly treat the last label as a file extension.
+    # Only skip suffix probing when the name already ends in an image extension.
     names = [icon_name]
-    if not ext:
+    if not icon_name.lower().endswith((".svg", ".png", ".xpm", ".svgz")):
         names.extend([f"{icon_name}.svg", f"{icon_name}.png", f"{icon_name}.xpm"])
-        if base and base != icon_name:
-            names.extend([f"{base}.svg", f"{base}.png", f"{base}.xpm"])
 
     for icon_dir in _ICON_DIRS:
         if not os.path.isdir(icon_dir):
@@ -157,6 +157,10 @@ def _binary_candidates(server):
     candidates.add(server.name)
     if server.name.endswith("-mcp"):
         candidates.add(server.name[:-4])
+    # Servers are often registered under a short name ("netbox", "zabbix")
+    # while the packaged binary follows a naming convention.
+    for pattern in ("{}-mcp", "{}-mcp-server", "mcp-server-{}", "mcp-{}-python"):
+        candidates.add(pattern.format(server.name))
     return {c for c in candidates if c}
 
 
