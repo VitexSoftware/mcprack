@@ -1080,6 +1080,7 @@ the catalog on `apt install`.
 - [MultiFlexi](https://github.com/VitexSoftware/mcp-server-multiflexi) (+ companion)
 - [NetBox](https://github.com/Spoje-NET/netbox-mcp-server) (`mcp-server-netbox` + companion; GitHub repo name unchanged)
 - [Nextcloud](https://github.com/Vitexus/mcp-server-nextcloud) (`mcp-server-nextcloud` + companion)
+- [Patreon](https://github.com/Vitexus/mcp-server-patreon) (`mcp-server-patreon` + companion; upstream kyurish)
 - [Phone / ADB](https://github.com/Vitexus/mcp-server-adb) (`mcp-server-adb` + companion)
 - [Raynet CRM](https://github.com/Vitexus/mcp-server-raynet) (`mcp-server-raynet` + companion)
 - [Redmine](https://github.com/Vitexus/mcp-server-redmine) (+ companion)
