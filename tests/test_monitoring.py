@@ -10,6 +10,18 @@ from mcprack.extensions import db
 from mcprack.models import McpServer, User
 
 
+@pytest.fixture(autouse=True)
+def _serialise_probe_pool(monkeypatch):
+    """check_servers() probes in a thread pool, and each worker opens its own
+    app context and reads the McpServer row back. That is fine in production,
+    where the engine pool hands every thread its own connection — but the test
+    config is `sqlite:///:memory:`, for which Flask-SQLAlchemy uses a
+    StaticPool holding ONE shared DBAPI connection. Two workers touching it at
+    once intermittently yields sqlite3.InterfaceError, a session.get() that
+    returns None for a row that exists, or an IndexError from inside the
+    driver (measured: 19 of 60 runs with 6 servers). Nothing here asserts
+    parallelism, so probe serially and keep these tests deterministic."""
+    monkeypatch.setattr(monitoring, "_MAX_PARALLEL", 1)
 
 
 def _server(**kw):
