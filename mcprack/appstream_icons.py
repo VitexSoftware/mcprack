@@ -81,7 +81,11 @@ def _iter_metainfo_files():
     )
     for pattern in patterns:
         for path in glob(pattern):
-            yield path
+            # Debian's ardour ships /usr/share/metainfo/ardour.appdata.xml as a
+            # *directory* of per-version files, so the glob can match something
+            # ET.parse() cannot open.
+            if os.path.isfile(path):
+                yield path
 
 
 def _resolve_icon_file(icon_name):
