@@ -8,14 +8,72 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-10-31 13:26+0100\n"
+"POT-Creation-Date: 2026-11-06 22:50+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.18.0\n"
+"Generated-By: Babel 2.17.0\n"
+
+#: mcprack/app.py:193
+msgid "Bad Request"
+msgstr ""
+
+#: mcprack/app.py:194
+msgid "The request could not be understood by the server."
+msgstr ""
+
+#: mcprack/app.py:204
+msgid "Access Denied"
+msgstr ""
+
+#: mcprack/app.py:205
+msgid "You do not have permission to access this resource."
+msgstr ""
+
+#: mcprack/app.py:215
+msgid "Page Not Found"
+msgstr ""
+
+#: mcprack/app.py:216
+msgid "The page or resource you requested could not be found."
+msgstr ""
+
+#: mcprack/app.py:226
+msgid "Request Too Large"
+msgstr ""
+
+#: mcprack/app.py:227
+msgid "The data you submitted is larger than this server accepts."
+msgstr ""
+
+#: mcprack/app.py:237
+msgid "Too Many Requests"
+msgstr ""
+
+#: mcprack/app.py:238
+msgid ""
+"Too many requests from your IP address. Please slow down and try again "
+"later."
+msgstr ""
+
+#: mcprack/app.py:249
+msgid "Internal Server Error"
+msgstr ""
+
+#: mcprack/app.py:250
+msgid "An unexpected server error occurred. Please contact the administrator."
+msgstr ""
+
+#: mcprack/app.py:260
+msgid "Bad Gateway"
+msgstr ""
+
+#: mcprack/app.py:261
+msgid "The upstream service did not respond properly."
+msgstr ""
 
 #: mcprack/auth.py:165 mcprack/auth.py:197
 msgid "Invalid username or password."
@@ -25,34 +83,34 @@ msgstr ""
 msgid "This account has been deactivated."
 msgstr ""
 
-#: mcprack/auth.py:233
+#: mcprack/auth.py:236
 msgid ""
 "Your account is managed externally (LDAP) — its password can't be changed"
 " here."
 msgstr ""
 
-#: mcprack/auth.py:242
+#: mcprack/auth.py:245
 msgid "Current password is incorrect."
 msgstr ""
 
-#: mcprack/auth.py:244 mcprack/auth.py:313
+#: mcprack/auth.py:247 mcprack/auth.py:317
 #, python-format
 msgid "New password must be at least %(n)d characters."
 msgstr ""
 
-#: mcprack/auth.py:246 mcprack/auth.py:315
+#: mcprack/auth.py:249 mcprack/auth.py:319
 msgid "New password and confirmation don't match."
 msgstr ""
 
-#: mcprack/auth.py:253
+#: mcprack/auth.py:256
 msgid "Password changed."
 msgstr ""
 
-#: mcprack/auth.py:279
+#: mcprack/auth.py:282
 msgid "mcprack password reset"
 msgstr ""
 
-#: mcprack/auth.py:281
+#: mcprack/auth.py:284
 #, python-format
 msgid ""
 "Someone (hopefully you) requested a password reset for the mcprack "
@@ -65,17 +123,17 @@ msgid ""
 " changed."
 msgstr ""
 
-#: mcprack/auth.py:293
+#: mcprack/auth.py:296
 msgid ""
 "If that account exists and has an email on file, a reset link has been "
 "sent."
 msgstr ""
 
-#: mcprack/auth.py:305
+#: mcprack/auth.py:309
 msgid "This password reset link is invalid or has expired."
 msgstr ""
 
-#: mcprack/auth.py:322
+#: mcprack/auth.py:326
 msgid "Password reset. You can now log in."
 msgstr ""
 
@@ -354,6 +412,11 @@ msgstr ""
 msgid "Close"
 msgstr ""
 
+#: mcprack/templates/error.html:10 mcprack/templates/override.html:108
+#: mcprack/templates/view_config.html:24
+msgid "Back to Catalog"
+msgstr ""
+
 #: mcprack/templates/forgot_password.html:2
 msgid "Forgot password"
 msgstr ""
@@ -468,47 +531,167 @@ msgstr ""
 
 #: mcprack/templates/override.html:2
 #, python-format
-msgid "Your %(label)s Credentials"
+msgid "Your %(label)s Configuration"
 msgstr ""
 
 #: mcprack/templates/override.html:6
 #, python-format
-msgid "Your credentials for %(label)s"
+msgid "Configuration for %(label)s"
 msgstr ""
 
-#: mcprack/templates/override.html:7
+#: mcprack/templates/override.html:8
 msgid ""
-"These credentials are stored securely in Vaultwarden and only apply to "
-"configs you download. They override the admin's default credentials."
+"mcprack automatically inherits all settings configured by your "
+"administrator. You can override specific keys or add your own custom "
+"settings below."
 msgstr ""
 
-#: mcprack/templates/admin/user_override_form.html:17
-#: mcprack/templates/override.html:11
-msgid "Expected keys:"
+#: mcprack/templates/admin/user_override_form.html:21
+#: mcprack/templates/override.html:15
+msgid "Available configuration keys"
 msgstr ""
 
-#: mcprack/templates/admin/user_override_form.html:25
-#: mcprack/templates/override.html:19
-msgid "Credentials (KEY=value format, one per line)"
+#: mcprack/templates/admin/user_override_form.html:22
+#: mcprack/templates/override.html:16
+msgid "Click \"+ Add\" to override or prefill a key"
 msgstr ""
 
-#: mcprack/templates/override.html:21
-msgid ""
-"Store sensitive values like API keys, tokens, and passwords in KEY=value "
-"format."
-msgstr ""
-
+#: mcprack/templates/admin/user_override_form.html:32
 #: mcprack/templates/override.html:26
-msgid "Save My Credentials"
+msgid "Required variable"
 msgstr ""
 
-#: mcprack/templates/admin/user_override_form.html:36
-#: mcprack/templates/override.html:31
-msgid "Reset to Default"
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+#: mcprack/templates/admin/user_override_form.html:32
+#: mcprack/templates/override.html:26
+msgid "required"
 msgstr ""
 
-#: mcprack/templates/override.html:36 mcprack/templates/view_config.html:24
-msgid "Back to Catalog"
+#: mcprack/templates/admin/user_override_form.html:35
+#: mcprack/templates/override.html:29
+msgid "Sensitive value / secret"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:35
+#: mcprack/templates/override.html:29
+msgid "secret"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:38
+#: mcprack/templates/override.html:32
+msgid "Configured by administrator"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:38
+#: mcprack/templates/override.html:32
+msgid "admin"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:46
+#: mcprack/templates/override.html:40
+msgid "Default:"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:50
+#: mcprack/templates/override.html:44
+msgid "Add"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:65
+#: mcprack/templates/override.html:59
+msgid "Add variable"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:185
+#: mcprack/templates/admin/user_override_form.html:68
+#: mcprack/templates/override.html:62
+msgid "Import .env file"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:73
+#: mcprack/templates/override.html:67
+msgid "Empty rows inherit the administrator's default values."
+msgstr ""
+
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+#: mcprack/templates/admin/user_override_form.html:82
+#: mcprack/templates/override.html:76
+msgid "sensitive"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:83
+#: mcprack/templates/override.html:77
+msgid "Inherited from admin"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:84
+#: mcprack/templates/override.html:78
+msgid "Overridden"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:85
+#: mcprack/templates/override.html:79
+msgid "Custom"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:86
+#: mcprack/templates/override.html:80
+msgid "↺ Revert to admin default"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:87
+#: mcprack/templates/override.html:81
+msgid "Duplicate key — each variable name must be unique."
+msgstr ""
+
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+#: mcprack/templates/admin/user_override_form.html:88
+#: mcprack/templates/override.html:82
+msgid "Key is required when a value is set."
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:178
+#: mcprack/templates/admin/user_override_form.html:89
+#: mcprack/templates/override.html:83
+msgid "Required value missing — the server cannot start until this is filled in."
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:178
+#: mcprack/templates/admin/user_override_form.html:90
+#: mcprack/templates/override.html:84
+#, python-format
+msgid ""
+"%(n)s required value(s) missing — the MCP server will not start until "
+"they are filled in."
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:95
+#: mcprack/templates/override.html:89
+msgid "Advanced: Raw KEY=value text editor"
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:98
+#: mcprack/templates/override.html:92
+msgid ""
+"If this textarea is populated and no row inputs are submitted, these "
+"KEY=value pairs will be saved."
+msgstr ""
+
+#: mcprack/templates/override.html:98
+msgid "Save My Configuration"
+msgstr ""
+
+#: mcprack/templates/override.html:103
+msgid "Reset All to Admin Defaults"
 msgstr ""
 
 #: mcprack/templates/reset_password.html:2
@@ -706,28 +889,7 @@ msgstr ""
 #: mcprack/templates/admin/install_wizard.html:103
 #: mcprack/templates/admin/install_wizard.html:137
 #: mcprack/templates/admin/server_form.html:178
-msgid "sensitive"
-msgstr ""
-
-#: mcprack/templates/admin/install_wizard.html:66
-#: mcprack/templates/admin/install_wizard.html:103
-#: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:178
-msgid "required"
-msgstr ""
-
-#: mcprack/templates/admin/install_wizard.html:66
-#: mcprack/templates/admin/install_wizard.html:103
-#: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:178
 msgid "Duplicate key — each environment variable name must be unique."
-msgstr ""
-
-#: mcprack/templates/admin/install_wizard.html:66
-#: mcprack/templates/admin/install_wizard.html:103
-#: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:178
-msgid "Key is required when a value is set."
 msgstr ""
 
 #: mcprack/templates/admin/install_wizard.html:67
@@ -1052,21 +1214,6 @@ msgstr ""
 msgid "This name is already used by another server."
 msgstr ""
 
-#: mcprack/templates/admin/server_form.html:178
-msgid "Required value missing — the server cannot start until this is filled in."
-msgstr ""
-
-#: mcprack/templates/admin/server_form.html:178
-#, python-format
-msgid ""
-"%(n)s required value(s) missing — the MCP server will not start until "
-"they are filled in."
-msgstr ""
-
-#: mcprack/templates/admin/server_form.html:185
-msgid "Import .env file"
-msgstr ""
-
 #: mcprack/templates/admin/servers_list.html:2
 msgid "MCP Servers"
 msgstr ""
@@ -1251,7 +1398,7 @@ msgstr ""
 
 #: mcprack/templates/admin/template_form.html:42
 #: mcprack/templates/admin/user_form.html:96
-#: mcprack/templates/admin/user_override_form.html:31
+#: mcprack/templates/admin/user_override_form.html:104
 msgid "Save"
 msgstr ""
 
@@ -1301,7 +1448,7 @@ msgid ""
 msgstr ""
 
 #: mcprack/templates/admin/user_config_view.html:24
-#: mcprack/templates/admin/user_override_form.html:41
+#: mcprack/templates/admin/user_override_form.html:114
 #, python-format
 msgid "Back to %(username)s"
 msgstr ""
@@ -1410,26 +1557,30 @@ msgstr ""
 
 #: mcprack/templates/admin/user_override_form.html:2
 #, python-format
-msgid "%(username)s — %(label)s credentials"
+msgid "%(username)s — %(label)s configuration"
 msgstr ""
 
 #: mcprack/templates/admin/user_override_form.html:6
 #, python-format
-msgid "Individual credentials for %(username)s — %(label)s"
+msgid "Individual configuration for %(username)s — %(label)s"
 msgstr ""
 
-#: mcprack/templates/admin/user_override_form.html:7
+#: mcprack/templates/admin/user_override_form.html:8
 msgid ""
-"Set this user's personal credentials for this server. These are stored "
-"securely and override the admin default for this user only. The user "
+"Set this user's personal configuration and credentials for this server. "
+"Empty keys automatically inherit the administrator defaults. The user "
 "never needs to log in or set these themselves."
 msgstr ""
 
-#: mcprack/templates/admin/user_override_form.html:11
+#: mcprack/templates/admin/user_override_form.html:13
 msgid ""
 "Self-service override is disabled for this server — this user could not "
 "set this themselves even if they logged in. As an admin, you can still "
 "set it here."
+msgstr ""
+
+#: mcprack/templates/admin/user_override_form.html:109
+msgid "Reset to Default"
 msgstr ""
 
 #: mcprack/templates/admin/users_list.html:5

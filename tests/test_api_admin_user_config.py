@@ -229,3 +229,57 @@ def test_apply_template_requires_template_id(app, client):
     _login_admin(client)
     resp = client.post(f"/api/v1/admin/users/{user_id}/apply-template", json={})
     assert resp.status_code == 400
+
+
+def test_admin_override_api_handles_non_secret_and_secret_keys_together(app, client):
+    """The JSON API, the CLI and the web editor all write the same override:
+    plain keys land in the database, declared/sensitive-looking ones in the
+    secret store, and a GET reports both."""
+    from mcprack import secret_store
+
+    user_id = _make_admin(app)
+    with app.app_context():
+        server = _make_server("jenkins", env_var_names=["API_TOKEN"])
+        server_id = server.id
+    _login_admin(client)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.put(
+            f"/api/v1/admin/users/{user_id}/overrides/{server_id}",
+            json={"env": {"API_TOKEN": "abc123", "REGION": "eu"}},
+        )
+        assert resp.status_code == 200
+
+        resp = client.get(f"/api/v1/admin/users/{user_id}/overrides/{server_id}?reveal=1")
+        assert resp.get_json()["data"]["env"] == {"API_TOKEN": "abc123", "REGION": "eu"}
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert non_secret == {"REGION": "eu"}
+    assert secret == {"API_TOKEN": "abc123"}
+    # the plain value really is in the row, not only in the secret store
+    assert row.env_config == {"REGION": "eu"}
+
+
+def test_admin_override_api_sees_a_value_set_through_the_web_editor(app, client):
+    from mcprack import secret_store
+
+    user_id = _make_admin(app)
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins", env_var_names=["API_TOKEN"])
+        server_id = server.id
+        user = db.session.get(User, user_id)
+        secret_store.save_user_override(server, user, {"REGION": "eu"}, {})
+        db.session.commit()
+    _login_admin(client)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.get(f"/api/v1/admin/users/{user_id}/overrides/{server_id}?reveal=1")
+
+    data = resp.get_json()["data"]
+    assert data["has_override"] is True
+    assert data["env"] == {"REGION": "eu"}

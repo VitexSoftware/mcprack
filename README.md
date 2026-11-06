@@ -116,11 +116,16 @@ after changing this.
 ## Security considerations for public-internet deployments
 
 mcprack ships hardened by default (CSRF protection, rate-limited login,
-secure session cookies, security headers, a `SECRET_KEY` startup guard) and
-`debian/mcprack.service`/`debian/apache-mcprack.conf` add systemd sandboxing
-and a sample TLS-terminating reverse proxy — see `debian/README.Debian`'s
-"Exposing mcprack to the public internet" section for the concrete
-configuration. Two risks remain that configuration alone doesn't close:
+password reset and OAuth token endpoints, secure session and remember-me
+cookies, security headers including CSP without `unsafe-inline`,
+`Permissions-Policy` and `Cross-Origin-Opener-Policy`, error pages that leak
+no stack traces, a `SECRET_KEY` startup guard, and gunicorn bound to
+loopback only — `GUNICORN_BIND`, so nothing can bypass TLS by talking to it
+directly) and `debian/mcprack.service`/`debian/apache-mcprack.conf` add
+systemd sandboxing and a sample TLS-terminating reverse proxy — see
+`debian/README.Debian`'s "Exposing mcprack to the public internet" section
+for the concrete configuration. Two risks remain that configuration alone
+doesn't close:
 
 - **Proxy path-token revocation**: the default per-user MCP proxy URLs
   (`/proxy/mcp/<token>/<server_id>`, minted by `catalog.py`'s
@@ -805,7 +810,15 @@ resolving that user's credentials at that exact moment. Each user gets their
 own isolated instance, even for a server several users have selected at once;
 idle instances are cleaned up automatically after 15 minutes. This needs
 `python3-fastmcp` installed (`apt install python3-fastmcp`) — see Admin →
-Proxy instances for a live list of what's running.
+Proxy instances for a live list of what's running. The binary is located at
+spawn time from `FASTMCP_BIN`, then `PATH`, then `/usr/bin/fastmcp`; set
+`FASTMCP_BIN` in `/etc/mcprack/env` only when fastmcp lives outside the
+system path (a virtualenv, say).
+
+Each instance listens on a loopback port derived from the (user, server)
+pair. If that port is already taken — a stale instance, or an unrelated
+local service — the spawn walks up to the next nine ports and records the
+one it actually bound, which is what Admin → Proxy instances shows.
 
 Two env vars in `/etc/mcprack/env` tune the cold-spawn path, if the defaults
 don't fit your hardware:

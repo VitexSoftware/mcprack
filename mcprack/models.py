@@ -417,13 +417,16 @@ class UserServerSelection(db.Model):
 
 
 class UserServerOverride(db.Model):
-    """Records that a personal override exists for this user+server.
+    """One user's personal configuration for one server, layered on top of
+    the admin's defaults — they inherit everything the admin set and
+    override or add individual keys.
 
-    When Vaultwarden is configured, the actual override values live in
-    Vaultwarden under '<server.vault_item>-user-<username>' and
-    `env_secrets_encrypted` here stays empty — this row is just bookkeeping.
-    When Vaultwarden is not configured, `env_secrets_encrypted` holds the
-    Fernet-encrypted fallback copy instead. See secret_store.py."""
+    Non-secret overrides live here in plain `env_config_json`. Secret ones
+    do not: when Vaultwarden is configured their values are in Vaultwarden
+    under '<server.vault_item>-user-<username>' and `env_secrets_encrypted`
+    stays empty; without Vaultwarden that column holds the Fernet-encrypted
+    fallback copy. Merge order and storage choice are secret_store.py's
+    (resolve_server_env / save_user_override)."""
 
     __tablename__ = "user_server_overrides"
 
@@ -431,9 +434,21 @@ class UserServerOverride(db.Model):
     server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
     updated_at = db.Column(db.DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
     env_secrets_encrypted = db.Column(db.Text, nullable=True)
+    # Non-secret environment variable overrides for this user+server (JSON dict),
+    # stored directly in the database without needing Vaultwarden.
+    env_config_json = db.Column(db.Text, nullable=True, default='{}')
 
     user = db.relationship("User", back_populates="overrides")
     server = db.relationship("McpServer", back_populates="overrides")
+
+    @property
+    def env_config(self):
+        value = _safe_json_loads(self.env_config_json, {})
+        return value if isinstance(value, dict) else {}
+
+    @env_config.setter
+    def env_config(self, value):
+        self.env_config_json = json.dumps(dict(value or {}))
 
 
 class AuditLogEntry(db.Model):

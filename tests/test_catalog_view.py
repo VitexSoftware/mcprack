@@ -742,7 +742,7 @@ def test_override_page_handles_malformed_env_var_names_json(app, client):
 
     resp = client.get(f"/override/{server_id}")
     assert resp.status_code == 200
-    assert b"Your credentials for Broken Override" in resp.data
+    assert b"Configuration for Broken Override" in resp.data
 
 
 def test_catalog_hides_servers_explicitly_denied_for_user(app, client):
@@ -844,3 +844,175 @@ def test_override_forbidden_when_server_denied_for_user(app, client):
 
     resp = client.get(f"/override/{denied_id}")
     assert resp.status_code == 403
+
+
+# --- user configuration editor ----------------------------------------------
+
+def _add_overridable_server(app, user_id, name="override-me"):
+    with app.app_context():
+        server = McpServer(
+            name=name, label=name, transport="stdio", command="/bin/true",
+            enabled=True, allow_user_override=True,
+        )
+        server.env_config = {"REGION": "eu"}
+        server.env_var_names = ["API_TOKEN"]
+        db.session.add(server)
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=user_id, server_id=server.id))
+        db.session.commit()
+        return server.id
+
+
+def test_override_page_lists_admin_keys_as_inheritable_rows(app, client):
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    resp = client.get(f"/override/{server_id}")
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    # The known-keys panel and the row editor both need the admin's keys.
+    assert "REGION" in body and "API_TOKEN" in body
+    assert "data-known-keys=" in body
+    assert "override-editor.js" in body and "env-parse.js" in body
+
+
+def test_override_save_keeps_the_other_admin_values_inherited(app, client):
+    """Submitting one row must not wipe the admin defaults for the rest -
+    an empty value on an admin-defined key means "keep inheriting"."""
+    from mcprack import secret_store
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save",
+            "env_key__r1": "REGION", "env_value__r1": "us",
+            "env_key__r2": "API_TOKEN", "env_value__r2": "", "env_sensitive__r2": "on",
+        }, follow_redirects=False)
+        assert resp.status_code == 302
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+
+    assert non_secret == {"REGION": "us"}
+    assert secret == {}
+
+
+def test_override_save_rejects_duplicate_keys_without_losing_input(app, client):
+    """Row ids are opaque, so two rows can carry the same key; saving would
+    silently keep whichever came last. The JS warns, but it can be bypassed."""
+    from mcprack.models import UserServerOverride
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save",
+            "env_key__r1": "REGION", "env_value__r1": "us",
+            "env_key__r2": "REGION", "env_value__r2": "cz",
+        })
+
+    assert resp.status_code == 200
+    body = resp.data.decode()
+    assert "Duplicate key" in body
+    # the submitted values come back rather than a blank form
+    assert 'value="us"' in body or "us" in body
+    with app.app_context():
+        assert UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first() is None
+
+
+def test_override_save_still_accepts_the_raw_key_value_textarea(app, client):
+    """The row editor is JavaScript; with it disabled the form submits only
+    the textarea, and that path must keep working (and classify secrets the
+    same way the server-side detection does)."""
+    from mcprack import secret_store
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save",
+            "env_text": "REGION=us\nAPI_TOKEN=abc123\n# comment\n",
+        })
+        assert resp.status_code == 302
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+
+    assert non_secret == {"REGION": "us"}
+    assert secret == {"API_TOKEN": "abc123"}
+
+
+def test_override_reset_removes_the_whole_override(app, client):
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            secret_store.save_user_override(server, user, {"REGION": "us"}, {})
+            db.session.commit()
+
+        resp = client.post(f"/override/{server_id}", data={"action": "reset"})
+        assert resp.status_code == 302
+
+        with app.app_context():
+            assert UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first() is None
+
+
+def test_proxy_error_to_the_client_masks_configured_values(app, client):
+    """A UserProxyError carries the tail of the spawned server's own log. An
+    MCP server that logs its connection string would otherwise hand the
+    credential mcprack injected straight back to the end user's client."""
+    from mcprack import catalog, user_proxy
+
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id, name="leaky")
+    with app.app_context():
+        server = db.session.get(McpServer, server_id)
+        server.env_config = {"DB_URL": "postgres://user:sup3rs3cret@db/x"}
+        db.session.commit()
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    boom = user_proxy.UserProxyError(
+        "Upstream MCP server 'leaky' failed its startup handshake\n"
+        "Last log lines:\nauth failed for postgres://user:sup3rs3cret@db/x"
+    )
+    with patch.object(catalog.user_proxy, "ensure_user_server_proxy", side_effect=boom):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    body = resp.data.decode()
+    assert "sup3rs3cret" not in body
+    assert "***" in body
+    assert "failed its startup handshake" in body
+
+
+def test_proxy_error_to_the_client_is_length_bounded(app, client):
+    from mcprack import catalog, user_proxy
+
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id, name="chatty")
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    boom = user_proxy.UserProxyError("x" * 5000)
+    with patch.object(catalog.user_proxy, "ensure_user_server_proxy", side_effect=boom):
+        resp = client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    payload = json.loads(resp.data.decode())
+    assert len(payload["error"]["message"]) < 700
+    assert "truncated" in payload["error"]["message"]
