@@ -10,6 +10,8 @@ from mcprack.models import McpServer, User, UserServerOverride
 
 
 def _server(**overrides):
+    """A committed stdio server with overrides allowed - the baseline every
+    test here layers an admin or user configuration onto."""
     defaults = dict(
         name="jenkins",
         label="Jenkins",
@@ -26,6 +28,7 @@ def _server(**overrides):
 
 
 def _user(username="alice"):
+    """A committed local user to hang an override off."""
     user = User(username=username, auth_type="local")
     user.set_password("pw")
     db.session.add(user)
@@ -199,6 +202,37 @@ def test_split_override_values_follows_the_admins_secret_declaration(app):
 
         assert non_secret == {"REGION": "c"}
         assert secret == {"PLAIN_LOOKING_NAME": "a", "SOME_TOKEN": "b"}
+
+
+def test_split_override_values_keeps_an_already_secret_key_secret(app):
+    """The editor lets a user mark any key sensitive, and that choice is
+    invisible to the name heuristic. Re-splitting from the CLI or the API
+    must not demote such a value into plain env_config_json."""
+    with app.app_context():
+        server = _server()
+
+        non_secret, secret = secret_store.split_override_values(
+            server,
+            {"CONNECTION_STRING": "postgres://u:p@h/db", "REGION": "c"},
+            secret_keys={"CONNECTION_STRING"},
+        )
+
+        assert non_secret == {"REGION": "c"}
+        assert secret == {"CONNECTION_STRING": "postgres://u:p@h/db"}
+
+
+def test_split_override_values_without_secret_keys_still_classifies_by_name(app):
+    """Guards the default argument: callers that pass nothing keep the old
+    admin-declaration + heuristic behaviour."""
+    with app.app_context():
+        server = _server()
+
+        non_secret, secret = secret_store.split_override_values(
+            server, {"CONNECTION_STRING": "x", "SOME_TOKEN": "y"}
+        )
+
+        assert non_secret == {"CONNECTION_STRING": "x"}
+        assert secret == {"SOME_TOKEN": "y"}
 
 
 def test_docker_args_forward_a_key_that_exists_only_in_the_user_override(app):

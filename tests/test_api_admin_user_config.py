@@ -283,3 +283,147 @@ def test_admin_override_api_sees_a_value_set_through_the_web_editor(app, client)
     data = resp.get_json()["data"]
     assert data["has_override"] is True
     assert data["env"] == {"REGION": "eu"}
+
+
+def test_override_put_keeps_an_existing_secret_key_out_of_the_database(app, client):
+    """PUT replaces the whole override. A key the web editor stored as a
+    secret because the user ticked the box matches no heuristic, so without
+    the sticky classification a plain round-trip would rewrite a live
+    credential into plain env_config_json."""
+    from mcprack import secret_store
+
+    user_id = _make_admin(app)
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins")
+        server_id = server.id
+        user = db.session.get(User, user_id)
+        secret_store.save_user_override(server, user, {}, {"JENKINS_PAT": "pat-123"})
+        db.session.commit()
+    _login_admin(client)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.put(
+            f"/api/v1/admin/users/{user_id}/overrides/{server_id}",
+            json={"env": {"JENKINS_PAT": "pat-123", "REGION": "eu"}},
+        )
+        assert resp.status_code == 200
+
+        with app.app_context():
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert row.env_config == {"REGION": "eu"}
+
+
+def test_override_put_can_demote_a_key_with_an_explicit_secret_keys_list(app, client):
+    """The sticky rule must not become a one-way trap: an explicit
+    secret_keys is the only way back to plain storage for a key that is
+    secret purely because somebody ticked the box."""
+    from mcprack import secret_store
+
+    user_id = _make_admin(app)
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins")
+        server_id = server.id
+        user = db.session.get(User, user_id)
+        secret_store.save_user_override(server, user, {}, {"JENKINS_PAT": "pat-123"})
+        db.session.commit()
+    _login_admin(client)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.put(
+            f"/api/v1/admin/users/{user_id}/overrides/{server_id}",
+            json={"env": {"JENKINS_PAT": "pat-123"}, "secret_keys": []},
+        )
+        assert resp.status_code == 200
+
+        with app.app_context():
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert row.env_config == {"JENKINS_PAT": "pat-123"}
+
+
+def test_override_put_still_forces_an_admin_declared_secret(app, client):
+    """An explicit secret_keys may add to the secret half, never shrink the
+    part the server enforces."""
+    from mcprack import secret_store
+
+    user_id = _make_admin(app)
+    with app.app_context():
+        server = _make_server("jenkins", env_var_names=["API_TOKEN"])
+        server_id = server.id
+    _login_admin(client)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.put(
+            f"/api/v1/admin/users/{user_id}/overrides/{server_id}",
+            json={"env": {"API_TOKEN": "abc123"}, "secret_keys": []},
+        )
+        assert resp.status_code == 200
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert non_secret == {}
+    assert secret == {"API_TOKEN": "abc123"}
+    assert row.env_config == {}
+
+
+def test_override_put_rejects_a_malformed_secret_keys_list(app, client):
+    user_id = _make_admin(app)
+    with app.app_context():
+        server = _make_server("jenkins")
+        server_id = server.id
+    _login_admin(client)
+
+    resp = client.put(
+        f"/api/v1/admin/users/{user_id}/overrides/{server_id}",
+        json={"env": {"REGION": "eu"}, "secret_keys": "REGION"},
+    )
+
+    assert resp.status_code == 400
+    assert resp.get_json()["error"]["code"] == "invalid_request"
+
+
+def test_override_put_reports_a_vaultwarden_failure_as_502(app, client):
+    """The implicit path loads the existing override to learn which keys are
+    secret. That load talks to Vaultwarden, so it has to sit inside the
+    handler's try - outside it an outage turns the documented 502 into 500."""
+    from mcprack import secret_store, vaultwarden
+
+    user_id = _make_admin(app)
+    with app.app_context():
+        server = _make_server("jenkins")
+        server_id = server.id
+    _login_admin(client)
+
+    with patch.object(
+        secret_store, "load_user_override", side_effect=vaultwarden.VaultwardenError("vault down")
+    ):
+        resp = client.put(
+            f"/api/v1/admin/users/{user_id}/overrides/{server_id}",
+            json={"env": {"REGION": "eu"}},
+        )
+
+    assert resp.status_code == 502
+    assert resp.get_json()["error"]["code"] == "vaultwarden_unreachable"
+
+
+def test_override_get_reports_which_keys_are_secret(app, client):
+    from mcprack import secret_store
+
+    user_id = _make_admin(app)
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins", env_var_names=["API_TOKEN"])
+        server_id = server.id
+        user = db.session.get(User, user_id)
+        secret_store.save_user_override(server, user, {"REGION": "eu"}, {"API_TOKEN": "abc123"})
+        db.session.commit()
+    _login_admin(client)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.get(f"/api/v1/admin/users/{user_id}/overrides/{server_id}")
+
+    assert resp.get_json()["data"]["secret_keys"] == ["API_TOKEN"]

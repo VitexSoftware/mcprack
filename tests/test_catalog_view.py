@@ -219,20 +219,29 @@ def _extract_textarea_text(html_body):
 
 
 def test_view_and_download_render_identical_payload(app, client):
-    user_id = _login(client)
-    _add_selected_server(app, user_id)
+    # The relay URL carries a URLSafeTimedSerializer token, whose payload
+    # embeds a one-second-granularity timestamp. These are two separate
+    # requests, so without pinning the token the assertion fails whenever
+    # they happen to straddle a second boundary.
+    with patch("mcprack.catalog._make_proxy_token", return_value="fixed-token"):
+        user_id = _login(client)
+        _add_selected_server(app, user_id)
 
-    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("mcprack.catalog.vaultwarden.lock"), \
-         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
-        view_resp = client.get("/view/copilot")
+        with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.catalog.vaultwarden.lock"), \
+             patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
+            view_resp = client.get("/view/copilot")
 
-    with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
-         patch("mcprack.catalog.vaultwarden.lock"), \
-         patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
-        download_resp = client.get("/download/copilot")
+        with patch("mcprack.catalog.vaultwarden.unlock", return_value="sess"), \
+             patch("mcprack.catalog.vaultwarden.lock"), \
+             patch("mcprack.catalog.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret-value"}):
+            download_resp = client.get("/download/copilot")
 
-    assert json.loads(download_resp.data) == json.loads(_extract_textarea_text(view_resp.data.decode()))
+    payload = json.loads(download_resp.data)
+    assert payload == json.loads(_extract_textarea_text(view_resp.data.decode()))
+    # guard the pin itself: if the relay URL ever stops carrying the token,
+    # the comparison above would pass for the wrong reason
+    assert "fixed-token" in json.dumps(payload)
 
 
 def test_view_escapes_html_sensitive_characters_in_resolved_values(app):
@@ -848,7 +857,23 @@ def test_override_forbidden_when_server_denied_for_user(app, client):
 
 # --- user configuration editor ----------------------------------------------
 
+def _initial_rows(body):
+    """The rows the override editor was re-rendered with. They travel as
+    JSON in the container's data-initial attribute, so a substring check
+    against the page body proves nothing."""
+    import html as html_mod
+    import json as json_mod
+    import re as re_mod
+
+    match = re_mod.search(r"data-initial='([^']*)'", body)
+    assert match, "no data-initial attribute in the rendered page"
+    return json_mod.loads(html_mod.unescape(match.group(1)))
+
+
 def _add_overridable_server(app, user_id, name="override-me"):
+    """A server the user has selected, carrying one admin plain value
+    (REGION) and one admin-declared secret (API_TOKEN) - enough to cover
+    inherit, override and forced-secret behaviour in one fixture."""
     with app.app_context():
         server = McpServer(
             name=name, label=name, transport="stdio", command="/bin/true",
@@ -887,7 +912,7 @@ def test_override_save_keeps_the_other_admin_values_inherited(app, client):
 
     with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         resp = client.post(f"/override/{server_id}", data={
-            "action": "save",
+            "action": "save", "env_editor": "1",
             "env_key__r1": "REGION", "env_value__r1": "us",
             "env_key__r2": "API_TOKEN", "env_value__r2": "", "env_sensitive__r2": "on",
         }, follow_redirects=False)
@@ -912,7 +937,7 @@ def test_override_save_rejects_duplicate_keys_without_losing_input(app, client):
 
     with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
         resp = client.post(f"/override/{server_id}", data={
-            "action": "save",
+            "action": "save", "env_editor": "1",
             "env_key__r1": "REGION", "env_value__r1": "us",
             "env_key__r2": "REGION", "env_value__r2": "cz",
         })
@@ -920,8 +945,10 @@ def test_override_save_rejects_duplicate_keys_without_losing_input(app, client):
     assert resp.status_code == 200
     body = resp.data.decode()
     assert "Duplicate key" in body
-    # the submitted values come back rather than a blank form
-    assert 'value="us"' in body or "us" in body
+    # the submitted values come back rather than a blank form; the rows are
+    # re-rendered into the editor's data-initial JSON, not as value="..."
+    rows = _initial_rows(body)
+    assert [(r["key"], r["value"]) for r in rows] == [("REGION", "us"), ("REGION", "cz")]
     with app.app_context():
         assert UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first() is None
 
@@ -949,6 +976,183 @@ def test_override_save_still_accepts_the_raw_key_value_textarea(app, client):
 
     assert non_secret == {"REGION": "us"}
     assert secret == {"API_TOKEN": "abc123"}
+
+
+def test_override_row_editor_cannot_store_an_admin_secret_in_plaintext(app, client):
+    """An unchecked sensitive box submits nothing at all, so it cannot be
+    told apart from a client that never sent the field. Trusting it alone
+    let an admin-declared secret land in plain env_config_json."""
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save", "env_editor": "1",
+            "env_key__r1": "API_TOKEN", "env_value__r1": "abc123",
+        })
+        assert resp.status_code == 302
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert non_secret == {}
+    assert secret == {"API_TOKEN": "abc123"}
+    assert row.env_config == {}
+
+
+def test_override_row_editor_forces_a_sensitive_looking_key_to_the_secret_store(app, client):
+    """The same rule for a key the admin never declared: the name heuristic
+    classifies it identically on every write path, so the row editor must
+    not be the one place a credential-looking name stays in plaintext."""
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save", "env_editor": "1",
+            "env_key__r1": "SOME_TOKEN", "env_value__r1": "zzz",
+            "env_key__r2": "REGION", "env_value__r2": "us",
+        })
+        assert resp.status_code == 302
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert non_secret == {"REGION": "us"}
+    assert secret == {"SOME_TOKEN": "zzz"}
+    assert row.env_config == {"REGION": "us"}
+
+
+def test_override_save_with_no_rows_clears_the_override(app, client):
+    """Removing every row with the ✕ button and saving must actually clear
+    the override. It used to look identical to a no-JS submit, so the server
+    fell back to the pre-filled textarea and saved the old values back."""
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            secret_store.save_user_override(server, user, {"CUSTOM": "x"}, {})
+            db.session.commit()
+
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save", "env_editor": "1",
+            "env_text": "CUSTOM=x\n",
+        })
+        assert resp.status_code == 302
+
+        with app.app_context():
+            assert UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first() is None
+
+
+def test_override_save_ignores_the_textarea_when_the_row_editor_ran(app, client):
+    """The rows win over a stale textarea the browser submitted alongside
+    them - otherwise the two inputs silently disagree."""
+    from mcprack import secret_store
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save", "env_editor": "1",
+            "env_key__r1": "REGION", "env_value__r1": "us",
+            "env_text": "REGION=stale\nGHOST=1\n",
+        })
+        assert resp.status_code == 302
+
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            non_secret, secret = secret_store.load_user_override(server, user)
+
+    assert non_secret == {"REGION": "us"}
+    assert secret == {}
+
+
+def test_no_js_textarea_save_keeps_a_user_marked_secret_secret(app, client):
+    """The textarea flattens both halves into KEY=value lines. Re-splitting
+    by name alone would move a key the user marked sensitive - whose name
+    matches nothing - into plain env_config_json."""
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            secret_store.save_user_override(server, user, {}, {"JENKINS_PAT": "pat-123"})
+            db.session.commit()
+
+        # exactly what the no-JS form posts back: the rendered textarea
+        # plus the hidden list of keys the page was rendered with
+        resp = client.post(f"/override/{server_id}", data={
+            "action": "save",
+            "env_text": "JENKINS_PAT=pat-123\nREGION=us\n",
+            "env_secret_keys": "JENKINS_PAT",
+        })
+        assert resp.status_code == 302
+
+        with app.app_context():
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert row.env_config == {"REGION": "us"}
+
+
+def test_override_page_renders_the_secret_key_list_for_the_no_js_fallback(app, client):
+    """The hidden field is what makes the textarea round-trip safe, so a
+    template refactor dropping it must fail here rather than silently
+    demote credentials."""
+    from mcprack import secret_store
+
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        with app.app_context():
+            server = db.session.get(McpServer, server_id)
+            user = db.session.get(User, user_id)
+            secret_store.save_user_override(server, user, {}, {"JENKINS_PAT": "pat-123"})
+            db.session.commit()
+
+        resp = client.get(f"/override/{server_id}")
+
+    body = resp.data.decode()
+    assert 'name="env_secret_keys"' in body
+    assert "JENKINS_PAT" in body
+    # the raw textarea must be reachable by assistive tech
+    assert 'id="env_text"' in body and "aria-label=" in body
+
+
+def test_override_page_does_not_prerender_the_js_editor_marker(app, client):
+    """The marker only means anything when JavaScript put it there. Render
+    it server-side and every no-JS save silently stops writing anything."""
+    user_id = _login(client)
+    server_id = _add_overridable_server(app, user_id)
+
+    resp = client.get(f"/override/{server_id}")
+
+    assert 'name="env_editor"' not in resp.data.decode()
 
 
 def test_override_reset_removes_the_whole_override(app, client):
@@ -998,6 +1202,36 @@ def test_proxy_error_to_the_client_masks_configured_values(app, client):
     assert "sup3rs3cret" not in body
     assert "***" in body
     assert "failed its startup handshake" in body
+
+
+def test_proxy_error_in_the_log_masks_configured_values(app, client, caplog):
+    """Masking only the client answer still leaves the credential in the
+    persisted log, which is the copy that outlives the request."""
+    import logging
+
+    from mcprack import catalog, user_proxy
+
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id, name="leaky-log")
+    with app.app_context():
+        server = db.session.get(McpServer, server_id)
+        server.env_config = {"DB_URL": "postgres://user:sup3rs3cret@db/x"}
+        db.session.commit()
+        from mcprack.catalog import _make_proxy_token
+        token = _make_proxy_token(user_id, server_id)
+
+    boom = user_proxy.UserProxyError(
+        "Upstream MCP server 'leaky-log' failed its startup handshake\n"
+        "Last log lines:\nauth failed for postgres://user:sup3rs3cret@db/x"
+    )
+    with caplog.at_level(logging.ERROR, logger="mcprack.catalog"):
+        with patch.object(catalog.user_proxy, "ensure_user_server_proxy", side_effect=boom):
+            client.post(f"/proxy/mcp/{token}/{server_id}")
+
+    logged = "\n".join(record.getMessage() for record in caplog.records)
+    assert "Proxy start failed" in logged
+    assert "sup3rs3cret" not in logged
+    assert "***" in logged
 
 
 def test_proxy_error_to_the_client_is_length_bounded(app, client):

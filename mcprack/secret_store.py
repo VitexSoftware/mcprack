@@ -415,18 +415,33 @@ def delete_user_override_secrets(server, user):
     _invalidate_cached_secrets(server_id=server.id, user_id=user.id)
 
 
-def split_override_values(server, values):
-    """Raw {KEY: value} - from the JSON API, the CLI, or the editors' no-JS
-    textarea fallback - split into (non_secret, secret). Keys the admin
-    declared as secrets stay secrets; the rest fall back to the same name
-    heuristic the browser editors use, so one key is classified identically
-    whichever path set it."""
+def override_key_is_secret(server, key, secret_keys=()):
+    """The one place that decides whether a user override key belongs in the
+    secret store. Every path that writes an override - the row editor, the
+    no-JS textarea, the JSON API, the CLI - must ask this, or the same key
+    ends up encrypted on one path and in plain `env_config_json` on another.
+
+    `secret_keys` carries the keys that are *already* stored as secrets.
+    A user may mark any key sensitive in the editor, and that choice is
+    invisible to the name heuristic, so without it a later CLI or API write
+    would silently demote a live credential to plaintext."""
     from .env_detection import looks_sensitive_name
 
-    admin_secret_keys = set(server.env_var_names)
+    return (
+        key in set(server.env_var_names)
+        or key in secret_keys
+        or looks_sensitive_name(key)
+    )
+
+
+def split_override_values(server, values, secret_keys=()):
+    """Raw {KEY: value} - from the JSON API, the CLI, or the editors' no-JS
+    textarea fallback - split into (non_secret, secret), classified by
+    override_key_is_secret() so one key is classified identically whichever
+    path set it."""
     non_secret, secret = {}, {}
     for key, value in values.items():
-        if key in admin_secret_keys or looks_sensitive_name(key):
+        if override_key_is_secret(server, key, secret_keys):
             secret[key] = value
         else:
             non_secret[key] = value

@@ -284,6 +284,10 @@ def server_icon(server_id):
 
 
 def _external_proxy_url(endpoint, **kwargs):
+    """Absolute URL for a relay endpoint, preferring PUBLIC_BASE_URL over
+    whatever the request happens to carry. Behind a reverse proxy the
+    request's own host and scheme are the internal ones, so a config
+    generated from them points clients at an address they cannot reach."""
     base_url = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
     if base_url:
         rel = url_for(endpoint, **kwargs)
@@ -411,8 +415,13 @@ def _serve_user_proxy_mcp(user, server_id):
                     server=server,
                 )
             except user_proxy.UserProxyError as exc:
-                logger.error("Proxy start failed for server %s (user %s): %s", server.name, user.id, exc)
+                # Redact before logging, not only before answering: the
+                # exception carries the tail of the spawned server's own
+                # log, so an unredacted logger call persists the credential
+                # we injected. Truncation stays after it, so the log keeps
+                # the whole message.
                 message = _redact_env_values(str(exc), env)
+                logger.error("Proxy start failed for server %s (user %s): %s", server.name, user.id, message)
                 if len(message) > _MAX_CLIENT_ERROR_CHARS:
                     message = message[:_MAX_CLIENT_ERROR_CHARS] + "… (truncated; see the server log)"
                 return _jsonrpc_error_response(request_id, message)
@@ -522,6 +531,10 @@ def set_user_selection(user_id, submitted_ids):
 @bp.route("/selection", methods=["POST"])
 @login_required
 def selection():
+    """Save which servers go into this user's generated config.
+    set_user_selection() filters the submitted ids against the ACL, so a
+    posted id for a server the user may not use is dropped rather than
+    rejected."""
     submitted_ids = {int(sid) for sid in request.form.getlist("server_id")}
     set_user_selection(current_user.id, submitted_ids)
     db.session.commit()
@@ -677,10 +690,15 @@ def parse_user_override_form(server, form):
     admin_non_secret = dict(server.env_config or {})
     admin_secret_keys = set(server.env_var_names)
 
-    if not any(name.startswith("env_key__") for name in form):
-        # No row inputs: the browser had no JS, so fall back to the raw
-        # KEY=value textarea the form still carries.
-        return _parse_override_env_text(server, form.get("env_text", ""))
+    if "env_editor" not in form:
+        # override-editor.js injects that marker on load, so its absence
+        # means the browser had no JS: fall back to the raw KEY=value
+        # textarea the form still carries. Absence of env_key__* rows is
+        # not the same signal - that is also what deleting every row looks
+        # like, and falling back there re-saved the values just removed.
+        return _parse_override_env_text(
+            server, form.get("env_text", ""), _submitted_secret_keys(form)
+        )
 
     non_secret, secret = {}, {}
     for row_id in _override_row_ids(form):
@@ -692,14 +710,38 @@ def parse_user_override_form(server, form):
         value = form.get(f"env_value__{row_id}", "")
         if not value and (key in admin_non_secret or key in admin_secret_keys):
             continue
-        if form.get(f"env_sensitive__{row_id}") is not None:
+        # The checkbox may opt a value *into* the secret store, never out of
+        # it: an unchecked box is indistinguishable from a client that never
+        # sent the field, so trusting it alone let an admin-declared secret
+        # be written to plain env_config_json.
+        if (
+            form.get(f"env_sensitive__{row_id}") is not None
+            or secret_store.override_key_is_secret(server, key)
+        ):
             secret[key] = value
         else:
             non_secret[key] = value
     return non_secret, secret, None
 
 
-def _parse_override_env_text(server, raw):
+def _submitted_secret_keys(form):
+    """Which keys the form was rendered with in the secret store. The no-JS
+    textarea carries both halves flattened into KEY=value lines, so without
+    this the round-trip would re-classify by name alone and demote a key the
+    user marked sensitive. Env var names never contain whitespace, so a
+    space-separated list is enough.
+
+    Client-controlled, but it can only add keys to the secret half or drop a
+    key that is secret purely because a box was ticked - which is exactly
+    what unticking that box already does. Admin-declared and
+    credential-looking names stay forced by override_key_is_secret()."""
+    return set(form.get("env_secret_keys", "").split())
+
+
+def _parse_override_env_text(server, raw, secret_keys=()):
+    """The no-JS fallback: raw KEY=value lines into (non_secret, secret,
+    error). The error slot is always None - unlike the row editor this
+    path cannot produce duplicates, since a repeated key simply wins."""
     values = {}
     for line in raw.splitlines():
         line = line.strip()
@@ -709,7 +751,7 @@ def _parse_override_env_text(server, raw):
         key, value = key.strip(), value.strip()
         if key:
             values[key] = value
-    non_secret, secret = secret_store.split_override_values(server, values)
+    non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
     return non_secret, secret, None
 
 
@@ -736,7 +778,10 @@ def override_rows_from_form(server, form):
             "admin_value": admin_value,
             "is_admin_defined": (key in admin_non_secret) or (key in admin_secret_keys),
             "is_overridden": bool(value),
-            "sensitive": form.get(f"env_sensitive__{row_id}") is not None,
+            "sensitive": (
+                form.get(f"env_sensitive__{row_id}") is not None
+                or secret_store.override_key_is_secret(server, key)
+            ),
             "required": (key in required_keys) or bool(meta.get("required")),
             "description": meta.get("description"),
             "source": meta.get("source"),
@@ -747,6 +792,10 @@ def override_rows_from_form(server, form):
 @bp.route("/override/<int:server_id>", methods=["GET", "POST"])
 @login_required
 def override(server_id):
+    """The user's own configuration editor for one server. Needs both the
+    server ACL and the server's allow_user_override flag - an admin can
+    still set the same values through admin.user_override when
+    self-service is off."""
     server = db.get_or_404(McpServer, server_id)
     if server.id not in _allowed_enabled_server_ids(current_user.id):
         abort(403)

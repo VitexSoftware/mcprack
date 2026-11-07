@@ -282,12 +282,14 @@ def user_override_set(username, server_name, pairs):
     user = _get_user_or_fail(username)
     server = _get_server_or_fail(server_name)
     try:
-        non_secret, secret = secret_store.load_user_override(server, user)
-        values = {**non_secret, **secret}
+        non_secret, existing_secret = secret_store.load_user_override(server, user)
+        values = {**non_secret, **existing_secret}
         for raw_pair in pairs:
             key, value = _parse_key_value_pair(raw_pair, "KEY=VALUE")
             values[key] = value
-        non_secret, secret = secret_store.split_override_values(server, values)
+        non_secret, secret = secret_store.split_override_values(
+            server, values, secret_keys=existing_secret.keys()
+        )
         secret_store.save_user_override(server, user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         raise click.ClickException(str(exc))

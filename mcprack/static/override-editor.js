@@ -14,6 +14,20 @@ document.addEventListener('DOMContentLoaded', function () {
   var containerId = container.id || 'override-rows';
   var counter = 0;
 
+  // Tells the server the row editor ran. Without it "no env_key__* fields"
+  // is the only signal, and that is also what deleting every row produces -
+  // the server then fell back to the pre-filled env_text textarea and saved
+  // the old values straight back. Must be injected here and never rendered
+  // server-side, or the no-JS textarea fallback stops working.
+  var editorForm = container.closest('form');
+  if (editorForm && !editorForm.querySelector('input[name="env_editor"]')) {
+    var editorMarker = document.createElement('input');
+    editorMarker.type = 'hidden';
+    editorMarker.name = 'env_editor';
+    editorMarker.value = '1';
+    editorForm.appendChild(editorMarker);
+  }
+
   var initialRows = [];
   try {
     initialRows = JSON.parse(container.dataset.initial || '[]');
@@ -52,6 +66,8 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   var sensitiveLabelText = container.dataset.sensitiveLabel || 'sensitive';
+  var forcedSecretText = container.dataset.forcedSecretLabel
+    || 'Always stored as a secret — the administrator declared this key, or its name looks like a credential.';
   var inheritedBadgeText = container.dataset.inheritedLabel || 'Inherited from admin';
   var overriddenBadgeText = container.dataset.overriddenLabel || 'Overridden';
   var customBadgeText = container.dataset.customLabel || 'Custom';
@@ -131,6 +147,19 @@ document.addEventListener('DOMContentLoaded', function () {
     updateMissingSummary();
   }
 
+  // Mirrors secret_store.override_key_is_secret(): the server stores these
+  // keys as secrets whatever the checkbox says, so the checkbox must not
+  // pretend otherwise. Deliberately not keyed off known.sensitive - that is
+  // also true for manifest-detected secrets, which stay a suggestion the
+  // user may override.
+  function isForcedSecret(key) {
+    if (!key) {
+      return false;
+    }
+    var known = knownMap[key];
+    return !!((known && known.admin_secret) || looksSensitiveEnvName(key));
+  }
+
   function addRow(data) {
     counter++;
     var rowId = containerId + '-' + counter;
@@ -197,6 +226,32 @@ document.addEventListener('DOMContentLoaded', function () {
     sensLabel.appendChild(sensInput);
     sensLabel.appendChild(document.createTextNode(' ' + sensitiveLabelText));
     optCol.appendChild(sensLabel);
+
+    var autoCheckedByForce = false;
+
+    function applyForcedSecret() {
+      var forced = isForcedSecret(keyInput.value.trim());
+      sensInput.disabled = forced;
+      sensLabel.title = forced ? forcedSecretText : '';
+      if (forced) {
+        if (!sensInput.checked) {
+          sensInput.checked = true;
+          autoCheckedByForce = true;
+        }
+        if (valueInput.value) {
+          valueInput.type = 'password';
+        }
+      } else if (autoCheckedByForce) {
+        // The key was renamed away from a credential-looking name. Leaving
+        // the box ticked would quietly keep storing the value as a secret
+        // the user never asked for, so hand their own choice back.
+        sensInput.checked = false;
+        autoCheckedByForce = false;
+        valueInput.type = 'text';
+      }
+    }
+
+    applyForcedSecret();
 
     // Status badge
     var statusBadge = document.createElement('span');
@@ -306,6 +361,7 @@ document.addEventListener('DOMContentLoaded', function () {
           descHint.hidden = false;
         }
       }
+      applyForcedSecret();
       refreshRowErrors();
     });
 

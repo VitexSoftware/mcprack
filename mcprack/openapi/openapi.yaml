@@ -1432,6 +1432,14 @@ components:
           description: Present when the override exists and ?reveal=1 was passed.
           additionalProperties:
             type: string
+        secret_keys:
+          type: array
+          items:
+            type: string
+          description: >-
+            Present when the override exists. Which of the keys are held in the
+            secret store rather than in plain database config. A PUT keeps these
+            keys secret unless it sends its own secret_keys list.
 
     OverrideSet:
       type: object
@@ -1441,6 +1449,16 @@ components:
           type: object
           additionalProperties:
             type: string
+        secret_keys:
+          type: array
+          items:
+            type: string
+          description: >-
+            Optional. Which keys to store in the secret store. Omit it and the
+            keys already stored as secrets stay secret, on top of the admin's
+            declared secrets and the credential-like name heuristic, both of
+            which are always enforced. Send it to move a key the web editor
+            marked sensitive back into plain storage.
 
     GeneratedConfig:
       type: object

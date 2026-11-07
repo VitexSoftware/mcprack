@@ -131,6 +131,30 @@ def test_admin_can_set_and_reset_individual_credentials(app, client):
         assert secret_store.load_user_override_secrets(server, user) == {}
 
 
+def test_admin_override_clears_the_override_when_every_row_is_removed(app, client):
+    """The admin editor shares catalog.parse_user_override_form, so it gets
+    the same fix: an empty row set with the editor marker clears the
+    override instead of re-saving the pre-filled textarea."""
+    from mcprack import secret_store
+
+    user_id = _login_admin(client)
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = _make_server("jenkins")
+        server_id = server.id
+        user = db.session.get(User, user_id)
+        secret_store.save_user_override(server, user, {"CUSTOM": "x"}, {})
+        db.session.commit()
+
+        resp = client.post(
+            f"/admin/users/{user_id}/override/{server_id}",
+            data={"action": "save", "env_editor": "1", "env_text": "CUSTOM=x\n"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+
+        assert UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first() is None
+
+
 def test_templates_crud_and_apply(app, client):
     user_id = _login_admin(client)
     with app.app_context():
