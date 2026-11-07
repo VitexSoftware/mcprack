@@ -75,13 +75,19 @@ def _component_pkgname(component):
 
 
 def _iter_metainfo_files():
+    """Every AppStream metainfo file on the system that is actually a file.
+    The isfile() guard is not paranoia - see the ardour case below."""
     patterns = (
         "/usr/share/metainfo/*.xml",
         "/usr/share/appdata/*.xml",
     )
     for pattern in patterns:
         for path in glob(pattern):
-            yield path
+            # Debian's ardour ships /usr/share/metainfo/ardour.appdata.xml as a
+            # *directory* of per-version files, so the glob can match something
+            # ET.parse() cannot open.
+            if os.path.isfile(path):
+                yield path
 
 
 def _resolve_icon_file(icon_name):

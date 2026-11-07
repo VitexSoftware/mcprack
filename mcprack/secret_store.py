@@ -185,47 +185,71 @@ def server_needs_secrets(server):
 
 
 def resolve_server_env(server, user=None):
-    """Non-secret config (server.env_config) merged with resolved secrets
-    (server default, then the user's personal override on top). The single
-    entry point callers should use instead of touching vaultwarden.py or the
-    local encrypted columns directly."""
+    """Non-secret config (server.env_config) merged with admin secrets,
+    then the user's personal non-secret and secret overrides on top.
+    The single entry point callers should use instead of touching
+    vaultwarden.py or the local encrypted columns directly."""
+    from .models import UserServerOverride
+
     env = dict(server.env_config or {})
 
-    if not server_needs_secrets(server):
-        return env
-
-    if is_vaultwarden_configured():
-        key = _env_cache_key(server, user)
-        secrets = _get_cached_secrets(key)
-        if secrets is None:
-            # Acquire vaultwarden's own cross-process lock directly (instead
-            # of going through session(), which would unlock() first) so we
-            # can re-check the shared cache *after* getting exclusive access.
-            # Another worker may have resolved and cached this very key while
-            # we were waiting for the lock - if so, skip the `bw` round trip
-            # entirely instead of paying for it again.
-            with vaultwarden._serialized():
-                secrets = _get_cached_secrets(key)
-                if secrets is None:
-                    sess = vaultwarden.unlock()
-                    try:
-                        secrets = vaultwarden.resolve_env(sess, server, user=user)
-                    finally:
-                        vaultwarden.lock(sess)
-                    _set_cached_secrets(key, secrets)
-        env.update(secrets)
-        return env
-
-    env.update(_decrypt(server.env_secrets_encrypted))
+    override_row = None
     if user is not None:
-        from .models import UserServerOverride
-
         override_row = UserServerOverride.query.filter_by(
             user_id=user.id, server_id=server.id
         ).first()
-        if override_row:
-            env.update(_decrypt(override_row.env_secrets_encrypted))
+
+    # A user may add a secret key to a server the admin declared none for, so
+    # an override row is reason enough to look. With Vaultwarden the values
+    # live there and env_secrets_encrypted stays empty, which is why the row's
+    # mere existence - not its column - is what counts.
+    if server_needs_secrets(server) or (
+        override_row is not None
+        and (bool(override_row.env_secrets_encrypted) or is_vaultwarden_configured())
+    ):
+        if is_vaultwarden_configured():
+            key = _env_cache_key(server, user)
+            secrets = _get_cached_secrets(key)
+            if secrets is None:
+                # Acquire vaultwarden's own cross-process lock directly (instead
+                # of going through session(), which would unlock() first) so we
+                # can re-check the shared cache *after* getting exclusive access.
+                with vaultwarden._serialized():
+                    secrets = _get_cached_secrets(key)
+                    if secrets is None:
+                        sess = vaultwarden.unlock()
+                        try:
+                            secrets = vaultwarden.resolve_env(sess, server, user=user)
+                        finally:
+                            vaultwarden.lock(sess)
+                        _set_cached_secrets(key, secrets)
+            env.update(secrets)
+        else:
+            if server.env_secrets_encrypted:
+                env.update(_decrypt(server.env_secrets_encrypted))
+            if override_row and override_row.env_secrets_encrypted:
+                env.update(_decrypt(override_row.env_secrets_encrypted))
+
+    # User's non-secret overrides take precedence over inherited admin config
+    if override_row and override_row.env_config:
+        env.update(override_row.env_config)
+
     return env
+
+
+def _user_override_configs(user, server_ids):
+    """{server_id: non-secret override dict} for one user in a single query.
+    resolve_server_envs()'s whole point is one round trip for N servers, so
+    this must not become a per-server lookup."""
+    if user is None or not server_ids:
+        return {}
+    from .models import UserServerOverride
+
+    rows = UserServerOverride.query.filter(
+        UserServerOverride.user_id == user.id,
+        UserServerOverride.server_id.in_(server_ids),
+    ).all()
+    return {row.server_id: row.env_config for row in rows if row.env_config}
 
 
 def resolve_server_envs(servers, user=None):
@@ -235,6 +259,8 @@ def resolve_server_envs(servers, user=None):
     unlock/lookup/lock round trip (each several seconds) per server - so a
     pass over N servers holds Vaultwarden's lock for about as long as one
     resolution. A failure is returned per server, never raised."""
+    servers = list(servers)
+    overrides = _user_override_configs(user, [server.id for server in servers])
     results, pending = {}, []
     for server in servers:
         env = dict(server.env_config or {})
@@ -250,6 +276,7 @@ def resolve_server_envs(servers, user=None):
             pending.append(server)
         else:
             env.update(secrets)
+            env.update(overrides.get(server.id, {}))
             results[server.id] = env
     if not pending:
         return results
@@ -263,7 +290,11 @@ def resolve_server_envs(servers, user=None):
                 if secrets is None:
                     todo.append(server)
                 else:
-                    results[server.id] = {**(server.env_config or {}), **secrets}
+                    results[server.id] = {
+                        **(server.env_config or {}),
+                        **secrets,
+                        **overrides.get(server.id, {}),
+                    }
             if todo:
                 sess = vaultwarden.unlock()
                 try:
@@ -285,7 +316,11 @@ def resolve_server_envs(servers, user=None):
                 values.update(vaultwarden.parse_notes(override[1]))
         audit.log_audit_event("credential_access", "success", user=user, server=server)
         _set_cached_secrets(_env_cache_key(server, user), values)
-        results[server.id] = {**(server.env_config or {}), **values}
+        results[server.id] = {
+            **(server.env_config or {}),
+            **values,
+            **overrides.get(server.id, {}),
+        }
         if default and server.vault_item_id != default[0]:
             server.vault_item_id = default[0]
             learned = True
@@ -378,6 +413,105 @@ def delete_user_override_secrets(server, user):
     if override_row:
         db.session.delete(override_row)
     _invalidate_cached_secrets(server_id=server.id, user_id=user.id)
+
+
+def override_key_is_secret(server, key, secret_keys=()):
+    """The one place that decides whether a user override key belongs in the
+    secret store. Every path that writes an override - the row editor, the
+    no-JS textarea, the JSON API, the CLI - must ask this, or the same key
+    ends up encrypted on one path and in plain `env_config_json` on another.
+
+    `secret_keys` carries the keys that are *already* stored as secrets.
+    A user may mark any key sensitive in the editor, and that choice is
+    invisible to the name heuristic, so without it a later CLI or API write
+    would silently demote a live credential to plaintext."""
+    from .env_detection import looks_sensitive_name
+
+    return (
+        key in set(server.env_var_names)
+        or key in secret_keys
+        or looks_sensitive_name(key)
+    )
+
+
+def split_override_values(server, values, secret_keys=()):
+    """Raw {KEY: value} - from the JSON API, the CLI, or the editors' no-JS
+    textarea fallback - split into (non_secret, secret), classified by
+    override_key_is_secret() so one key is classified identically whichever
+    path set it."""
+    non_secret, secret = {}, {}
+    for key, value in values.items():
+        if override_key_is_secret(server, key, secret_keys):
+            secret[key] = value
+        else:
+            non_secret[key] = value
+    return non_secret, secret
+
+
+def load_user_override(server, user):
+    """Returns (non_secret_dict, secret_dict) for user's personal overrides."""
+    from .models import UserServerOverride
+
+    override_row = UserServerOverride.query.filter_by(
+        user_id=user.id, server_id=server.id
+    ).first()
+    non_secret = dict(override_row.env_config) if override_row else {}
+    secret = load_user_override_secrets(server, user)
+    return non_secret, secret
+
+
+def save_user_override(server, user, non_secret, secret):
+    """Save user's personal overrides: non-secret config directly in DB,
+    and secret config in Vaultwarden or local encrypted store."""
+    from .extensions import db
+    from .models import UserServerOverride
+
+    override_row = UserServerOverride.query.filter_by(
+        user_id=user.id, server_id=server.id
+    ).first()
+
+    if not non_secret and not secret:
+        if override_row:
+            delete_user_override(server, user)
+        return
+
+    # Whether a secret could already be stored for this pair. With
+    # Vaultwarden the values live there and env_secrets_encrypted stays
+    # empty, so an existing row is all we can go on - erring towards the
+    # teardown below, which must not leave a stale Vaultwarden item behind
+    # when a user clears their last secret.
+    had_secrets = override_row is not None and (
+        bool(override_row.env_secrets_encrypted) or is_vaultwarden_configured()
+    )
+
+    if not override_row:
+        override_row = UserServerOverride(user_id=user.id, server_id=server.id)
+        db.session.add(override_row)
+
+    override_row.env_config = non_secret or {}
+
+    if secret:
+        save_user_override_secrets(server, user, secret)
+    elif had_secrets:
+        # Only when something was actually stored before: an unlock/lock
+        # cycle costs seconds, and deleting an item that never existed is a
+        # no-op worth skipping on every non-secret save.
+        if is_vaultwarden_configured():
+            override_item = f"{server.vault_item}-user-{user.username}"
+            with vaultwarden.session() as sess:
+                vaultwarden.delete_item(sess, override_item)
+        override_row.env_secrets_encrypted = None
+
+    _invalidate_cached_secrets(server_id=server.id, user_id=user.id)
+
+
+def delete_user_override(server, user):
+    """Drop every personal override - secret and non-secret - for user+server.
+    Deleting the UserServerOverride row takes env_config_json with it, so the
+    secret-store teardown is all this needs to do; it exists as its own name
+    because callers reverting a user to the admin defaults should not have to
+    know that."""
+    delete_user_override_secrets(server, user)
 
 
 # --- Migration actions ------------------------------------------------------

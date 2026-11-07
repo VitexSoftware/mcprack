@@ -227,6 +227,9 @@ def logout():
 
 
 @bp.route("/account/password", methods=["GET", "POST"])
+# Same brute-force surface as /login: the form checks current_password, so an
+# authenticated session (or a hijacked one) could otherwise guess it freely.
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
 @login_required
 def account_password():
     if current_user.auth_type != "local":
@@ -257,7 +260,7 @@ def account_password():
 
 
 @bp.route("/forgot-password", methods=["GET", "POST"])
-@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+@limiter.limit(lambda: current_app.config["PASSWORD_RESET_RATE_LIMIT"])
 def forgot_password():
     smtp_configured = mailer.smtp_configured()
 
@@ -299,6 +302,7 @@ def forgot_password():
 
 
 @bp.route("/reset-password/<token>", methods=["GET", "POST"])
+@limiter.limit(lambda: current_app.config["PASSWORD_RESET_RATE_LIMIT"])
 def reset_password(token):
     user = _verify_reset_token(token, current_app.config["PASSWORD_RESET_MAX_AGE"])
     if user is None:

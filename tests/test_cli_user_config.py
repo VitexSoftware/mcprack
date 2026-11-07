@@ -291,3 +291,88 @@ def test_template_and_user_server_commands_fail_for_unknown_names(app):
         ):
             result = runner.invoke(args=args)
             assert result.exit_code != 0
+
+
+def test_user_override_set_stores_non_secret_keys_too(app):
+    """The CLI and the web editor must see one shared state: before this, a
+    plain key set in the browser was invisible here, and a CLI save left it
+    behind in the database to reappear later."""
+    from mcprack import secret_store
+
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        user = _make_user("alice")
+        server = _make_server("jenkins", env_var_names=["API_TOKEN"])
+        runner = app.test_cli_runner()
+
+        result = runner.invoke(args=[
+            "user", "override", "set", "alice", "jenkins", "REGION=eu", "API_TOKEN=abc123",
+        ])
+        assert result.exit_code == 0, result.output
+
+        non_secret, secret = secret_store.load_user_override(server, user)
+        assert non_secret == {"REGION": "eu"}
+        assert secret == {"API_TOKEN": "abc123"}
+
+        result = runner.invoke(args=["user", "override", "list", "alice", "jenkins"])
+        assert "REGION\tset" in result.output
+        assert "API_TOKEN\tset" in result.output
+
+
+def test_user_override_set_merges_into_a_browser_set_override(app):
+    from mcprack import secret_store
+
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        user = _make_user("alice")
+        server = _make_server("jenkins", env_var_names=["API_TOKEN"])
+        secret_store.save_user_override(server, user, {"REGION": "eu"}, {})
+        db.session.commit()
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["user", "override", "set", "alice", "jenkins", "LOG_LEVEL=debug"])
+        assert result.exit_code == 0, result.output
+
+        non_secret, _secret = secret_store.load_user_override(server, user)
+        assert non_secret == {"REGION": "eu", "LOG_LEVEL": "debug"}
+
+
+def test_user_override_set_does_not_demote_an_existing_secret_key(app):
+    """`override set` merges everything and re-splits it. A key the browser
+    editor stored as a secret because the user ticked the box matches no
+    heuristic, so without the sticky classification an unrelated CLI write
+    would move a live credential into plain env_config_json."""
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        user = _make_user("alice")
+        server = _make_server("jenkins")
+        secret_store.save_user_override(server, user, {}, {"JENKINS_PAT": "pat-123"})
+        db.session.commit()
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["user", "override", "set", "alice", "jenkins", "LOG_LEVEL=debug"])
+        assert result.exit_code == 0, result.output
+
+        non_secret, secret = secret_store.load_user_override(server, user)
+        assert non_secret == {"LOG_LEVEL": "debug"}
+        assert secret == {"JENKINS_PAT": "pat-123"}
+
+        row = UserServerOverride.query.filter_by(user_id=user.id, server_id=server.id).first()
+        assert row.env_config == {"LOG_LEVEL": "debug"}
+
+
+def test_user_override_reset_clears_non_secret_values_as_well(app):
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        user = _make_user("alice")
+        server = _make_server("jenkins")
+        secret_store.save_user_override(server, user, {"REGION": "eu"}, {})
+        db.session.commit()
+
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["user", "override", "reset", "alice", "jenkins"])
+        assert result.exit_code == 0, result.output
+
+        assert UserServerOverride.query.filter_by(user_id=user.id, server_id=server.id).first() is None

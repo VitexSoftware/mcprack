@@ -23,6 +23,9 @@ class Config:
     SESSION_COOKIE_SECURE = os.environ.get("SESSION_COOKIE_SECURE", "true").lower() in ("true", "1", "yes")
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
+    REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = int(os.environ.get("SESSION_LIFETIME_SECONDS", str(8 * 3600)))
 
     # --- CSRF (Flask-WTF) ---
@@ -35,6 +38,12 @@ class Config:
     # global limit across all workers.
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     LOGIN_RATE_LIMIT = os.environ.get("LOGIN_RATE_LIMIT", "10 per minute;50 per hour")
+    PASSWORD_RESET_RATE_LIMIT = os.environ.get("PASSWORD_RESET_RATE_LIMIT", "5 per minute;20 per hour")  # NOSONAR - rate-limit spec, not a credential
+    OAUTH_TOKEN_RATE_LIMIT = os.environ.get("OAUTH_TOKEN_RATE_LIMIT", "30 per minute")
+    # Flask-Limiter injects Retry-After / X-RateLimit-* from its own
+    # after_request hook, which is also what reaches app.py's custom 429
+    # page - without this the rendered page would carry no backoff hint.
+    RATELIMIT_HEADERS_ENABLED = True
 
     # --- Request body size cap ---
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(2 * 1024 * 1024)))
@@ -99,6 +108,7 @@ class Config:
         "BITWARDENCLI_APPDATA_DIR", "/opt/mcprack/.bw"
     )
     BW_BIN = os.environ.get("BW_BIN", "/usr/bin/bw")
+    FASTMCP_BIN = os.environ.get("FASTMCP_BIN", "")
 
     # Public demo mode: catalog browsing/selection and everything else still
     # works normally, but registering/editing/deleting MCP servers is

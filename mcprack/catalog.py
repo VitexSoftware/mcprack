@@ -25,6 +25,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from . import appstream_icons
 from . import audit
+from . import env_detection
 from . import health
 from . import secret_store
 from . import telemetry
@@ -282,6 +283,18 @@ def server_icon(server_id):
     return send_file(icon_path)
 
 
+def _external_proxy_url(endpoint, **kwargs):
+    """Absolute URL for a relay endpoint, preferring PUBLIC_BASE_URL over
+    whatever the request happens to carry. Behind a reverse proxy the
+    request's own host and scheme are the internal ones, so a config
+    generated from them points clients at an address they cannot reach."""
+    base_url = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
+    if base_url:
+        rel = url_for(endpoint, **kwargs)
+        return f"{base_url}{rel}"
+    return url_for(endpoint, _external=True, **kwargs)
+
+
 def _proxy_relay_url(user, server):
     """Per-user MCP relay URL for `server`. When OAuth is enabled the
     path token is omitted — clients authenticate with Authorization:
@@ -289,17 +302,15 @@ def _proxy_relay_url(user, server):
     Path-token URLs remain valid either way for clients that still embed
     them."""
     if current_app.config.get("OAUTH_ENABLED"):
-        return url_for(
+        return _external_proxy_url(
             "catalog.user_proxy_mcp_oauth",
             server_id=server.id,
-            _external=True,
         )
     token = _make_proxy_token(user.id, server.id)
-    return url_for(
+    return _external_proxy_url(
         "catalog.user_proxy_mcp",
         token=token,
         server_id=server.id,
-        _external=True,
     )
 
 
@@ -336,6 +347,20 @@ def _resolve_bearer_proxy_user():
     token.last_used_at = datetime.now(timezone.utc)
     db.session.commit()
     return user
+
+
+_MAX_CLIENT_ERROR_CHARS = 500
+
+
+def _redact_env_values(text, env):
+    """Masks every configured value in `text`. A UserProxyError carries the
+    tail of the spawned server's own log, and an MCP server that logs its
+    connection string or an auth failure puts the credential we injected
+    straight into it - the relay answer goes back to the end user's client,
+    so it must not become a credential read-back channel."""
+    for value in sorted((v for v in (env or {}).values() if v and len(str(v)) > 3), key=len, reverse=True):
+        text = text.replace(str(value), "***")
+    return text
 
 
 def _serve_user_proxy_mcp(user, server_id):
@@ -390,7 +415,16 @@ def _serve_user_proxy_mcp(user, server_id):
                     server=server,
                 )
             except user_proxy.UserProxyError as exc:
-                return _jsonrpc_error_response(request_id, str(exc))
+                # Redact before logging, not only before answering: the
+                # exception carries the tail of the spawned server's own
+                # log, so an unredacted logger call persists the credential
+                # we injected. Truncation stays after it, so the log keeps
+                # the whole message.
+                message = _redact_env_values(str(exc), env)
+                logger.error("Proxy start failed for server %s (user %s): %s", server.name, user.id, message)
+                if len(message) > _MAX_CLIENT_ERROR_CHARS:
+                    message = message[:_MAX_CLIENT_ERROR_CHARS] + "… (truncated; see the server log)"
+                return _jsonrpc_error_response(request_id, message)
 
             if request.method == "GET":
                 # A GET relay carries a long-lived SSE stream — holding
@@ -497,6 +531,10 @@ def set_user_selection(user_id, submitted_ids):
 @bp.route("/selection", methods=["POST"])
 @login_required
 def selection():
+    """Save which servers go into this user's generated config.
+    set_user_selection() filters the submitted ids against the ACL, so a
+    posted id for a server the user may not use is dropped rather than
+    rejected."""
     submitted_ids = {int(sid) for sid in request.form.getlist("server_id")}
     set_user_selection(current_user.id, submitted_ids)
     db.session.commit()
@@ -504,23 +542,270 @@ def selection():
     return redirect(url_for("catalog.index"))
 
 
+def get_server_known_keys(server):
+    """Collects all known/available configuration keys for `server` from
+    manifests, package metadata, detected environment variables, and admin settings."""
+    known = {}
+
+    suggestions = env_detection.from_system_manifest(server) or server.detected_env_vars or []
+    for s in suggestions:
+        name = s.get("name")
+        if name:
+            desc = s.get("description") or ""
+            if s.get("choices"):
+                choices = "one of: " + ", ".join(s["choices"])
+                desc = f"{desc} ({choices})" if desc else choices
+            known[name] = {
+                "key": name,
+                "description": desc or None,
+                "required": bool(s.get("required")),
+                "sensitive": bool(s.get("secret")),
+                "default": s.get("default") or "",
+                "source": s.get("source"),
+            }
+
+    for k, v in (server.env_config or {}).items():
+        entry = known.setdefault(
+            k,
+            {
+                "key": k,
+                "description": None,
+                "required": False,
+                "sensitive": False,
+                "default": "",
+                "source": "admin",
+            },
+        )
+        entry["default"] = v
+        entry["admin_defined"] = True
+
+    for k in server.env_var_names:
+        entry = known.setdefault(
+            k,
+            {
+                "key": k,
+                "description": None,
+                "required": False,
+                "sensitive": True,
+                "default": "",
+                "source": "admin",
+            },
+        )
+        entry["sensitive"] = True
+        entry["admin_defined"] = True
+        entry["admin_secret"] = True
+
+    for k in server.required_env_keys:
+        entry = known.setdefault(
+            k,
+            {
+                "key": k,
+                "description": None,
+                "required": True,
+                "sensitive": False,
+                "default": "",
+                "source": "required",
+            },
+        )
+        entry["required"] = True
+
+    return sorted(known.values(), key=lambda x: (not x.get("required"), x["key"]))
+
+
+def get_user_override_context(server, user):
+    """Prepares structured rows and known keys for the user configuration editor."""
+    try:
+        user_non_secret, user_secret = secret_store.load_user_override(server, user)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        flash(f"Could not reach Vaultwarden to load your credentials: {exc}", "error")
+        user_non_secret, user_secret = {}, {}
+
+    admin_non_secret = dict(server.env_config or {})
+    admin_secret_keys = set(server.env_var_names)
+    required_keys = set(server.required_env_keys)
+
+    known_keys = get_server_known_keys(server)
+    known_map = {item["key"]: item for item in known_keys}
+
+    all_keys = set(admin_non_secret) | admin_secret_keys | set(user_non_secret) | set(user_secret) | required_keys
+
+    rows = []
+    for k in sorted(all_keys, key=lambda key: (key not in required_keys, key)):
+        is_admin_defined = (k in admin_non_secret) or (k in admin_secret_keys)
+        is_secret = (k in user_secret) or (k in admin_secret_keys) or known_map.get(k, {}).get("sensitive", False)
+        is_required = (k in required_keys) or known_map.get(k, {}).get("required", False)
+
+        is_overridden = (k in user_non_secret) or (k in user_secret)
+
+        admin_val = ""
+        if k in admin_non_secret:
+            admin_val = admin_non_secret[k]
+        elif k in admin_secret_keys:
+            admin_val = "●●●●●●"
+
+        current_val = ""
+        if k in user_non_secret:
+            current_val = user_non_secret[k]
+        elif k in user_secret:
+            current_val = user_secret[k]
+
+        rows.append({
+            "key": k,
+            "value": current_val,
+            "admin_value": admin_val,
+            "is_admin_defined": is_admin_defined,
+            "is_overridden": is_overridden,
+            "sensitive": is_secret,
+            "required": is_required,
+            "description": known_map.get(k, {}).get("description"),
+            "source": known_map.get(k, {}).get("source"),
+        })
+
+    has_override = bool(user_non_secret or user_secret)
+    return rows, known_keys, has_override
+
+
+def _override_row_ids(form):
+    """Submitted row ids in DOM order. Order matters: a set would make which
+    of two rows with the same key wins arbitrary."""
+    ids, seen = [], set()
+    for name in form:
+        if name.startswith("env_key__"):
+            row_id = name[len("env_key__"):]
+            if row_id not in seen:
+                seen.add(row_id)
+                ids.append(row_id)
+    return ids
+
+
+def parse_user_override_form(server, form):
+    """The override editor's submitted rows -> (non_secret, secret, error).
+    Shared by catalog.override and admin.user_override so the self-service
+    and admin editors cannot drift apart.
+
+    `error` is a message to show the submitter; when it is set, nothing was
+    parsed and nothing should be saved. An empty value on an admin-defined
+    key means "keep inheriting the default" - that is exactly what the
+    editor's revert button does, it just clears the input."""
+    admin_non_secret = dict(server.env_config or {})
+    admin_secret_keys = set(server.env_var_names)
+
+    if "env_editor" not in form:
+        # override-editor.js injects that marker on load, so its absence
+        # means the browser had no JS: fall back to the raw KEY=value
+        # textarea the form still carries. Absence of env_key__* rows is
+        # not the same signal - that is also what deleting every row looks
+        # like, and falling back there re-saved the values just removed.
+        return _parse_override_env_text(
+            server, form.get("env_text", ""), _submitted_secret_keys(form)
+        )
+
+    non_secret, secret = {}, {}
+    for row_id in _override_row_ids(form):
+        key = form.get(f"env_key__{row_id}", "").strip()
+        if not key:
+            continue
+        if key in non_secret or key in secret:
+            return {}, {}, f"Duplicate key '{key}' — each variable name must appear only once."
+        value = form.get(f"env_value__{row_id}", "")
+        if not value and (key in admin_non_secret or key in admin_secret_keys):
+            continue
+        # The checkbox may opt a value *into* the secret store, never out of
+        # it: an unchecked box is indistinguishable from a client that never
+        # sent the field, so trusting it alone let an admin-declared secret
+        # be written to plain env_config_json.
+        if (
+            form.get(f"env_sensitive__{row_id}") is not None
+            or secret_store.override_key_is_secret(server, key)
+        ):
+            secret[key] = value
+        else:
+            non_secret[key] = value
+    return non_secret, secret, None
+
+
+def _submitted_secret_keys(form):
+    """Which keys the form was rendered with in the secret store. The no-JS
+    textarea carries both halves flattened into KEY=value lines, so without
+    this the round-trip would re-classify by name alone and demote a key the
+    user marked sensitive. Env var names never contain whitespace, so a
+    space-separated list is enough.
+
+    Client-controlled, but it can only add keys to the secret half or drop a
+    key that is secret purely because a box was ticked - which is exactly
+    what unticking that box already does. Admin-declared and
+    credential-looking names stay forced by override_key_is_secret()."""
+    return set(form.get("env_secret_keys", "").split())
+
+
+def _parse_override_env_text(server, raw, secret_keys=()):
+    """The no-JS fallback: raw KEY=value lines into (non_secret, secret,
+    error). The error slot is always None - unlike the row editor this
+    path cannot produce duplicates, since a repeated key simply wins."""
+    values = {}
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _sep, value = line.partition("=")
+        key, value = key.strip(), value.strip()
+        if key:
+            values[key] = value
+    non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
+    return non_secret, secret, None
+
+
+def override_rows_from_form(server, form):
+    """Rebuild the editor's rows from a rejected submission, so the submitter
+    gets their input back instead of a blank form (admin._env_rows_from_form
+    does the same job for the server form)."""
+    known_map = {item["key"]: item for item in get_server_known_keys(server)}
+    admin_non_secret = dict(server.env_config or {})
+    admin_secret_keys = set(server.env_var_names)
+    required_keys = set(server.required_env_keys)
+
+    rows = []
+    for row_id in _override_row_ids(form):
+        key = form.get(f"env_key__{row_id}", "").strip()
+        if not key:
+            continue
+        meta = known_map.get(key, {})
+        admin_value = admin_non_secret.get(key, "●●●●●●" if key in admin_secret_keys else "")
+        value = form.get(f"env_value__{row_id}", "")
+        rows.append({
+            "key": key,
+            "value": value,
+            "admin_value": admin_value,
+            "is_admin_defined": (key in admin_non_secret) or (key in admin_secret_keys),
+            "is_overridden": bool(value),
+            "sensitive": (
+                form.get(f"env_sensitive__{row_id}") is not None
+                or secret_store.override_key_is_secret(server, key)
+            ),
+            "required": (key in required_keys) or bool(meta.get("required")),
+            "description": meta.get("description"),
+            "source": meta.get("source"),
+        })
+    return rows
+
+
 @bp.route("/override/<int:server_id>", methods=["GET", "POST"])
 @login_required
 def override(server_id):
+    """The user's own configuration editor for one server. Needs both the
+    server ACL and the server's allow_user_override flag - an admin can
+    still set the same values through admin.user_override when
+    self-service is off."""
     server = db.get_or_404(McpServer, server_id)
     if server.id not in _allowed_enabled_server_ids(current_user.id):
         abort(403)
     if not server.allow_user_override:
         abort(403)
 
-    override_row = UserServerOverride.query.filter_by(
-        user_id=current_user.id, server_id=server.id
-    ).first()
-
     if request.method == "POST":
         if request.form.get("action") == "reset":
             try:
-                secret_store.delete_user_override_secrets(server, current_user)
+                secret_store.delete_user_override(server, current_user)
             except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
                 flash(f"Could not reach Vaultwarden: {exc} (ask an admin to check the diagnostics wizard).", "error")
                 return redirect(url_for("catalog.index"))
@@ -528,18 +813,20 @@ def override(server_id):
             flash(f"Reverted '{server.label}' to the default credentials.", "success")
             return redirect(url_for("catalog.index"))
 
-        values = {}
-        for line in request.form.get("env_text", "").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key = key.strip()
-            if key:
-                values[key] = val.strip()
+        user_non_secret, user_secret, error = parse_user_override_form(server, request.form)
+        if error:
+            flash(error, "error")
+            return render_template(
+                "override.html",
+                server=server,
+                env_rows=override_rows_from_form(server, request.form),
+                known_keys=get_server_known_keys(server),
+                has_override=True,
+                env_text=request.form.get("env_text", ""),
+            )
 
         try:
-            secret_store.save_user_override_secrets(server, current_user, values)
+            secret_store.save_user_override(server, current_user, user_non_secret, user_secret)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
             flash(f"Could not save your credentials: {exc} (ask an admin to check the diagnostics wizard).", "error")
             return redirect(url_for("catalog.index"))
@@ -548,17 +835,18 @@ def override(server_id):
         flash(f"Saved your personal credentials for '{server.label}'.", "success")
         return redirect(url_for("catalog.index"))
 
-    env_text = ""
-    if override_row:
-        try:
-            values = secret_store.load_user_override_secrets(server, current_user)
-        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            flash(f"Could not reach Vaultwarden to load your credentials: {exc}", "error")
-            values = {}
-        env_text = "\n".join(f"{k}={v}" for k, v in values.items())
+    env_rows, known_keys, has_override = get_user_override_context(server, current_user)
+
+    # env_text for backward compatibility
+    env_text = "\n".join(f"{r['key']}={r['value']}" for r in env_rows if r["is_overridden"])
 
     return render_template(
-        "override.html", server=server, env_text=env_text, has_override=bool(override_row)
+        "override.html",
+        server=server,
+        env_rows=env_rows,
+        known_keys=known_keys,
+        has_override=has_override,
+        env_text=env_text,
     )
 
 

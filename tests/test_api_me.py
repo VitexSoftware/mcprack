@@ -93,6 +93,36 @@ def test_overrides_round_trip(app, client):
         assert resp.get_json()["data"]["has_override"] is False
 
 
+def test_me_override_put_keeps_an_existing_secret_key_out_of_the_database(app, client):
+    """The /me mirror of the sticky-classification rule: a full-replace PUT
+    must not rewrite a key the web editor stored as a secret into plain
+    env_config_json."""
+    from mcprack import secret_store
+    from mcprack.models import UserServerOverride
+
+    user_id = _create_user(app)
+    server_id = _add_server(app)
+    _login(client)
+
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = db.session.get(McpServer, server_id)
+        user = db.session.get(User, user_id)
+        secret_store.save_user_override(server, user, {}, {"JENKINS_PAT": "pat-123"})
+        db.session.commit()
+
+    with patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        resp = client.put(
+            f"/api/v1/me/overrides/{server_id}",
+            json={"env": {"JENKINS_PAT": "pat-123", "REGION": "eu"}},
+        )
+        assert resp.status_code == 200
+
+        with app.app_context():
+            row = UserServerOverride.query.filter_by(user_id=user_id, server_id=server_id).first()
+
+    assert row.env_config == {"REGION": "eu"}
+
+
 def test_override_forbidden_when_not_allowed(app, client):
     _create_user(app)
     server_id = _add_server(app, name="locked", allow_user_override=False)

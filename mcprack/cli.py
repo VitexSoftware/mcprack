@@ -20,14 +20,9 @@ from . import admin
 from . import catalog
 from . import secret_store
 from . import vaultwarden
-from .env_detection import SENSITIVE_NAME_HINTS
+from .env_detection import looks_sensitive_name
 from .extensions import db
 from .models import ConfigTemplate, ConfigTemplateServer, McpServer, User, UserServerSelection
-
-
-def _looks_sensitive_name(name):
-    upper = name.upper()
-    return any(hint in upper for hint in SENSITIVE_NAME_HINTS)
 
 
 def _parse_key_value_pair(raw_value, option_name):
@@ -287,11 +282,15 @@ def user_override_set(username, server_name, pairs):
     user = _get_user_or_fail(username)
     server = _get_server_or_fail(server_name)
     try:
-        values = secret_store.load_user_override_secrets(server, user)
+        non_secret, existing_secret = secret_store.load_user_override(server, user)
+        values = {**non_secret, **existing_secret}
         for raw_pair in pairs:
             key, value = _parse_key_value_pair(raw_pair, "KEY=VALUE")
             values[key] = value
-        secret_store.save_user_override_secrets(server, user, values)
+        non_secret, secret = secret_store.split_override_values(
+            server, values, secret_keys=existing_secret.keys()
+        )
+        secret_store.save_user_override(server, user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         raise click.ClickException(str(exc))
     db.session.commit()
@@ -306,13 +305,13 @@ def user_override_list(username, server_name):
     user = _get_user_or_fail(username)
     server = _get_server_or_fail(server_name)
     try:
-        values = secret_store.load_user_override_secrets(server, user)
+        non_secret, secret = secret_store.load_user_override(server, user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         raise click.ClickException(str(exc))
-    if not values:
+    if not non_secret and not secret:
         click.echo(f"No individual credentials set for '{username}' on '{server_name}'.")
         return
-    for key in sorted(values):
+    for key in sorted({**non_secret, **secret}):
         click.echo(f"{key}\tset")
 
 
@@ -324,7 +323,7 @@ def user_override_reset(username, server_name):
     user = _get_user_or_fail(username)
     server = _get_server_or_fail(server_name)
     try:
-        secret_store.delete_user_override_secrets(server, user)
+        secret_store.delete_user_override(server, user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         raise click.ClickException(str(exc))
     db.session.commit()
@@ -855,7 +854,7 @@ def server_import_env(server_name, dotenv_path, overwrite):
         if already_set and not overwrite:
             skipped.append(key)
             continue
-        if _looks_sensitive_name(key):
+        if looks_sensitive_name(key):
             secret_values[key] = value
             secret_keys.add(key)
             non_secret.pop(key, None)

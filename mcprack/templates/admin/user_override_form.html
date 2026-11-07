@@ -1,10 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ _('%(username)s — %(label)s credentials', username=target_user.username, label=server.label) }} — {{ _('Admin') }} — mcprack{% endblock %}
+{% import "_override_editor.html" as override_editor with context %}
+{% block title %}{{ _('%(username)s — %(label)s configuration', username=target_user.username, label=server.label) }} — {{ _('Admin') }} — mcprack{% endblock %}
 {% block content %}
 
-<section>
-  <h1>🔐 {{ _('Individual credentials for %(username)s — %(label)s', username=target_user.username, label=server.label) }}</h1>
-  <p class="text-muted">{{ _('Set this user\'s personal credentials for this server. These are stored securely and override the admin default for this user only. The user never needs to log in or set these themselves.') }}</p>
+<section class="override-page-container">
+  <h1>⚙️ {{ _('Individual configuration for %(username)s — %(label)s', username=target_user.username, label=server.label) }}</h1>
+  <p class="text-muted">
+    {{ _('Set this user\'s personal configuration and credentials for this server. Empty keys automatically inherit the administrator defaults. The user never needs to log in or set these themselves.') }}
+  </p>
 
   {% if not server.allow_user_override %}
   <div class="card-tertiary mt-lg mb-lg">
@@ -12,19 +15,12 @@
   </div>
   {% endif %}
 
-  {% if server.env_var_names %}
-  <div class="card-tertiary mt-lg mb-lg">
-    <p class="m-0 mb-xs font-medium">{{ _('Expected keys:') }}</p>
-    <code class="block m-0">{{ server.env_var_names | join(', ') }}</code>
-  </div>
-  {% endif %}
+  {{ override_editor.known_keys_card(known_keys) }}
 
-  <form method="post">
+  <form method="post" id="admin-user-override-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="form-group">
-      <label for="env_text">{{ _('Credentials (KEY=value format, one per line)') }}</label>
-      <textarea id="env_text" name="env_text" rows="8" placeholder="EXAMPLE_API_KEY=your-key-here&#10;EXAMPLE_PASSWORD=your-password-here">{{ env_text }}</textarea>
-    </div>
+
+    {{ override_editor.editor_body(env_rows, known_keys, env_text, 'admin-override-rows') }}
 
     <div class="flex-gap-wrap">
       <button type="submit" name="action" value="save" class="btn btn-primary">
@@ -44,4 +40,5 @@
   </form>
 </section>
 
+{{ override_editor.editor_scripts() }}
 {% endblock %}

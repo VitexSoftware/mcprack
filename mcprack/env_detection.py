@@ -51,8 +51,12 @@ JS_ENV_PATTERN = re.compile(
 )
 
 
-def _looks_sensitive(name):
-    upper = name.upper()
+def looks_sensitive_name(name):
+    """Name-only guess at whether a value should be stored as a secret.
+    Public because every path that accepts raw KEY=value input - the web
+    editors' no-JS fallback, the JSON API, the CLI - has to make the same
+    call, and static/env-parse.js mirrors it for the browser side."""
+    upper = (name or "").upper()
     return any(hint in upper for hint in SENSITIVE_NAME_HINTS)
 
 
@@ -95,7 +99,7 @@ def _env_vars_from_manifest_dict(data):
         # An explicit isSecret (true or false) from the manifest author wins;
         # the name heuristic is only the fallback when the field is absent
         # (e.g. CREDENTIAL_STORAGE is a mode switch, not a credential).
-        secret = bool(entry["isSecret"]) if "isSecret" in entry else _looks_sensitive(name)
+        secret = bool(entry["isSecret"]) if "isSecret" in entry else looks_sensitive_name(name)
         default = entry.get("default")
         suggestion = {
             "name": name,
@@ -266,7 +270,7 @@ def _parse_smithery_yaml(text):
             {
                 "name": name,
                 "required": name in required_names,
-                "secret": _looks_sensitive(name),
+                "secret": looks_sensitive_name(name),
                 "description": None,
             }
         )
@@ -321,7 +325,7 @@ def _from_source_scan(install_path, install_method, package_spec):
                     found[name] = {
                         "name": name,
                         "required": False,
-                        "secret": _looks_sensitive(name),
+                        "secret": looks_sensitive_name(name),
                         "description": None,
                         "source": "source-scan",
                     }
@@ -359,7 +363,7 @@ def _from_docker_inspect(image_ref):
             {
                 "name": name,
                 "required": False,
-                "secret": _looks_sensitive(name),
+                "secret": looks_sensitive_name(name),
                 "description": "declared in Docker image",
                 "source": "docker-inspect",
             }

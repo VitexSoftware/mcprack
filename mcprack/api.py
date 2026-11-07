@@ -296,14 +296,45 @@ def _override_response(server, target_user, reveal):
     data = {"server_id": server.id, "has_override": bool(override_row)}
     if override_row:
         try:
-            values = secret_store.load_user_override_secrets(server, target_user)
+            non_secret, secret = secret_store.load_user_override(server, target_user)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
             return None, api_error(502, "vaultwarden_unreachable", str(exc))
+        values = {**non_secret, **secret}
+        # Which half a key lives in is sticky on a PUT, so a client that
+        # cannot see the classification cannot reason about what it is
+        # about to write back. Key names are already in env_keys.
+        data["secret_keys"] = sorted(secret)
         if reveal:
             data["env"] = values
         else:
             data["env_keys"] = list(values.keys())
     return data, None
+
+
+def _override_put_payload(server, target_user):
+    """Validate a PUT body for the two override setters and work out which
+    keys this write stores as secrets. Returns (values, secret_keys, None),
+    or (None, None, error_response).
+
+    An explicit `secret_keys` in the body wins: a full-replace PUT is
+    otherwise the one path that cannot move a key the web editor marked
+    sensitive back into plain storage. With no explicit list, keys already
+    stored as secrets stay secret, so a client that echoes back a GET
+    cannot silently demote a live credential to plaintext.
+
+    May raise VaultwardenError - call it inside the caller's try."""
+    data = request.get_json(silent=True) or {}
+    values = data.get("env")
+    if not isinstance(values, dict):
+        return None, None, api_error(400, "invalid_request", "env must be an object of key/value pairs")
+
+    explicit = data.get("secret_keys")
+    if explicit is None:
+        _non_secret, existing_secret = secret_store.load_user_override(server, target_user)
+        return values, set(existing_secret), None
+    if not isinstance(explicit, list) or not all(isinstance(key, str) for key in explicit):
+        return None, None, api_error(400, "invalid_request", "secret_keys must be an array of key names")
+    return values, set(explicit), None
 
 
 def _template_summary(template):
@@ -646,6 +677,9 @@ def admin_user_selections_set(user_id):
 # --- current user's per-server overrides ------------------------------------
 
 def _override_target_server(server_id):
+    """The server behind a /me/overrides call, or abort. Enforces both the
+    caller's ACL and the server's allow_user_override flag - unlike the
+    admin routes, which deliberately honour neither."""
     server = db.get_or_404(McpServer, server_id)
     if server.id not in catalog._allowed_enabled_server_ids(current_user.id):
         abort(403)
@@ -658,6 +692,9 @@ def _override_target_server(server_id):
 @api_login_required
 @api_scope_required("overrides:manage")
 def me_override_get(server_id):
+    """The caller's override for one server. Key names only unless
+    ?reveal=1 asks for the values, so a client listing what is configured
+    need not pull the credentials through."""
     server = _override_target_server(server_id)
     reveal = request.args.get("reveal") == "1"
     data, error = _override_response(server, current_user, reveal)
@@ -670,14 +707,16 @@ def me_override_get(server_id):
 @api_login_required
 @api_scope_required("overrides:manage")
 def me_override_set(server_id):
+    """Replace the caller's whole override for one server. Full replace,
+    not merge - a key left out is removed. See _override_put_payload() for
+    how this decides which of the submitted keys are stored as secrets."""
     server = _override_target_server(server_id)
-    data = request.get_json(silent=True) or {}
-    values = data.get("env")
-    if not isinstance(values, dict):
-        return api_error(400, "invalid_request", "env must be an object of key/value pairs")
-
     try:
-        secret_store.save_user_override_secrets(server, current_user, values)
+        values, secret_keys, error = _override_put_payload(server, current_user)
+        if error:
+            return error
+        non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
+        secret_store.save_user_override(server, current_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 
@@ -689,9 +728,11 @@ def me_override_set(server_id):
 @api_login_required
 @api_scope_required("overrides:manage")
 def me_override_delete(server_id):
+    """Drop the caller's override for one server, putting them back on the
+    admin's defaults for every key."""
     server = _override_target_server(server_id)
     try:
-        secret_store.delete_user_override_secrets(server, current_user)
+        secret_store.delete_user_override(server, current_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 
@@ -723,13 +764,12 @@ def admin_user_override_set(user_id, server_id):
     user_override route)."""
     target_user = db.get_or_404(User, user_id)
     server = db.get_or_404(McpServer, server_id)
-    data = request.get_json(silent=True) or {}
-    values = data.get("env")
-    if not isinstance(values, dict):
-        return api_error(400, "invalid_request", "env must be an object of key/value pairs")
-
     try:
-        secret_store.save_user_override_secrets(server, target_user, values)
+        values, secret_keys, error = _override_put_payload(server, target_user)
+        if error:
+            return error
+        non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
+        secret_store.save_user_override(server, target_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 
@@ -747,10 +787,12 @@ def admin_user_override_set(user_id, server_id):
 @bp.route("/admin/users/<int:user_id>/overrides/<int:server_id>", methods=["DELETE"])
 @api_admin_required
 def admin_user_override_delete(user_id, server_id):
+    """Revert one user's override for one server to the admin defaults.
+    Audited, because an admin is changing somebody else's credentials."""
     target_user = db.get_or_404(User, user_id)
     server = db.get_or_404(McpServer, server_id)
     try:
-        secret_store.delete_user_override_secrets(server, target_user)
+        secret_store.delete_user_override(server, target_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 

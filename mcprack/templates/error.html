@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}{{ error_code }} {{ error_title }} — mcprack{% endblock %}
+{% block content %}
+<section class="section">
+  <div class="card p-lg text-center error-card">
+    <h1 class="error-code">{{ error_code }}</h1>
+    <h2 class="mb-md">{{ error_title }}</h2>
+    <p class="text-muted mb-lg">{{ error_message }}</p>
+    <div>
+      <a href="{{ url_for('catalog.index') }}" class="btn btn-primary">{{ _('Back to Catalog') }}</a>
+    </div>
+  </div>
+</section>
+{% endblock %}

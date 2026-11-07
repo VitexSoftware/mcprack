@@ -2,9 +2,12 @@ import contextlib
 import fcntl
 import http.client
 import json
+import logging
 import os
 import re
+import shutil
 import signal
+import socket
 import subprocess
 import time
 from pathlib import Path
@@ -13,6 +16,8 @@ from . import audit
 from . import health
 from . import telemetry
 
+
+logger = logging.getLogger(__name__)
 
 STATE_DIR = Path("/var/lib/mcprack/user-proxies")
 _KEY_RE = re.compile(r"^u(?P<user_id>\d+)-s(?P<server_id>\d+)$")
@@ -70,12 +75,17 @@ def _port_for(user_id, server_id):
 
 
 def _paths(user_id, server_id):
+    """Every state file one (user, server) proxy owns. The state lives in
+    files rather than in memory because the gunicorn workers are separate
+    processes - whichever one handles the next relay has to find the
+    instance another worker spawned."""
     key = _server_key(user_id, server_id)
     base = STATE_DIR / key
     return {
         "config": base.with_suffix(".json"),
         "meta": base.with_suffix(".meta.json"),
         "pid": base.with_suffix(".pid"),
+        "port": base.with_suffix(".port"),
         "last_used": base.with_suffix(".last_used"),
         "healthy_at": base.with_suffix(".healthy_at"),
         "log": base.with_suffix(".log"),
@@ -200,6 +210,9 @@ def _read_text(path):
 
 
 def _read_pid(path):
+    """The pid recorded for an instance, or None when the file is missing,
+    empty or corrupt. A half-written file during a crash must read as "no
+    instance", not raise."""
     raw = _read_text(path)
     if not raw:
         return None
@@ -207,6 +220,21 @@ def _read_pid(path):
         return int(raw.strip())
     except ValueError:
         return None
+
+
+def _read_port(path):
+    """The port a spawn actually bound. It is not always _port_for()'s value:
+    a collision moves the instance to base+N, and that is the only record of
+    which port the live process is on. None when there is no usable record,
+    so callers fall back to the deterministic base port."""
+    raw = _read_text(path)
+    if not raw:
+        return None
+    try:
+        port = int(raw.strip())
+    except ValueError:
+        return None
+    return port if 1 <= port <= 65535 else None
 
 
 def _read_float(path):
@@ -220,6 +248,9 @@ def _read_float(path):
 
 
 def _pid_running(pid):
+    """Whether `pid` is a process that could still serve a relay. A zombie
+    counts as gone - see the comment below for why kill(pid, 0) alone is
+    not enough."""
     if not pid:
         return False
     try:
@@ -242,21 +273,34 @@ def _pid_running(pid):
 
 
 def _stop_pid(pid, timeout=3.0):
+    """SIGTERM, then SIGKILL once `timeout` has passed with the process
+    still alive. Escalating rather than waiting indefinitely: a wedged
+    fastmcp still holds the port the respawn needs."""
     if not _pid_running(pid):
         return
-    try:
-        os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return
+
+    def _send_signal(sig):
+        """Signal the whole process group, falling back to the pid alone.
+        fastmcp runs with start_new_session=True so its process group is
+        pid; signalling the group is what stops the stdio MCP server it
+        spawned from being orphaned."""
+        try:
+            os.killpg(pid, sig)
+            return
+        except (OSError, ProcessLookupError) as exc:
+            logger.debug("killpg(%s, %s) failed (%s), signalling the pid alone", pid, sig, exc)
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+
+    _send_signal(signal.SIGTERM)
     deadline = time.time() + timeout
     while time.time() < deadline:
         if not _pid_running(pid):
             return
         time.sleep(0.1)
-    try:
-        os.kill(pid, signal.SIGKILL)
-    except OSError:
-        pass
+    _send_signal(signal.SIGKILL)
 
 
 def _desired_config(server_name, command, args, env):
@@ -360,21 +404,117 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
 
 
 def _clear_state_files(paths):
-    for key in ("pid", "meta", "config", "healthy_at"):
+    """Drop the records of a dead instance so the next ensure() spawns
+    instead of probing a port nothing listens on. `last_used` and `log`
+    deliberately survive - one drives idle reaping, the other is the only
+    evidence left of why the instance died."""
+    for key in ("pid", "port", "meta", "config", "healthy_at"):
         try:
             paths[key].unlink()
         except OSError:
             pass
 
 
+def _resolve_fastmcp_bin():
+    """Explicit FASTMCP_BIN, else PATH, else the Debian package location.
+    Tested for executability rather than mere existence, and raising instead
+    of returning a guess: Popen on a missing path raises FileNotFoundError,
+    which callers that only catch UserProxyError would turn into a 500."""
+    from flask import current_app
+    try:
+        cfg = current_app.config.get("FASTMCP_BIN")
+    except Exception:
+        cfg = None
+    if cfg:
+        if os.access(cfg, os.X_OK):
+            return cfg
+        logger.warning("FASTMCP_BIN=%s is not executable; falling back to PATH lookup", cfg)
+    found = shutil.which("fastmcp")
+    if found:
+        return found
+    if os.access("/usr/bin/fastmcp", os.X_OK):
+        return "/usr/bin/fastmcp"
+    raise UserProxyError(
+        "No usable 'fastmcp' executable found - install the python3-fastmcp package, "
+        "or point FASTMCP_BIN in /etc/mcprack/env at it."
+    )
+
+
+def _read_recent_log(log_path, max_lines=20):
+    """The tail of an instance's own log, for a startup failure message.
+    Never raises: a missing or unreadable log must not replace the real
+    error with an IOError. Callers must redact it before it leaves the
+    process - the spawned server may have logged credentials into it."""
+    try:
+        with open(log_path, "r", errors="replace") as f:
+            lines = f.readlines()
+            if lines:
+                return "".join(lines[-max_lines:]).strip()
+    except Exception:
+        pass
+    return None
+
+
+# How far past the deterministic base port a spawn may walk when the port
+# is taken (by a stale instance, or by an unrelated local service).
+_PORT_SEARCH_RANGE = 10
+
+
+def _is_port_available(port, host="127.0.0.1"):
+    """Whether a spawn could bind `port` right now. Racy by nature - the
+    answer can be stale by the time fastmcp binds - but it turns the
+    common case (a stale instance or an unrelated local service) from an
+    opaque handshake failure into a port that simply works."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.bind((host, port))
+            return True
+        except OSError:
+            return False
+
+
+def _find_available_port(user_id, server_id):
+    """The deterministic base port for this pair, or the first free port
+    above it. Walking upward keeps the mapping stable in the normal case
+    while still letting an instance start when the base port is taken."""
+    base_port = _port_for(user_id, server_id)
+    for offset in range(_PORT_SEARCH_RANGE):
+        cand = base_port + offset
+        if _is_port_available(cand):
+            if offset:
+                logger.info("port %s busy, using %s for u%s-s%s", base_port, cand, user_id, server_id)
+            return cand
+    # Returning the busy base port instead would surface as a generic
+    # handshake failure, with the real "address already in use" buried in
+    # the instance log.
+    raise UserProxyError(
+        f"No free local port for this MCP server: {base_port}-{base_port + _PORT_SEARCH_RANGE - 1} "
+        "are all in use. Stop stale proxy instances in Admin -> Proxy instances."
+    )
+
+
 def _spawn(paths, port, server_name, desired_config, desired_json):
+    """Write the instance's config and start fastmcp on `port`. The config
+    and meta files are written first so a worker that finds the pid can
+    tell whether the running instance matches the config it wants."""
     paths["config"].write_text(json.dumps(desired_config, indent=2))
     paths["meta"].write_text(desired_json)
+    paths["port"].write_text(str(port))
+
+    fastmcp_bin = _resolve_fastmcp_bin()
+    spawn_env = os.environ.copy()
+    spawn_env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    # systemd does not set LANG, so without these a Python-based MCP server
+    # inherits an ASCII locale and dies on the first non-ASCII byte it tries
+    # to write.
+    spawn_env.setdefault("LANG", "C.UTF-8")
+    spawn_env.setdefault("PYTHONIOENCODING", "utf-8")
 
     with paths["log"].open("a") as log_file:
         proc = subprocess.Popen(
             [
-                "/usr/bin/fastmcp",
+                fastmcp_bin,
                 "run",
                 str(paths["config"]),
                 "--transport",
@@ -388,6 +528,7 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
             ],
             stdout=log_file,
             stderr=log_file,
+            env=spawn_env,
             start_new_session=True,
         )
 
@@ -395,22 +536,31 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
     paths["last_used"].write_text(str(int(time.time())))
     time.sleep(0.2)
     if proc.poll() is not None:
+        recent_log = _read_recent_log(paths["log"])
         _clear_state_files(paths)
-        raise UserProxyError(f"User proxy process exited early for {server_name}")
+        err = f"User proxy process exited early for {server_name}"
+        if recent_log:
+            err += f":\n{recent_log}"
+        raise UserProxyError(err)
 
     if not _probe_upstream_health(port, require_tools=True):
+        recent_log = _read_recent_log(paths["log"])
         _stop_pid(proc.pid)
         _clear_state_files(paths)
-        raise UserProxyError(
+        err = (
             f"Upstream MCP server '{server_name}' failed its startup handshake within "
-            f"{HANDSHAKE_TIMEOUT}s (or serves no tools) — the registered command is likely broken (check its "
-            f"log at {paths['log']}, or its registration in Admin → Servers)."
+            f"{HANDSHAKE_TIMEOUT}s (or serves no tools) — the registered command is likely broken."
         )
+        if recent_log:
+            err += f"\nLast log lines:\n{recent_log}"
+        else:
+            err += f" (check its log at {paths['log']}, or its registration in Admin → Servers)."
+        raise UserProxyError(err)
 
     paths["healthy_at"].write_text(str(time.time()))
 
 
-def _effective_args(server, args):
+def _effective_args(server, args, env_keys=()):
     """For Docker-installed servers, dynamically appends `-e <NAME>` for
     every currently configured env var name, computed fresh on each spawn
     rather than baked once into stored args — `docker run` never forwards
@@ -427,7 +577,7 @@ def _effective_args(server, args):
     if server is None or getattr(server, "install_method", None) != "docker":
         return args
 
-    names = list(server.env_var_names) + list(server.env_config.keys())
+    names = list(server.env_var_names) + list(server.env_config.keys()) + list(env_keys)
     if server.auth_env_key:
         names.append(server.auth_env_key)
 
@@ -439,14 +589,23 @@ def _effective_args(server, args):
 
 
 def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env, server=None):
+    """Return the port of a live proxy for this (user, server), starting or
+    restarting it as needed, and raise UserProxyError when it will not come
+    up. Idempotent and safe to call from every relay: the whole
+    read-decide-spawn sequence is held under the cross-process lock, so
+    concurrent workers converge on one instance instead of racing to spawn
+    several on the same port."""
     if not command:
         raise UserProxyError("Cannot start user proxy for server without command")
 
-    args = _effective_args(server, args)
+    # env_keys covers keys that exist only in this user's personal override -
+    # server.env_var_names/env_config alone would miss them.
+    args = _effective_args(server, args, env_keys=(env or {}).keys())
 
     with _serialized(user_id, server_id):
         paths = _paths(user_id, server_id)
-        port = _port_for(user_id, server_id)
+        recorded_port = _read_port(paths["port"])
+        port = recorded_port if recorded_port else _port_for(user_id, server_id)
 
         desired_config = _desired_config(server_name, command, args, env)
         desired_json = json.dumps(desired_config, sort_keys=True)
@@ -476,6 +635,9 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
             _stop_pid(pid)
         elif running:
             _stop_pid(pid)
+
+        # For a fresh spawn, find an available port starting from the base port
+        port = _find_available_port(user_id, server_id)
 
         start_time = time.monotonic()
         with telemetry.span("mcp.proxy.start", {"server_name": server_name}) as current_span:
@@ -514,8 +676,12 @@ def running_proxy_port(user_id, server_id):
     with a concurrent spawn/cleanup is absorbed by the caller's own probe
     or start path. Used by the monitoring prober so a periodic health
     refresh can reuse a warm instance without resolving credentials."""
-    if not _pid_running(_read_pid(_paths(user_id, server_id)["pid"])):
+    paths = _paths(user_id, server_id)
+    if not _pid_running(_read_pid(paths["pid"])):
         return None
+    recorded_port = _read_port(paths["port"])
+    if recorded_port:
+        return recorded_port
     return _port_for(user_id, server_id)
 
 
@@ -625,7 +791,7 @@ def stop_server_proxies(server_id):
                 pid = _read_pid(pid_path)
                 if pid:
                     _stop_pid(pid)
-                for key in ("pid", "last_used", "meta", "config", "healthy_at"):
+                for key in ("pid", "port", "last_used", "meta", "config", "healthy_at"):
                     try:
                         _paths(pid_user_id, server_id)[key].unlink()
                     except OSError:
@@ -642,13 +808,15 @@ def stop_server_proxies(server_id):
 
 
 def stop_user_server_proxy(user_id, server_id):
+    """Terminate this pair's proxy and forget it. Takes the same exclusive
+    lock as a spawn, so it cannot cut in on a relay mid-request."""
     with telemetry.span("mcp.proxy.stop", {"server_id": server_id}):
         with _serialized(user_id, server_id):
             paths = _paths(user_id, server_id)
             pid = _read_pid(paths["pid"])
             if pid:
                 _stop_pid(pid)
-            for key in ("pid", "last_used", "meta", "config", "healthy_at"):
+            for key in ("pid", "port", "last_used", "meta", "config", "healthy_at"):
                 try:
                     paths[key].unlink()
                 except OSError:
@@ -657,6 +825,9 @@ def stop_user_server_proxy(user_id, server_id):
 
 
 def list_proxy_instances():
+    """Every proxy the state directory knows about, running or not, for the
+    admin view. Reads files rather than process state because the instances
+    belong to other gunicorn workers."""
     instances = []
     if not STATE_DIR.exists():
         return instances
@@ -670,7 +841,7 @@ def list_proxy_instances():
         paths = _paths(user_id, server_id)
         pid = _read_pid(paths["pid"])
         running = _pid_running(pid)
-        port = _port_for(user_id, server_id)
+        port = _read_port(paths["port"]) or _port_for(user_id, server_id)
 
         last_used = 0.0
         try:
