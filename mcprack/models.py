@@ -443,11 +443,17 @@ class UserServerOverride(db.Model):
 
     @property
     def env_config(self):
+        """This user's non-secret overrides. Always a dict: the column is
+        nullable and holds free-form JSON, so a row written before the
+        column existed - or by hand - must not break the editor."""
         value = _safe_json_loads(self.env_config_json, {})
         return value if isinstance(value, dict) else {}
 
     @env_config.setter
     def env_config(self, value):
+        """Secrets must never arrive here - secret_store.save_user_override
+        splits them off first, and this column is plain text in the
+        database."""
         self.env_config_json = json.dumps(dict(value or {}))
 
 

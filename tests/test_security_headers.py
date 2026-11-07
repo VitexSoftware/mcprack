@@ -70,6 +70,9 @@ def test_hsts_absent_on_plain_http_test_request(client):
 
 
 def test_permissions_policy_and_coop_on_html_pages(client):
+    """COOP belongs on browsable pages but not everywhere - the companion
+    test below covers the MCP endpoints that must stay reachable
+    cross-origin."""
     resp = client.get("/login")
     permissions = resp.headers.get("Permissions-Policy", "")
     for feature in ("camera=()", "geolocation=()", "microphone=()", "usb=()"):

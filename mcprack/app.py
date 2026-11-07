@@ -79,6 +79,9 @@ def get_locale():
 
 
 def create_app(config_object=Config):
+    """Build a configured Flask app. The factory shape is what lets the
+    tests and the CLI build an isolated instance per use instead of
+    importing one global app."""
     app = Flask(__name__)
     app.config.from_object(config_object)
     _enforce_secret_key(app)
@@ -117,6 +120,10 @@ def create_app(config_object=Config):
 
     @app.after_request
     def _set_security_headers(response):
+        """Harden every response for a public-internet deployment. Applied
+        here rather than in the reverse proxy so the guarantee holds even
+        when mcprack is reached directly or the vhost is misconfigured;
+        setdefault so a view that needs its own value still wins."""
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
@@ -176,6 +183,9 @@ def create_app(config_object=Config):
         return response
 
     def _is_api_or_proxy_request():
+        """Whether this caller wants a machine-readable error. An MCP
+        client or API consumer handed a rendered HTML error page cannot
+        parse it, and the proxy and OAuth paths are never browsed."""
         return (
             request.path.startswith("/api/")
             or request.path.startswith("/proxy/mcp/")
@@ -185,6 +195,8 @@ def create_app(config_object=Config):
 
     @app.errorhandler(400)
     def handle_bad_request(err):
+        """400 as JSON for API/proxy callers, as a translated page for
+        browsers."""
         if _is_api_or_proxy_request():
             return jsonify({"error": "bad_request", "message": getattr(err, "description", str(err))}), 400
         return render_template(
@@ -196,6 +208,8 @@ def create_app(config_object=Config):
 
     @app.errorhandler(403)
     def handle_forbidden(err):
+        """403 as JSON for API/proxy callers, as a translated page for
+        browsers."""
         if _is_api_or_proxy_request():
             return jsonify({"error": "forbidden", "message": getattr(err, "description", str(err))}), 403
         return render_template(
@@ -207,6 +221,8 @@ def create_app(config_object=Config):
 
     @app.errorhandler(404)
     def handle_not_found(err):
+        """404 as JSON for API/proxy callers, as a translated page for
+        browsers."""
         if _is_api_or_proxy_request():
             return jsonify({"error": "not_found", "message": getattr(err, "description", str(err))}), 404
         return render_template(
@@ -218,6 +234,8 @@ def create_app(config_object=Config):
 
     @app.errorhandler(413)
     def handle_payload_too_large(err):
+        """413 from the MAX_CONTENT_LENGTH cap. The generic message is
+        deliberate - the limit itself is not the submitter's business."""
         if _is_api_or_proxy_request():
             return jsonify({"error": "payload_too_large", "message": getattr(err, "description", str(err))}), 413
         return render_template(
@@ -229,6 +247,9 @@ def create_app(config_object=Config):
 
     @app.errorhandler(429)
     def handle_rate_limit(err):
+        """429 from Flask-Limiter. Flask-Limiter adds Retry-After and the
+        X-RateLimit-* headers from its own after_request hook, so this only
+        has to supply the body."""
         if _is_api_or_proxy_request():
             return jsonify({"error": "rate_limit_exceeded", "message": getattr(err, "description", str(err))}), 429
         return render_template(
@@ -240,6 +261,9 @@ def create_app(config_object=Config):
 
     @app.errorhandler(500)
     def handle_internal_server_error(err):
+        """500 with the detail logged and withheld. Unlike the other
+        handlers this never echoes the description: an unexpected
+        exception's text can carry paths, SQL or credentials."""
         current_app.logger.exception("Internal server error")
         if _is_api_or_proxy_request():
             return jsonify({"error": "internal_error", "message": "An unexpected error occurred."}), 500
@@ -252,6 +276,8 @@ def create_app(config_object=Config):
 
     @app.errorhandler(502)
     def handle_bad_gateway(err):
+        """502 for an upstream that did not answer properly - a relayed MCP
+        backend, or Vaultwarden."""
         if _is_api_or_proxy_request():
             return jsonify({"error": "bad_gateway", "message": getattr(err, "description", str(err))}), 502
         return render_template(

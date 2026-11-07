@@ -75,6 +75,8 @@ def _component_pkgname(component):
 
 
 def _iter_metainfo_files():
+    """Every AppStream metainfo file on the system that is actually a file.
+    The isfile() guard is not paranoia - see the ardour case below."""
     patterns = (
         "/usr/share/metainfo/*.xml",
         "/usr/share/appdata/*.xml",

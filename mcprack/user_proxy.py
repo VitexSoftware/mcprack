@@ -75,6 +75,10 @@ def _port_for(user_id, server_id):
 
 
 def _paths(user_id, server_id):
+    """Every state file one (user, server) proxy owns. The state lives in
+    files rather than in memory because the gunicorn workers are separate
+    processes - whichever one handles the next relay has to find the
+    instance another worker spawned."""
     key = _server_key(user_id, server_id)
     base = STATE_DIR / key
     return {
@@ -206,6 +210,9 @@ def _read_text(path):
 
 
 def _read_pid(path):
+    """The pid recorded for an instance, or None when the file is missing,
+    empty or corrupt. A half-written file during a crash must read as "no
+    instance", not raise."""
     raw = _read_text(path)
     if not raw:
         return None
@@ -241,6 +248,9 @@ def _read_float(path):
 
 
 def _pid_running(pid):
+    """Whether `pid` is a process that could still serve a relay. A zombie
+    counts as gone - see the comment below for why kill(pid, 0) alone is
+    not enough."""
     if not pid:
         return False
     try:
@@ -263,12 +273,17 @@ def _pid_running(pid):
 
 
 def _stop_pid(pid, timeout=3.0):
+    """SIGTERM, then SIGKILL once `timeout` has passed with the process
+    still alive. Escalating rather than waiting indefinitely: a wedged
+    fastmcp still holds the port the respawn needs."""
     if not _pid_running(pid):
         return
 
     def _send_signal(sig):
-        # fastmcp runs with start_new_session=True so its process group is pid.
-        # Terminating the process group prevents orphaned child commands.
+        """Signal the whole process group, falling back to the pid alone.
+        fastmcp runs with start_new_session=True so its process group is
+        pid; signalling the group is what stops the stdio MCP server it
+        spawned from being orphaned."""
         try:
             os.killpg(pid, sig)
             return
@@ -389,6 +404,10 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
 
 
 def _clear_state_files(paths):
+    """Drop the records of a dead instance so the next ensure() spawns
+    instead of probing a port nothing listens on. `last_used` and `log`
+    deliberately survive - one drives idle reaping, the other is the only
+    evidence left of why the instance died."""
     for key in ("pid", "port", "meta", "config", "healthy_at"):
         try:
             paths[key].unlink()
@@ -422,6 +441,10 @@ def _resolve_fastmcp_bin():
 
 
 def _read_recent_log(log_path, max_lines=20):
+    """The tail of an instance's own log, for a startup failure message.
+    Never raises: a missing or unreadable log must not replace the real
+    error with an IOError. Callers must redact it before it leaves the
+    process - the spawned server may have logged credentials into it."""
     try:
         with open(log_path, "r", errors="replace") as f:
             lines = f.readlines()
@@ -438,6 +461,10 @@ _PORT_SEARCH_RANGE = 10
 
 
 def _is_port_available(port, host="127.0.0.1"):
+    """Whether a spawn could bind `port` right now. Racy by nature - the
+    answer can be stale by the time fastmcp binds - but it turns the
+    common case (a stale instance or an unrelated local service) from an
+    opaque handshake failure into a port that simply works."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -448,6 +475,9 @@ def _is_port_available(port, host="127.0.0.1"):
 
 
 def _find_available_port(user_id, server_id):
+    """The deterministic base port for this pair, or the first free port
+    above it. Walking upward keeps the mapping stable in the normal case
+    while still letting an instance start when the base port is taken."""
     base_port = _port_for(user_id, server_id)
     for offset in range(_PORT_SEARCH_RANGE):
         cand = base_port + offset
@@ -465,6 +495,9 @@ def _find_available_port(user_id, server_id):
 
 
 def _spawn(paths, port, server_name, desired_config, desired_json):
+    """Write the instance's config and start fastmcp on `port`. The config
+    and meta files are written first so a worker that finds the pid can
+    tell whether the running instance matches the config it wants."""
     paths["config"].write_text(json.dumps(desired_config, indent=2))
     paths["meta"].write_text(desired_json)
     paths["port"].write_text(str(port))
@@ -556,6 +589,12 @@ def _effective_args(server, args, env_keys=()):
 
 
 def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env, server=None):
+    """Return the port of a live proxy for this (user, server), starting or
+    restarting it as needed, and raise UserProxyError when it will not come
+    up. Idempotent and safe to call from every relay: the whole
+    read-decide-spawn sequence is held under the cross-process lock, so
+    concurrent workers converge on one instance instead of racing to spawn
+    several on the same port."""
     if not command:
         raise UserProxyError("Cannot start user proxy for server without command")
 
@@ -769,6 +808,8 @@ def stop_server_proxies(server_id):
 
 
 def stop_user_server_proxy(user_id, server_id):
+    """Terminate this pair's proxy and forget it. Takes the same exclusive
+    lock as a spawn, so it cannot cut in on a relay mid-request."""
     with telemetry.span("mcp.proxy.stop", {"server_id": server_id}):
         with _serialized(user_id, server_id):
             paths = _paths(user_id, server_id)
@@ -784,6 +825,9 @@ def stop_user_server_proxy(user_id, server_id):
 
 
 def list_proxy_instances():
+    """Every proxy the state directory knows about, running or not, for the
+    admin view. Reads files rather than process state because the instances
+    belong to other gunicorn workers."""
     instances = []
     if not STATE_DIR.exists():
         return instances
