@@ -1373,14 +1373,10 @@ def user_override(user_id, server_id):
     target_user = db.get_or_404(User, user_id)
     server = db.get_or_404(McpServer, server_id)
 
-    override_row = UserServerOverride.query.filter_by(
-        user_id=target_user.id, server_id=server.id
-    ).first()
-
     if request.method == "POST":
         if request.form.get("action") == "reset":
             try:
-                secret_store.delete_user_override_secrets(server, target_user)
+                secret_store.delete_user_override(server, target_user)
             except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
                 flash(f"Could not reach Vaultwarden: {exc}", "error")
                 return redirect(url_for("admin.user_edit", user_id=user_id))
@@ -1395,18 +1391,21 @@ def user_override(user_id, server_id):
             flash(f"Reverted '{target_user.username}' to the default credentials for '{server.label}'.", "success")
             return redirect(url_for("admin.user_edit", user_id=user_id))
 
-        values = {}
-        for line in request.form.get("env_text", "").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, val = line.partition("=")
-            key = key.strip()
-            if key:
-                values[key] = val.strip()
+        user_non_secret, user_secret, error = catalog.parse_user_override_form(server, request.form)
+        if error:
+            flash(error, "error")
+            return render_template(
+                "admin/user_override_form.html",
+                target_user=target_user,
+                server=server,
+                env_rows=catalog.override_rows_from_form(server, request.form),
+                known_keys=catalog.get_server_known_keys(server),
+                env_text=request.form.get("env_text", ""),
+                has_override=True,
+            )
 
         try:
-            secret_store.save_user_override_secrets(server, target_user, values)
+            secret_store.save_user_override(server, target_user, user_non_secret, user_secret)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
             flash(f"Could not save credentials: {exc}", "error")
             return redirect(url_for("admin.user_edit", user_id=user_id))
@@ -1422,21 +1421,17 @@ def user_override(user_id, server_id):
         flash(f"Saved individual credentials for '{target_user.username}' on '{server.label}'.", "success")
         return redirect(url_for("admin.user_edit", user_id=user_id))
 
-    env_text = ""
-    if override_row:
-        try:
-            values = secret_store.load_user_override_secrets(server, target_user)
-        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            flash(f"Could not reach Vaultwarden to load current values: {exc}", "error")
-            values = {}
-        env_text = "\n".join(f"{k}={v}" for k, v in values.items())
+    env_rows, known_keys, has_override = catalog.get_user_override_context(server, target_user)
+    env_text = "\n".join(f"{r['key']}={r['value']}" for r in env_rows if r["is_overridden"])
 
     return render_template(
         "admin/user_override_form.html",
         target_user=target_user,
         server=server,
+        env_rows=env_rows,
+        known_keys=known_keys,
         env_text=env_text,
-        has_override=bool(override_row),
+        has_override=has_override,
     )
 
 

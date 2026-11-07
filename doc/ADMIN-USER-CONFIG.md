@@ -20,11 +20,18 @@ consistent and either can be scripted or clicked through interchangeably.
   included when a config is generated for that user (`UserServerSelection`).
   A server can be allowed but not selected (available but not currently
   wanted in the config).
-- **Individual credentials** — per-user override values for one server
+- **Individual configuration** — per-user override values for one server
   (`UserServerOverride`, resolved through `secret_store.py`). These sit on
-  top of the server's admin-set defaults and are stored securely (in
-  Vaultwarden if configured, otherwise a local Fernet-encrypted column) —
-  never in plain text, and never in a configuration template.
+  top of the server's admin-set defaults: the user inherits everything the
+  admin configured and replaces or adds individual keys, so setting one
+  value never drops the rest. Secret values (keys the admin declared as
+  secrets, plus anything whose name looks like a credential — see
+  `env_detection.looks_sensitive_name`) are stored securely in Vaultwarden
+  if configured, otherwise in a local Fernet-encrypted column; never in
+  plain text, and never in a configuration template. Plain values are kept
+  in the row's own `env_config_json`, so a server with no secrets at all
+  needs no secret backend. The web editor, the JSON API and the CLI all read
+  and write this same state.
 - **Configuration template** (`ConfigTemplate` / `ConfigTemplateServer`) —
   a reusable, named preset of ACL + selection state an admin defines once
   and applies to any number of users. Applying a template replaces that
@@ -84,6 +91,15 @@ even when that server has self-service override disabled
 user's own self-service page respects that flag. Use **Reset to Default**
 to revert to the server's admin-set default credentials.
 
+The editor is the same row editor as the server form: it lists every known
+configuration key for that server (from the admin's own settings, the
+server's declared secrets and required keys, and any package/registry
+manifest), offers them as one-click chips and as autocomplete on the key
+field, marks each row as inherited / overridden / custom, and can import a
+`.env` file. A row left empty keeps inheriting the admin default — that is
+what the row's **Revert to admin default** button does. The user's own
+self-service page (`/override/<server_id>`) is identical.
+
 ### Hand off the finished config
 
 Admin → All Users → edit the user → **Client configs** → pick a client
@@ -106,7 +122,8 @@ mcprack user server select alice --server jenkins --server postgres
 
 # Individual (per-user) credentials
 mcprack user override set alice jenkins JENKINS_TOKEN=abc123
-mcprack user override list alice jenkins
+mcprack user override set alice jenkins LOG_LEVEL=debug   # plain values too
+mcprack user override list alice jenkins              # every overridden key
 mcprack user override reset alice jenkins             # revert to the server default
 
 # Hand off the finished config

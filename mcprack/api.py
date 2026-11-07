@@ -296,9 +296,10 @@ def _override_response(server, target_user, reveal):
     data = {"server_id": server.id, "has_override": bool(override_row)}
     if override_row:
         try:
-            values = secret_store.load_user_override_secrets(server, target_user)
+            non_secret, secret = secret_store.load_user_override(server, target_user)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
             return None, api_error(502, "vaultwarden_unreachable", str(exc))
+        values = {**non_secret, **secret}
         if reveal:
             data["env"] = values
         else:
@@ -676,8 +677,9 @@ def me_override_set(server_id):
     if not isinstance(values, dict):
         return api_error(400, "invalid_request", "env must be an object of key/value pairs")
 
+    non_secret, secret = secret_store.split_override_values(server, values)
     try:
-        secret_store.save_user_override_secrets(server, current_user, values)
+        secret_store.save_user_override(server, current_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 
@@ -691,7 +693,7 @@ def me_override_set(server_id):
 def me_override_delete(server_id):
     server = _override_target_server(server_id)
     try:
-        secret_store.delete_user_override_secrets(server, current_user)
+        secret_store.delete_user_override(server, current_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 
@@ -728,8 +730,9 @@ def admin_user_override_set(user_id, server_id):
     if not isinstance(values, dict):
         return api_error(400, "invalid_request", "env must be an object of key/value pairs")
 
+    non_secret, secret = secret_store.split_override_values(server, values)
     try:
-        secret_store.save_user_override_secrets(server, target_user, values)
+        secret_store.save_user_override(server, target_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 
@@ -750,7 +753,7 @@ def admin_user_override_delete(user_id, server_id):
     target_user = db.get_or_404(User, user_id)
     server = db.get_or_404(McpServer, server_id)
     try:
-        secret_store.delete_user_override_secrets(server, target_user)
+        secret_store.delete_user_override(server, target_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         return api_error(502, "vaultwarden_unreachable", str(exc))
 

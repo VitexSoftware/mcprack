@@ -26,7 +26,7 @@ from authlib.oauth2.rfc7636 import CodeChallenge as _CodeChallenge
 from flask import Blueprint, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
-from .extensions import csrf, db
+from .extensions import csrf, db, limiter
 from .models import (
     OAUTH_MCP_SCOPE,
     OAuthAuthorizationCode,
@@ -310,16 +310,24 @@ def authorize():
     return authorization.create_authorization_response(grant=grant, grant_user=current_user)
 
 
+# These three are unauthenticated POST endpoints reachable by anyone who can
+# reach the instance: /oauth/token is a credential-guessing surface, and
+# /oauth/register mints a client row per call (RFC7591 DCR has no auth by
+# design). /oauth/authorize is deliberately left unlimited - it sits behind
+# @login_required, and the login itself is already rate limited.
 @bp.route("/oauth/token", methods=["POST"])
+@limiter.limit(lambda: current_app.config["OAUTH_TOKEN_RATE_LIMIT"])
 def issue_token():
     return authorization.create_token_response()
 
 
 @bp.route("/oauth/register", methods=["POST"])
+@limiter.limit(lambda: current_app.config["OAUTH_TOKEN_RATE_LIMIT"])
 def register_client():
     return authorization.create_endpoint_response("client_registration")
 
 
 @bp.route("/oauth/revoke", methods=["POST"])
+@limiter.limit(lambda: current_app.config["OAUTH_TOKEN_RATE_LIMIT"])
 def revoke_token():
     return authorization.create_endpoint_response("revocation")

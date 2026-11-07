@@ -1,11 +1,11 @@
 import os
 
 import click
-from flask import current_app, Flask, request
+from flask import current_app, Flask, jsonify, render_template, request, session
+from flask_babel import gettext as _
 from flask_migrate import stamp
 from sqlalchemy import inspect
 
-from flask import session
 from .config import Config
 from .extensions import babel, csrf, db, limiter, login_manager, migrate
 from .secret_store import INSECURE_DEFAULT_SECRET_KEY
@@ -137,6 +137,17 @@ def create_app(config_object=Config):
             response.headers.setdefault(
                 "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
             )
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()",
+        )
+        if not (
+            request.path.startswith("/proxy/mcp/")
+            or request.path.startswith("/.well-known/")
+            or request.path.startswith("/oauth/")
+        ):
+            response.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+
         # The user-proxy MCP endpoint is bearer-token authenticated via the
         # signed token in the URL path (or Authorization: Bearer when
         # OAuth is on), not cookies - so, unlike the rest of the app, it's
@@ -163,6 +174,92 @@ def create_app(config_object=Config):
             response.headers["Access-Control-Expose-Headers"] = "Mcp-Session-Id"
             response.headers["Access-Control-Max-Age"] = "86400"
         return response
+
+    def _is_api_or_proxy_request():
+        return (
+            request.path.startswith("/api/")
+            or request.path.startswith("/proxy/mcp/")
+            or request.path.startswith("/oauth/")
+            or request.accept_mimetypes.best == "application/json"
+        )
+
+    @app.errorhandler(400)
+    def handle_bad_request(err):
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "bad_request", "message": getattr(err, "description", str(err))}), 400
+        return render_template(
+            "error.html",
+            error_code=400,
+            error_title=_("Bad Request"),
+            error_message=getattr(err, "description", _("The request could not be understood by the server.")),
+        ), 400
+
+    @app.errorhandler(403)
+    def handle_forbidden(err):
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "forbidden", "message": getattr(err, "description", str(err))}), 403
+        return render_template(
+            "error.html",
+            error_code=403,
+            error_title=_("Access Denied"),
+            error_message=getattr(err, "description", _("You do not have permission to access this resource.")),
+        ), 403
+
+    @app.errorhandler(404)
+    def handle_not_found(err):
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "not_found", "message": getattr(err, "description", str(err))}), 404
+        return render_template(
+            "error.html",
+            error_code=404,
+            error_title=_("Page Not Found"),
+            error_message=getattr(err, "description", _("The page or resource you requested could not be found.")),
+        ), 404
+
+    @app.errorhandler(413)
+    def handle_payload_too_large(err):
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "payload_too_large", "message": getattr(err, "description", str(err))}), 413
+        return render_template(
+            "error.html",
+            error_code=413,
+            error_title=_("Request Too Large"),
+            error_message=_("The data you submitted is larger than this server accepts."),
+        ), 413
+
+    @app.errorhandler(429)
+    def handle_rate_limit(err):
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "rate_limit_exceeded", "message": getattr(err, "description", str(err))}), 429
+        return render_template(
+            "error.html",
+            error_code=429,
+            error_title=_("Too Many Requests"),
+            error_message=_("Too many requests from your IP address. Please slow down and try again later."),
+        ), 429
+
+    @app.errorhandler(500)
+    def handle_internal_server_error(err):
+        current_app.logger.exception("Internal server error")
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "internal_error", "message": "An unexpected error occurred."}), 500
+        return render_template(
+            "error.html",
+            error_code=500,
+            error_title=_("Internal Server Error"),
+            error_message=_("An unexpected server error occurred. Please contact the administrator."),
+        ), 500
+
+    @app.errorhandler(502)
+    def handle_bad_gateway(err):
+        if _is_api_or_proxy_request():
+            return jsonify({"error": "bad_gateway", "message": getattr(err, "description", str(err))}), 502
+        return render_template(
+            "error.html",
+            error_code=502,
+            error_title=_("Bad Gateway"),
+            error_message=getattr(err, "description", _("The upstream service did not respond properly.")),
+        ), 502
 
     from .auth import bp as auth_bp
     from .admin import bp as admin_bp

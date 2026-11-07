@@ -465,3 +465,162 @@ def test_proxy_request_survives_cleanup_failure(app):
         resp = app.test_client().post("/proxy/mcp/not-a-real-token/5")
 
     assert resp.status_code == 403
+
+
+# --- fastmcp lookup ---------------------------------------------------------
+
+def test_resolve_fastmcp_bin_prefers_configured_executable(app, tmp_path):
+    binary = tmp_path / "fastmcp"
+    binary.write_text("#!/bin/sh\n")
+    binary.chmod(0o755)
+    app.config["FASTMCP_BIN"] = str(binary)
+
+    with app.app_context():
+        assert user_proxy._resolve_fastmcp_bin() == str(binary)
+
+
+def test_resolve_fastmcp_bin_falls_back_to_path_when_config_is_not_executable(app, tmp_path):
+    """A half-installed package (or a stale path in /etc/mcprack/env) must not
+    win over a working binary on PATH."""
+    not_executable = tmp_path / "fastmcp"
+    not_executable.write_text("")
+    not_executable.chmod(0o644)
+    app.config["FASTMCP_BIN"] = str(not_executable)
+
+    with app.app_context(), patch("mcprack.user_proxy.shutil.which", return_value="/opt/bin/fastmcp"):
+        assert user_proxy._resolve_fastmcp_bin() == "/opt/bin/fastmcp"
+
+
+def test_resolve_fastmcp_bin_raises_a_useful_error_when_missing(app):
+    """Popen on a non-existent path raises FileNotFoundError, which callers
+    catching only UserProxyError would surface as a 500 instead of a message
+    naming the package to install."""
+    app.config["FASTMCP_BIN"] = ""
+
+    with app.app_context(), \
+         patch("mcprack.user_proxy.shutil.which", return_value=None), \
+         patch("mcprack.user_proxy.os.access", return_value=False):
+        with pytest.raises(user_proxy.UserProxyError, match="python3-fastmcp"):
+            user_proxy._resolve_fastmcp_bin()
+
+
+# --- port allocation --------------------------------------------------------
+
+def test_find_available_port_walks_past_a_busy_base_port(state_dir):
+    base = user_proxy._port_for(1, 11)
+    with patch("mcprack.user_proxy._is_port_available", side_effect=lambda p: p != base):
+        assert user_proxy._find_available_port(1, 11) == base + 1
+
+
+def test_find_available_port_raises_when_the_whole_range_is_busy(state_dir):
+    """Returning the busy base port instead would fail later as a generic
+    handshake timeout, with the real cause only in the instance log."""
+    with patch("mcprack.user_proxy._is_port_available", return_value=False):
+        with pytest.raises(user_proxy.UserProxyError, match="No free local port"):
+            user_proxy._find_available_port(1, 11)
+
+
+def test_spawn_records_the_port_it_actually_bound(state_dir):
+    base = user_proxy._port_for(1, 11)
+    with patch("mcprack.user_proxy.subprocess.Popen", return_value=_fake_proc()), \
+         patch("mcprack.user_proxy._probe_upstream_health", return_value=True), \
+         patch("mcprack.user_proxy._pid_running", return_value=False), \
+         patch("mcprack.user_proxy._resolve_fastmcp_bin", return_value="/usr/bin/fastmcp"), \
+         patch("mcprack.user_proxy._is_port_available", side_effect=lambda p: p != base):
+        port = user_proxy.ensure_user_server_proxy(
+            user_id=1, server_id=11, server_name="ok",
+            command="/bin/ok-mcp", args=[], env={},
+        )
+
+    assert port == base + 1
+    assert user_proxy._paths(1, 11)["port"].read_text() == str(base + 1)
+
+
+def test_running_proxy_port_and_listing_report_the_recorded_port(state_dir):
+    """Both readers must use the .port file: after a collision the live
+    process is not on _port_for()'s value, and Admin -> Proxy instances
+    would otherwise print a port nothing is listening on."""
+    paths = _make_idle_instance(1, 11, idle_seconds=5)
+    moved = user_proxy._port_for(1, 11) + 3
+    paths["port"].write_text(str(moved))
+
+    with patch("mcprack.user_proxy._pid_running", return_value=True):
+        assert user_proxy.running_proxy_port(1, 11) == moved
+        rows = user_proxy.list_proxy_instances()
+
+    assert [row["port"] for row in rows] == [moved]
+
+
+def test_listing_falls_back_to_the_base_port_for_a_garbled_record(state_dir):
+    paths = _make_idle_instance(1, 11, idle_seconds=5)
+    paths["port"].write_text("not-a-port")
+
+    with patch("mcprack.user_proxy._pid_running", return_value=True):
+        rows = user_proxy.list_proxy_instances()
+
+    assert [row["port"] for row in rows] == [user_proxy._port_for(1, 11)]
+
+
+# --- process teardown -------------------------------------------------------
+
+def test_stop_pid_signals_the_whole_process_group(state_dir):
+    """fastmcp spawns the registered command as its own child, so signalling
+    only fastmcp's pid leaves that child (node, python, uvx...) orphaned."""
+    with patch("mcprack.user_proxy._pid_running", side_effect=[True, False]), \
+         patch("mcprack.user_proxy.os.killpg") as killpg, \
+         patch("mcprack.user_proxy.os.kill") as kill:
+        user_proxy._stop_pid(4242)
+
+    killpg.assert_called_once_with(4242, 15)
+    kill.assert_not_called()
+
+
+def test_stop_pid_falls_back_to_the_bare_pid_when_there_is_no_group(state_dir):
+    with patch("mcprack.user_proxy._pid_running", side_effect=[True, False]), \
+         patch("mcprack.user_proxy.os.killpg", side_effect=ProcessLookupError), \
+         patch("mcprack.user_proxy.os.kill") as kill:
+        user_proxy._stop_pid(4242)
+
+    kill.assert_called_once_with(4242, 15)
+
+
+# --- failure diagnostics ----------------------------------------------------
+
+def test_spawn_error_carries_the_tail_of_the_instance_log(state_dir):
+    """Without this the admin only ever sees "the registered command is
+    likely broken" and has to go find the log by hand."""
+    paths = user_proxy._paths(1, 11)
+    paths["log"].parent.mkdir(parents=True, exist_ok=True)
+    paths["log"].write_text("ModuleNotFoundError: No module named 'jira'\n")
+
+    with patch("mcprack.user_proxy.subprocess.Popen", return_value=_fake_proc(alive=False)), \
+         patch("mcprack.user_proxy._pid_running", return_value=False), \
+         patch("mcprack.user_proxy._resolve_fastmcp_bin", return_value="/usr/bin/fastmcp"):
+        with pytest.raises(user_proxy.UserProxyError, match="No module named 'jira'"):
+            user_proxy.ensure_user_server_proxy(
+                user_id=1, server_id=11, server_name="jira",
+                command="/bin/jira-mcp", args=[], env={},
+            )
+
+
+def test_spawn_environment_sets_a_utf8_locale(state_dir):
+    """systemd sets no LANG, so a Python MCP server would otherwise inherit an
+    ASCII locale and die on its first non-ASCII byte."""
+    captured = {}
+
+    def fake_popen(cmd, **kwargs):
+        captured.update(kwargs.get("env") or {})
+        return _fake_proc()
+
+    with patch("mcprack.user_proxy.subprocess.Popen", side_effect=fake_popen), \
+         patch("mcprack.user_proxy._probe_upstream_health", return_value=True), \
+         patch("mcprack.user_proxy._pid_running", return_value=False), \
+         patch("mcprack.user_proxy._resolve_fastmcp_bin", return_value="/usr/bin/fastmcp"):
+        user_proxy.ensure_user_server_proxy(
+            user_id=1, server_id=11, server_name="ok",
+            command="/bin/ok-mcp", args=[], env={},
+        )
+
+    assert captured["LANG"]
+    assert captured["PYTHONIOENCODING"] == "utf-8"
+    assert captured["PATH"]

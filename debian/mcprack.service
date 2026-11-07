@@ -3,13 +3,14 @@ Description=mcprack MCP server catalog & config generator
 After=network.target
 
 [Service]
+Environment=GUNICORN_BIND=127.0.0.1:8912
 EnvironmentFile=-/etc/mcprack/env
 User=mcprack
 Group=mcprack
 WorkingDirectory=/usr/lib/mcprack
 StateDirectory=mcprack
 ExecStart=/usr/bin/gunicorn \
-    --bind 0.0.0.0:8912 \
+    --bind ${GUNICORN_BIND} \
     --workers 4 \
     --worker-class sync \
     --worker-tmp-dir /dev/shm \

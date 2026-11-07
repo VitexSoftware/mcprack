@@ -1,10 +1,12 @@
 {% extends "base.html" %}
-{% block title %}{{ _('%(username)s — %(label)s credentials', username=target_user.username, label=server.label) }} — {{ _('Admin') }} — mcprack{% endblock %}
+{% block title %}{{ _('%(username)s — %(label)s configuration', username=target_user.username, label=server.label) }} — {{ _('Admin') }} — mcprack{% endblock %}
 {% block content %}
 
-<section>
-  <h1>🔐 {{ _('Individual credentials for %(username)s — %(label)s', username=target_user.username, label=server.label) }}</h1>
-  <p class="text-muted">{{ _('Set this user\'s personal credentials for this server. These are stored securely and override the admin default for this user only. The user never needs to log in or set these themselves.') }}</p>
+<section class="override-page-container">
+  <h1>⚙️ {{ _('Individual configuration for %(username)s — %(label)s', username=target_user.username, label=server.label) }}</h1>
+  <p class="text-muted">
+    {{ _('Set this user\'s personal configuration and credentials for this server. Empty keys automatically inherit the administrator defaults. The user never needs to log in or set these themselves.') }}
+  </p>
 
   {% if not server.allow_user_override %}
   <div class="card-tertiary mt-lg mb-lg">
@@ -12,19 +14,90 @@
   </div>
   {% endif %}
 
-  {% if server.env_var_names %}
-  <div class="card-tertiary mt-lg mb-lg">
-    <p class="m-0 mb-xs font-medium">{{ _('Expected keys:') }}</p>
-    <code class="block m-0">{{ server.env_var_names | join(', ') }}</code>
+  {% if known_keys %}
+  <div class="known-keys-card mb-lg">
+    <div class="known-keys-header">
+      <div class="known-keys-title">
+        <strong>💡 {{ _('Available configuration keys') }}</strong>
+        <span class="text-muted text-xs">({{ _('Click "+ Add" to override or prefill a key') }})</span>
+      </div>
+    </div>
+    <div class="known-keys-grid">
+      {% for item in known_keys %}
+      <div class="known-key-chip">
+        <div class="known-key-header">
+          <code class="known-key-name">{{ item.key }}</code>
+          <div class="known-key-badges">
+            {% if item.required %}
+              <span class="badge-tag badge-tag-required" title="{{ _('Required variable') }}">{{ _('required') }}</span>
+            {% endif %}
+            {% if item.sensitive %}
+              <span class="badge-tag badge-tag-secret" title="{{ _('Sensitive value / secret') }}">🔒 {{ _('secret') }}</span>
+            {% endif %}
+            {% if item.admin_defined %}
+              <span class="badge-tag badge-tag-admin" title="{{ _('Configured by administrator') }}">🛡️ {{ _('admin') }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% if item.description %}
+          <div class="known-key-desc">{{ item.description }}</div>
+        {% endif %}
+        {% if item.default and not item.sensitive %}
+          <div class="known-key-default text-xs text-muted">{{ _('Default:') }} <code>{{ item.default }}</code></div>
+        {% endif %}
+        <div class="known-key-action">
+          <button type="button" class="btn btn-sm btn-secondary" data-add-known-key="{{ item.key }}">
+            ➕ {{ _('Add') }}
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
   </div>
   {% endif %}
 
-  <form method="post">
+  <form method="post" id="admin-user-override-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="form-group">
-      <label for="env_text">{{ _('Credentials (KEY=value format, one per line)') }}</label>
-      <textarea id="env_text" name="env_text" rows="8" placeholder="EXAMPLE_API_KEY=your-key-here&#10;EXAMPLE_PASSWORD=your-password-here">{{ env_text }}</textarea>
+
+    <div class="override-toolbar mb-md flex-gap flex-between">
+      <div class="flex-gap">
+        <button type="button" class="btn btn-secondary add-override-row-btn">
+          ➕ {{ _('Add variable') }}
+        </button>
+        <label class="btn btn-secondary cursor-pointer m-0">
+          📥 {{ _('Import .env file') }}
+          <input type="file" class="hidden" data-override-import-input accept=".env,text/plain">
+        </label>
+      </div>
+      <span class="text-muted text-xs align-self-center">
+        {{ _('Empty rows inherit the administrator\'s default values.') }}
+      </span>
     </div>
+
+    <div id="admin-override-rows"
+         class="override-rows-wrapper mb-lg"
+         data-override-rows-container
+         data-initial='{{ env_rows | tojson }}'
+         data-known-keys='{{ known_keys | tojson }}'
+         data-sensitive-label="{{ _('sensitive') }}"
+         data-inherited-label="{{ _('Inherited from admin') }}"
+         data-overridden-label="{{ _('Overridden') }}"
+         data-custom-label="{{ _('Custom') }}"
+         data-revert-label="{{ _('↺ Revert to admin default') }}"
+         data-duplicate-label="{{ _('Duplicate key — each variable name must be unique.') }}"
+         data-empty-key-label="{{ _('Key is required when a value is set.') }}"
+         data-missing-label="{{ _('Required value missing — the server cannot start until this is filled in.') }}"
+         data-missing-summary="{{ _('%(n)s required value(s) missing — the MCP server will not start until they are filled in.', n='{n}') }}">
+    </div>
+
+    <!-- Legacy format accordion for convenience / fallback -->
+    <details class="mb-lg">
+      <summary class="text-muted text-xs cursor-pointer">{{ _('Advanced: Raw KEY=value text editor') }}</summary>
+      <div class="form-group mt-sm">
+        <textarea id="env_text" name="env_text" rows="5" class="form-control" placeholder="KEY=value&#10;ANOTHER_KEY=value">{{ env_text }}</textarea>
+        <small class="text-muted">{{ _('If this textarea is populated and no row inputs are submitted, these KEY=value pairs will be saved.') }}</small>
+      </div>
+    </details>
 
     <div class="flex-gap-wrap">
       <button type="submit" name="action" value="save" class="btn btn-primary">
@@ -44,4 +117,6 @@
   </form>
 </section>
 
+<script src="{{ url_for('static', filename='env-parse.js') }}"></script>
+<script src="{{ url_for('static', filename='override-editor.js') }}"></script>
 {% endblock %}
