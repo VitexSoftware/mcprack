@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-06 22:50+0100\n"
+"POT-Creation-Date: 2026-11-07 14:18+0100\n"
 "PO-Revision-Date: 2026-08-01 11:21+0000\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: cs\n"
@@ -16,63 +16,65 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Generated-By: Babel 2.17.0\n"
+"Generated-By: Babel 2.18.0\n"
 
-#: mcprack/app.py:193
+#: mcprack/app.py:205
 msgid "Bad Request"
 msgstr "Neplatný požadavek"
 
-#: mcprack/app.py:194
+#: mcprack/app.py:206
 msgid "The request could not be understood by the server."
 msgstr "Serveru se nepodařilo požadavku porozumět."
 
-#: mcprack/app.py:204
+#: mcprack/app.py:218
 msgid "Access Denied"
 msgstr "Přístup odepřen"
 
-#: mcprack/app.py:205
+#: mcprack/app.py:219
 msgid "You do not have permission to access this resource."
 msgstr "K tomuto zdroji nemáte oprávnění."
 
-#: mcprack/app.py:215
+#: mcprack/app.py:231
 msgid "Page Not Found"
 msgstr "Stránka nenalezena"
 
-#: mcprack/app.py:216
+#: mcprack/app.py:232
 msgid "The page or resource you requested could not be found."
 msgstr "Požadovaná stránka ani zdroj nebyly nalezeny."
 
-#: mcprack/app.py:226
+#: mcprack/app.py:244
 msgid "Request Too Large"
 msgstr "Požadavek je příliš velký"
 
-#: mcprack/app.py:227
+#: mcprack/app.py:245
 msgid "The data you submitted is larger than this server accepts."
 msgstr "Odeslaná data jsou větší, než tento server přijímá."
 
-#: mcprack/app.py:237
+#: mcprack/app.py:258
 msgid "Too Many Requests"
 msgstr "Příliš mnoho požadavků"
 
-#: mcprack/app.py:238
+#: mcprack/app.py:259
 msgid ""
 "Too many requests from your IP address. Please slow down and try again "
 "later."
-msgstr "Z vaší IP adresy přišlo příliš mnoho požadavků. Zpomalte a zkuste to znovu později."
+msgstr ""
+"Z vaší IP adresy přišlo příliš mnoho požadavků. Zpomalte a zkuste to "
+"znovu později."
 
-#: mcprack/app.py:249
+#: mcprack/app.py:273
 msgid "Internal Server Error"
 msgstr "Vnitřní chyba serveru"
 
-#: mcprack/app.py:250
+#: mcprack/app.py:274
 msgid "An unexpected server error occurred. Please contact the administrator."
 msgstr "Došlo k neočekávané chybě serveru. Obraťte se na administrátora."
 
-#: mcprack/app.py:260
+#: mcprack/app.py:286
 msgid "Bad Gateway"
 msgstr "Chybná brána"
 
-#: mcprack/app.py:261
+#: mcprack/app.py:287
 msgid "The upstream service did not respond properly."
 msgstr "Nadřazená služba neodpověděla správně."
 
@@ -181,7 +183,9 @@ msgstr "Windows"
 msgid ""
 "Claude Code (the CLI) — this file also holds other settings, so merge the"
 " \"mcpServers\" key into it instead of overwriting it:"
-msgstr "Claude Code (CLI) — tento soubor obsahuje i další nastavení, proto do něj klíč „mcpServers“ sloučte, místo abyste ho přepsali:"
+msgstr ""
+"Claude Code (CLI) — tento soubor obsahuje i další nastavení, proto do něj"
+" klíč „mcpServers“ sloučte, místo abyste ho přepsali:"
 
 #: mcprack/templates/_config_paths.html:18
 msgid "Linux / macOS"
@@ -191,25 +195,35 @@ msgstr "Linux / macOS"
 msgid ""
 "Or install <code>mcprack-sync-claude</code> and run <code>mcprack-sync-"
 "claude sync</code> to keep this file up to date automatically."
-msgstr "Nebo nainstalujte <code>mcprack-sync-claude</code> a spusťte <code>mcprack-sync-claude sync</code>, aby se soubor udržoval aktuální automaticky."
+msgstr ""
+"Nebo nainstalujte <code>mcprack-sync-claude</code> a spusťte <code"
+">mcprack-sync-claude sync</code>, aby se soubor udržoval aktuální "
+"automaticky."
 
 #: mcprack/templates/_config_paths.html:29
 msgid ""
 "VS Code (user profile — applies to every workspace). If the file already "
 "exists, merge the \"servers\" key into it instead of overwriting it:"
-msgstr "VS Code (uživatelský profil — platí pro všechny workspace). Pokud soubor už existuje, sloučte do něj klíč „servers“, místo abyste ho přepsali:"
+msgstr ""
+"VS Code (uživatelský profil — platí pro všechny workspace). Pokud soubor "
+"už existuje, sloučte do něj klíč „servers“, místo abyste ho přepsali:"
 
 #: mcprack/templates/_config_paths.html:38
 msgid ""
 "Or install <code>mcprack-sync-vscode</code> and run <code>mcprack-sync-"
 "vscode sync</code> to keep this file up to date automatically."
-msgstr "Nebo nainstalujte <code>mcprack-sync-vscode</code> a spusťte <code>mcprack-sync-vscode sync</code>, aby se soubor udržoval aktuální automaticky."
+msgstr ""
+"Nebo nainstalujte <code>mcprack-sync-vscode</code> a spusťte <code"
+">mcprack-sync-vscode sync</code>, aby se soubor udržoval aktuální "
+"automaticky."
 
 #: mcprack/templates/_config_paths.html:44
 msgid ""
 "Cursor (user profile). If the file already exists, merge the "
 "\"mcpServers\" key into it instead of overwriting it:"
-msgstr "Cursor (uživatelský profil). Pokud soubor už existuje, sloučte do něj klíč „mcpServers“, místo abyste ho přepsali:"
+msgstr ""
+"Cursor (uživatelský profil). Pokud soubor už existuje, sloučte do něj "
+"klíč „mcpServers“, místo abyste ho přepsali:"
 
 #: mcprack/templates/_config_paths.html:50
 msgid "Also checked"
@@ -219,7 +233,139 @@ msgstr "Kontroluje se také"
 msgid ""
 "Or install <code>mcprack-sync-cursor</code> and run <code>mcprack-sync-"
 "cursor sync</code> to keep this file up to date automatically."
-msgstr "Nebo nainstalujte <code>mcprack-sync-cursor</code> a spusťte <code>mcprack-sync-cursor sync</code>, aby se soubor udržoval aktuální automaticky."
+msgstr ""
+"Nebo nainstalujte <code>mcprack-sync-cursor</code> a spusťte <code"
+">mcprack-sync-cursor sync</code>, aby se soubor udržoval aktuální "
+"automaticky."
+
+#: mcprack/templates/_override_editor.html:13
+msgid "Available configuration keys"
+msgstr "Dostupné konfigurační klíče"
+
+#: mcprack/templates/_override_editor.html:14
+msgid "Click \"+ Add\" to override or prefill a key"
+msgstr "Klepnutím na „+ Přidat“ klíč přetížíte nebo předvyplníte"
+
+#: mcprack/templates/_override_editor.html:24
+msgid "Required variable"
+msgstr "Povinná proměnná"
+
+#: mcprack/templates/_override_editor.html:24
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+msgid "required"
+msgstr "povinné"
+
+#: mcprack/templates/_override_editor.html:27
+msgid "Sensitive value / secret"
+msgstr "Citlivá hodnota / tajemství"
+
+#: mcprack/templates/_override_editor.html:27
+msgid "secret"
+msgstr "tajné"
+
+#: mcprack/templates/_override_editor.html:30
+msgid "Configured by administrator"
+msgstr "Nastaveno administrátorem"
+
+#: mcprack/templates/_override_editor.html:30
+msgid "admin"
+msgstr "admin"
+
+#: mcprack/templates/_override_editor.html:38
+msgid "Default:"
+msgstr "Výchozí:"
+
+#: mcprack/templates/_override_editor.html:42
+msgid "Add"
+msgstr "Přidat"
+
+#: mcprack/templates/_override_editor.html:56
+msgid "Add variable"
+msgstr "Přidat proměnnou"
+
+#: mcprack/templates/_override_editor.html:59
+#: mcprack/templates/admin/server_form.html:185
+msgid "Import .env file"
+msgstr "Importovat soubor .env"
+
+#: mcprack/templates/_override_editor.html:64
+msgid "Empty rows inherit the administrator's default values."
+msgstr "Prázdné řádky dědí výchozí hodnoty od administrátora."
+
+#: mcprack/templates/_override_editor.html:80
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+msgid "sensitive"
+msgstr "citlivé"
+
+#: mcprack/templates/_override_editor.html:81
+msgid ""
+"Always stored as a secret — the administrator declared this key, or its "
+"name looks like a credential."
+msgstr ""
+"Vždy se ukládá jako tajná hodnota — tento klíč deklaroval administrátor, "
+"nebo jeho název vypadá jako přihlašovací údaj."
+
+#: mcprack/templates/_override_editor.html:82
+msgid "Inherited from admin"
+msgstr "Zděděno od administrátora"
+
+#: mcprack/templates/_override_editor.html:83
+msgid "Overridden"
+msgstr "Přetíženo"
+
+#: mcprack/templates/_override_editor.html:84
+msgid "Custom"
+msgstr "Vlastní"
+
+#: mcprack/templates/_override_editor.html:85
+msgid "↺ Revert to admin default"
+msgstr "↺ Vrátit na výchozí od administrátora"
+
+#: mcprack/templates/_override_editor.html:86
+msgid "Duplicate key — each variable name must be unique."
+msgstr "Duplicitní klíč — každý název proměnné musí být jedinečný."
+
+#: mcprack/templates/_override_editor.html:87
+#: mcprack/templates/admin/install_wizard.html:66
+#: mcprack/templates/admin/install_wizard.html:103
+#: mcprack/templates/admin/install_wizard.html:137
+#: mcprack/templates/admin/server_form.html:178
+msgid "Key is required when a value is set."
+msgstr "Když je zadána hodnota, je povinný i klíč."
+
+#: mcprack/templates/_override_editor.html:88
+#: mcprack/templates/admin/server_form.html:178
+msgid "Required value missing — the server cannot start until this is filled in."
+msgstr "Chybí povinná hodnota — bez jejího vyplnění server nenastartuje."
+
+#: mcprack/templates/_override_editor.html:89
+#: mcprack/templates/admin/server_form.html:178
+#, python-format
+msgid ""
+"%(n)s required value(s) missing — the MCP server will not start until "
+"they are filled in."
+msgstr ""
+"Chybí povinné hodnoty (%(n)s) — dokud je nevyplníte, MCP server "
+"nenastartuje."
+
+#: mcprack/templates/_override_editor.html:94
+#: mcprack/templates/_override_editor.html:96
+msgid "Advanced: Raw KEY=value text editor"
+msgstr "Pokročilé: textový editor ve formátu KLÍČ=hodnota"
+
+#: mcprack/templates/_override_editor.html:97
+msgid ""
+"If this textarea is populated and no row inputs are submitted, these "
+"KEY=value pairs will be saved."
+msgstr ""
+"Pokud je toto pole vyplněné a neodešlou se žádné řádky editoru, uloží se "
+"tyto páry KLÍČ=hodnota."
 
 #: mcprack/templates/_proxy_auth_note.html:6
 msgid ""
@@ -436,7 +582,7 @@ msgstr "Uložit výběr"
 msgid "Close"
 msgstr "Zavřít"
 
-#: mcprack/templates/error.html:10 mcprack/templates/override.html:108
+#: mcprack/templates/error.html:10 mcprack/templates/override.html:31
 #: mcprack/templates/view_config.html:24
 msgid "Back to Catalog"
 msgstr "Zpět do katalogu"
@@ -563,168 +709,30 @@ msgstr "Povolit"
 msgid "Deny"
 msgstr "Zakázat"
 
-#: mcprack/templates/override.html:2
+#: mcprack/templates/override.html:3
 #, python-format
 msgid "Your %(label)s Configuration"
 msgstr "Vaše konfigurace %(label)s"
 
-#: mcprack/templates/override.html:6
+#: mcprack/templates/override.html:7
 #, python-format
 msgid "Configuration for %(label)s"
 msgstr "Konfigurace %(label)s"
 
-#: mcprack/templates/override.html:8
+#: mcprack/templates/override.html:9
 msgid ""
 "mcprack automatically inherits all settings configured by your "
 "administrator. You can override specific keys or add your own custom "
 "settings below."
-msgstr "mcprack automaticky dědí všechna nastavení od administrátora. Níže můžete přetížit jednotlivé klíče nebo přidat vlastní."
+msgstr ""
+"mcprack automaticky dědí všechna nastavení od administrátora. Níže můžete"
+" přetížit jednotlivé klíče nebo přidat vlastní."
 
-#: mcprack/templates/admin/user_override_form.html:21
-#: mcprack/templates/override.html:15
-msgid "Available configuration keys"
-msgstr "Dostupné konfigurační klíče"
-
-#: mcprack/templates/admin/user_override_form.html:22
-#: mcprack/templates/override.html:16
-msgid "Click \"+ Add\" to override or prefill a key"
-msgstr "Klepnutím na „+ Přidat“ klíč přetížíte nebo předvyplníte"
-
-#: mcprack/templates/admin/user_override_form.html:32
-#: mcprack/templates/override.html:26
-msgid "Required variable"
-msgstr "Povinná proměnná"
-
-#: mcprack/templates/admin/install_wizard.html:66
-#: mcprack/templates/admin/install_wizard.html:103
-#: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:178
-#: mcprack/templates/admin/user_override_form.html:32
-#: mcprack/templates/override.html:26
-msgid "required"
-msgstr "povinné"
-
-#: mcprack/templates/admin/user_override_form.html:35
-#: mcprack/templates/override.html:29
-msgid "Sensitive value / secret"
-msgstr "Citlivá hodnota / tajemství"
-
-#: mcprack/templates/admin/user_override_form.html:35
-#: mcprack/templates/override.html:29
-msgid "secret"
-msgstr "tajné"
-
-#: mcprack/templates/admin/user_override_form.html:38
-#: mcprack/templates/override.html:32
-msgid "Configured by administrator"
-msgstr "Nastaveno administrátorem"
-
-#: mcprack/templates/admin/user_override_form.html:38
-#: mcprack/templates/override.html:32
-msgid "admin"
-msgstr "admin"
-
-#: mcprack/templates/admin/user_override_form.html:46
-#: mcprack/templates/override.html:40
-msgid "Default:"
-msgstr "Výchozí:"
-
-#: mcprack/templates/admin/user_override_form.html:50
-#: mcprack/templates/override.html:44
-msgid "Add"
-msgstr "Přidat"
-
-#: mcprack/templates/admin/user_override_form.html:65
-#: mcprack/templates/override.html:59
-msgid "Add variable"
-msgstr "Přidat proměnnou"
-
-#: mcprack/templates/admin/server_form.html:185
-#: mcprack/templates/admin/user_override_form.html:68
-#: mcprack/templates/override.html:62
-msgid "Import .env file"
-msgstr "Importovat soubor .env"
-
-#: mcprack/templates/admin/user_override_form.html:73
-#: mcprack/templates/override.html:67
-msgid "Empty rows inherit the administrator's default values."
-msgstr "Prázdné řádky dědí výchozí hodnoty od administrátora."
-
-#: mcprack/templates/admin/install_wizard.html:66
-#: mcprack/templates/admin/install_wizard.html:103
-#: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:178
-#: mcprack/templates/admin/user_override_form.html:82
-#: mcprack/templates/override.html:76
-msgid "sensitive"
-msgstr "citlivé"
-
-#: mcprack/templates/admin/user_override_form.html:83
-#: mcprack/templates/override.html:77
-msgid "Inherited from admin"
-msgstr "Zděděno od administrátora"
-
-#: mcprack/templates/admin/user_override_form.html:84
-#: mcprack/templates/override.html:78
-msgid "Overridden"
-msgstr "Přetíženo"
-
-#: mcprack/templates/admin/user_override_form.html:85
-#: mcprack/templates/override.html:79
-msgid "Custom"
-msgstr "Vlastní"
-
-#: mcprack/templates/admin/user_override_form.html:86
-#: mcprack/templates/override.html:80
-msgid "↺ Revert to admin default"
-msgstr "↺ Vrátit na výchozí od administrátora"
-
-#: mcprack/templates/admin/user_override_form.html:87
-#: mcprack/templates/override.html:81
-msgid "Duplicate key — each variable name must be unique."
-msgstr "Duplicitní klíč — každý název proměnné musí být jedinečný."
-
-#: mcprack/templates/admin/install_wizard.html:66
-#: mcprack/templates/admin/install_wizard.html:103
-#: mcprack/templates/admin/install_wizard.html:137
-#: mcprack/templates/admin/server_form.html:178
-#: mcprack/templates/admin/user_override_form.html:88
-#: mcprack/templates/override.html:82
-msgid "Key is required when a value is set."
-msgstr "Když je zadána hodnota, je povinný i klíč."
-
-#: mcprack/templates/admin/server_form.html:178
-#: mcprack/templates/admin/user_override_form.html:89
-#: mcprack/templates/override.html:83
-msgid "Required value missing — the server cannot start until this is filled in."
-msgstr "Chybí povinná hodnota — bez jejího vyplnění server nenastartuje."
-
-#: mcprack/templates/admin/server_form.html:178
-#: mcprack/templates/admin/user_override_form.html:90
-#: mcprack/templates/override.html:84
-#, python-format
-msgid ""
-"%(n)s required value(s) missing — the MCP server will not start until "
-"they are filled in."
-msgstr "Chybí povinné hodnoty (%(n)s) — dokud je nevyplníte, MCP server nenastartuje."
-
-#: mcprack/templates/admin/user_override_form.html:95
-#: mcprack/templates/override.html:89
-msgid "Advanced: Raw KEY=value text editor"
-msgstr "Pokročilé: textový editor ve formátu KLÍČ=hodnota"
-
-#: mcprack/templates/admin/user_override_form.html:98
-#: mcprack/templates/override.html:92
-msgid ""
-"If this textarea is populated and no row inputs are submitted, these "
-"KEY=value pairs will be saved."
-msgstr "Pokud je toto pole vyplněné a neodešlou se žádné řádky editoru, uloží se tyto páry KLÍČ=hodnota."
-
-#: mcprack/templates/override.html:98
+#: mcprack/templates/override.html:21
 msgid "Save My Configuration"
 msgstr "Uložit mou konfiguraci"
 
-#: mcprack/templates/override.html:103
+#: mcprack/templates/override.html:26
 msgid "Reset All to Admin Defaults"
 msgstr "Vrátit vše na výchozí od administrátora"
 
@@ -770,7 +778,7 @@ msgstr "Zkopírováno do schránky!"
 #: mcprack/templates/admin/template_form.html:2
 #: mcprack/templates/admin/templates_list.html:2
 #: mcprack/templates/admin/user_form.html:30
-#: mcprack/templates/admin/user_override_form.html:2
+#: mcprack/templates/admin/user_override_form.html:3
 #: mcprack/templates/admin/users_list.html:8
 msgid "Admin"
 msgstr "Administrace"
@@ -1116,7 +1124,12 @@ msgid ""
 "host&apos;s-hostname&gt;\"</code> so you can tell them apart in "
 "Grafana/your trace UI even if the Collector's own resource-attribute "
 "handling (service.name/host.name) is misconfigured."
-msgstr "Pokud tento Collector využívá více instancí mcpracku, je testovací signál označen jako <code>server_name=\"otel-diagnostics@&lt;hostname-tohoto-stroje&gt;\"</code>, takže je v Grafaně nebo ve svém trace UI rozlišíte i tehdy, když má Collector špatně nastavené zpracování atributů prostředku (service.name/host.name)."
+msgstr ""
+"Pokud tento Collector využívá více instancí mcpracku, je testovací signál"
+" označen jako <code>server_name=\"otel-diagnostics@&lt;hostname-tohoto-"
+"stroje&gt;\"</code>, takže je v Grafaně nebo ve svém trace UI rozlišíte i"
+" tehdy, když má Collector špatně nastavené zpracování atributů prostředku"
+" (service.name/host.name)."
 
 #: mcprack/templates/admin/otel_wizard.html:73
 msgid "Send test span + metric"
@@ -1375,7 +1388,9 @@ msgstr "chybí: %(keys)s"
 msgid ""
 "No admin default value set — a user can only use this server if "
 "allow_user_override lets them supply their own."
-msgstr "Administrátor nenastavil výchozí hodnotu — uživatel může tento server použít jen tehdy, když mu allow_user_override dovolí zadat vlastní."
+msgstr ""
+"Administrátor nenastavil výchozí hodnotu — uživatel může tento server "
+"použít jen tehdy, když mu allow_user_override dovolí zadat vlastní."
 
 #: mcprack/templates/admin/servers_list.html:74
 #, python-format
@@ -1458,7 +1473,10 @@ msgid ""
 "Tick \"Allowed\" for every server users of this template may use, and "
 "\"Pre-selected\" for the subset that should already be included in their "
 "generated config."
-msgstr "Zaškrtněte „Povoleno“ u každého serveru, který uživatelé této šablony smí používat, a „Předvybráno“ u těch, které mají být hned součástí jejich vygenerované konfigurace."
+msgstr ""
+"Zaškrtněte „Povoleno“ u každého serveru, který uživatelé této šablony smí"
+" používat, a „Předvybráno“ u těch, které mají být hned součástí jejich "
+"vygenerované konfigurace."
 
 #: mcprack/templates/admin/template_form.html:25
 msgid "Allowed"
@@ -1475,7 +1493,7 @@ msgstr "Nejsou dostupné žádné povolené servery."
 
 #: mcprack/templates/admin/template_form.html:42
 #: mcprack/templates/admin/user_form.html:96
-#: mcprack/templates/admin/user_override_form.html:104
+#: mcprack/templates/admin/user_override_form.html:27
 msgid "Save"
 msgstr "Uložit"
 
@@ -1493,7 +1511,11 @@ msgid ""
 "A template is a reusable preset of allowed/denied servers and which of "
 "them are pre-selected. Apply it to a user from their edit page to "
 "configure them in one step, then fine-tune individually if needed."
-msgstr "Šablona je znovupoužitelná předvolba povolených a zakázaných serverů a toho, které z nich jsou předvybrané. Použijte ji na uživatele z jeho stránky pro úpravu — nastavíte ho tím v jednom kroku a potom můžete doladit jednotlivosti."
+msgstr ""
+"Šablona je znovupoužitelná předvolba povolených a zakázaných serverů a "
+"toho, které z nich jsou předvybrané. Použijte ji na uživatele z jeho "
+"stránky pro úpravu — nastavíte ho tím v jednom kroku a potom můžete "
+"doladit jednotlivosti."
 
 #: mcprack/templates/admin/templates_list.html:27
 msgid "allowed"
@@ -1528,7 +1550,7 @@ msgstr ""
 "uživateli."
 
 #: mcprack/templates/admin/user_config_view.html:24
-#: mcprack/templates/admin/user_override_form.html:114
+#: mcprack/templates/admin/user_override_form.html:37
 #, python-format
 msgid "Back to %(username)s"
 msgstr "Zpět k %(username)s"
@@ -1573,7 +1595,10 @@ msgid ""
 "Allow or deny each server for this user, and tick which allowed servers "
 "should actually be included in their generated config — the admin decides"
 " this on their behalf, no login required."
-msgstr "Povolte nebo zakažte tomuto uživateli jednotlivé servery a zaškrtněte, které z povolených mají být součástí jeho vygenerované konfigurace — rozhoduje o tom administrátor za něj, uživatel se nemusí přihlašovat."
+msgstr ""
+"Povolte nebo zakažte tomuto uživateli jednotlivé servery a zaškrtněte, "
+"které z povolených mají být součástí jeho vygenerované konfigurace — "
+"rozhoduje o tom administrátor za něj, uživatel se nemusí přihlašovat."
 
 #: mcprack/templates/admin/user_form.html:45
 msgid "Access"
@@ -1623,7 +1648,10 @@ msgstr "Použít konfigurační šablonu"
 msgid ""
 "Replaces this user's access and selection with the template's. Individual"
 " credentials already set for this user are kept."
-msgstr "Nahradí přístup a výběr tohoto uživatele hodnotami ze šablony. Individuální přihlašovací údaje, které už má nastavené, zůstanou zachovány."
+msgstr ""
+"Nahradí přístup a výběr tohoto uživatele hodnotami ze šablony. "
+"Individuální přihlašovací údaje, které už má nastavené, zůstanou "
+"zachovány."
 
 #: mcprack/templates/admin/user_form.html:105
 msgid "Choose a template…"
@@ -1637,31 +1665,37 @@ msgstr "Použít šablonu"
 msgid "Manage templates"
 msgstr "Správa šablon"
 
-#: mcprack/templates/admin/user_override_form.html:2
+#: mcprack/templates/admin/user_override_form.html:3
 #, python-format
 msgid "%(username)s — %(label)s configuration"
 msgstr "Konfigurace %(label)s pro %(username)s"
 
-#: mcprack/templates/admin/user_override_form.html:6
+#: mcprack/templates/admin/user_override_form.html:7
 #, python-format
 msgid "Individual configuration for %(username)s — %(label)s"
 msgstr "Individuální konfigurace uživatele %(username)s — %(label)s"
 
-#: mcprack/templates/admin/user_override_form.html:8
+#: mcprack/templates/admin/user_override_form.html:9
 msgid ""
 "Set this user's personal configuration and credentials for this server. "
 "Empty keys automatically inherit the administrator defaults. The user "
 "never needs to log in or set these themselves."
-msgstr "Nastavte tomuto uživateli osobní konfiguraci a přihlašovací údaje pro tento server. Prázdné klíče automaticky dědí výchozí hodnoty od administrátora. Uživatel se nemusí přihlašovat ani nic nastavovat sám."
+msgstr ""
+"Nastavte tomuto uživateli osobní konfiguraci a přihlašovací údaje pro "
+"tento server. Prázdné klíče automaticky dědí výchozí hodnoty od "
+"administrátora. Uživatel se nemusí přihlašovat ani nic nastavovat sám."
 
-#: mcprack/templates/admin/user_override_form.html:13
+#: mcprack/templates/admin/user_override_form.html:14
 msgid ""
 "Self-service override is disabled for this server — this user could not "
 "set this themselves even if they logged in. As an admin, you can still "
 "set it here."
-msgstr "U tohoto serveru je vlastní nastavení uživatelem zakázáno — tento uživatel by si to nemohl nastavit sám, ani kdyby se přihlásil. Jako administrátor to tady nastavit můžete."
+msgstr ""
+"U tohoto serveru je vlastní nastavení uživatelem zakázáno — tento "
+"uživatel by si to nemohl nastavit sám, ani kdyby se přihlásil. Jako "
+"administrátor to tady nastavit můžete."
 
-#: mcprack/templates/admin/user_override_form.html:109
+#: mcprack/templates/admin/user_override_form.html:32
 msgid "Reset to Default"
 msgstr "Obnovit výchozí"
 
