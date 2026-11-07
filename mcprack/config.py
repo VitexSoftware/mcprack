@@ -38,7 +38,7 @@ class Config:
     # global limit across all workers.
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     LOGIN_RATE_LIMIT = os.environ.get("LOGIN_RATE_LIMIT", "10 per minute;50 per hour")
-    PASSWORD_RESET_RATE_LIMIT = os.environ.get("PASSWORD_RESET_RATE_LIMIT", "5 per minute;20 per hour")
+    PASSWORD_RESET_RATE_LIMIT = os.environ.get("PASSWORD_RESET_RATE_LIMIT", "5 per minute;20 per hour")  # NOSONAR - rate-limit spec, not a credential
     OAUTH_TOKEN_RATE_LIMIT = os.environ.get("OAUTH_TOKEN_RATE_LIMIT", "30 per minute")
     # Flask-Limiter injects Retry-After / X-RateLimit-* from its own
     # after_request hook, which is also what reaches app.py's custom 429
