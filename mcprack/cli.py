@@ -9,6 +9,7 @@ scripts (debian/postinst) already call by name and must keep working
 unchanged.
 """
 
+import json
 from pathlib import Path
 
 import click
@@ -18,6 +19,7 @@ from flask.cli import AppGroup
 
 from . import admin
 from . import catalog
+from . import health
 from . import secret_store
 from . import vaultwarden
 from .env_detection import looks_sensitive_name
@@ -819,6 +821,106 @@ def server_delete(name):
     db.session.delete(s)
     db.session.commit()
     click.echo(f"Server '{name}' deleted.")
+
+
+def _echo_probe_result(label, ok, result, as_json):
+    """Print a probe_stdio/probe_http result; returns the process exit code
+    (0 only when the server answered)."""
+    if as_json:
+        payload = {"ok": ok, "server": label}
+        if ok:
+            payload.update(result)
+        else:
+            payload["error"] = result
+        click.echo(json.dumps(payload, indent=2, default=str))
+        return 0 if ok else 1
+    if not ok:
+        click.echo(f"FAIL {label}: {result}", err=True)
+        return 1
+    info = result.get("serverInfo") or {}
+    click.echo(
+        f"server:  {info.get('name', '?')} {info.get('version', '?')} "
+        f"(protocol {result.get('protocolVersion') or '?'})"
+    )
+    for key, title, name_field in (
+        ("tools", "tools", "name"),
+        ("resources", "resources", "uri"),
+        ("prompts", "prompts", "name"),
+    ):
+        items = result.get(key) or []
+        click.echo(f"{title} ({len(items)}):")
+        for item in items:
+            description = item.get("description") or ""
+            first_line = description.splitlines()[0] if description else ""
+            suffix = f": {first_line}" if first_line else ""
+            click.echo(f"  - {item.get(name_field)}{suffix}")
+    click.echo("OK")
+    return 0
+
+
+@server_cli.command("test")
+@click.argument("name")
+@click.option("--timeout", type=float, default=15.0, show_default=True, help="Overall probe timeout in seconds (a cold start can take a while).")
+@click.option("--json", "as_json", is_flag=True, help="Print the probe result as JSON (for scripts and autopkgtest).")
+def server_test(name, timeout, as_json):
+    """Test one registered MCP server: connect to it, perform the MCP
+    handshake, and print the tools, resources and prompts it provides.
+
+    For stdio servers the registered command is spawned with its resolved
+    environment (the CLI counterpart of the Admin -> Servers test button,
+    but it goes all the way to listing what the server offers). For
+    http/sse servers the URL is probed directly. Exits 0 only when the
+    server answers - a broken runtime dependency (e.g. python3-fastmcp)
+    makes the spawned process crash on import and fails the probe.
+    """
+    s = _get_server_or_fail(name)
+    try:
+        env = secret_store.resolve_server_env(s)
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
+        raise click.ClickException(f"Could not resolve credentials to test '{name}': {exc}")
+
+    if s.command:
+        ok, result = health.probe_stdio_capabilities(s.command, s.args, env, timeout=timeout)
+        label = f"{name} (stdio: {' '.join([s.command, *(s.args or [])])})"
+    elif s.url:
+        extra_headers = None
+        if s.auth_header_name and s.auth_env_key and env.get(s.auth_env_key):
+            extra_headers = {s.auth_header_name: env[s.auth_env_key]}
+        ok, result = health.probe_http_capabilities(s.url, timeout=timeout, extra_headers=extra_headers)
+        label = f"{name} ({s.url})"
+    else:
+        raise click.ClickException(f"Server '{name}' has neither command nor url configured.")
+    raise SystemExit(_echo_probe_result(label, ok, result, as_json))
+
+
+@server_cli.command("probe", context_settings={"ignore_unknown_options": True})
+@click.argument("command")
+@click.argument("command_args", nargs=-1)
+@click.option("--set-env", "set_env_pairs", multiple=True, metavar="KEY=VALUE", help="Env var passed to the spawned server (repeatable).")
+@click.option("--timeout", type=float, default=15.0, show_default=True, help="Overall probe timeout in seconds (a cold start can take a while).")
+@click.option("--json", "as_json", is_flag=True, help="Print the probe result as JSON (for scripts and autopkgtest).")
+def server_probe(command, command_args, set_env_pairs, timeout, as_json):
+    """Probe a stdio MCP command directly - no catalog entry needed - and
+    print the tools, resources and prompts it serves.
+
+    This is the form used by autopkgtest (DEP-8) smoke tests of
+    mcp-server-* Debian packages, where the installed binary is exercised
+    right after package install, before any mcprack catalog registration:
+
+    mcprack server probe /usr/bin/mcp-server-<name> --set-env <PREFIX>_READ_ONLY=true
+
+    Exits 0 only when the server completes the MCP handshake and answers
+    the list calls - which also proves its runtime dependencies (e.g.
+    python3-fastmcp) are intact, because the server process itself has to
+    import them in order to answer at all.
+    """
+    env = {}
+    for raw_pair in set_env_pairs:
+        key, value = _parse_key_value_pair(raw_pair, "--set-env")
+        env[key] = value
+    ok, result = health.probe_stdio_capabilities(command, list(command_args), env, timeout=timeout)
+    label = " ".join([command, *command_args])
+    raise SystemExit(_echo_probe_result(label, ok, result, as_json))
 
 
 @server_cli.command("import-env")

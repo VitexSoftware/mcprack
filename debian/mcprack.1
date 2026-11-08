@@ -100,6 +100,21 @@ Disable a server, hiding it from the catalog.
 Permanently delete a server and any stored credentials. Requires
 .B --yes
 confirmation.
+.TP
+.BI "server test " NAME " [--timeout SECONDS] [--json]"
+Test one registered MCP server: connect to it, perform the MCP handshake,
+and print the tools, resources and prompts it provides. For stdio servers
+the registered command is spawned with its resolved environment; for
+http/sse servers the URL is probed directly. Exit status is 0 only when the
+server answers the handshake and the list calls, so a broken runtime
+dependency (e.g. python3-fastmcp) fails the test.
+.TP
+.BI "server probe " COMMAND " [ARGS...] [--set-env KEY=VALUE]... [--timeout SECONDS] [--json]"
+Probe a stdio MCP command directly, without a catalog entry, and print the
+tools, resources and prompts it serves. This is the form used by autopkgtest
+(DEP-8) smoke tests of mcp-server-* Debian packages:
+.B mcprack server probe /usr/bin/mcp-server-<name>
+Exit status is 0 only when the server completes the handshake and answers.
 .SS secret \- manage a server's credential (secret env var) values
 .TP
 .B secret backend

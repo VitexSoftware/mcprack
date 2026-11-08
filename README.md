@@ -277,6 +277,15 @@ mcprack server enable jenkins
 mcprack server disable jenkins
 mcprack server delete jenkins --yes             # also clears stored secrets
 
+# test one server: MCP handshake + print its tools/resources/prompts;
+# exit status is 0 only when the server answers (catches broken deps too)
+mcprack server test jenkins
+mcprack server test jenkins --json
+
+# same probe for a raw stdio command, no catalog entry needed — this is the
+# form used by autopkgtest smoke tests of mcp-server-* deb packages
+mcprack server probe /usr/bin/mcp-server-jenkins --set-env JENKINS_READ_ONLY=true
+
 # edit env/key metadata in one command
 mcprack server edit multiflexi \
   --set-env MULTIFLEXI_HOST=https://flexibee-dev.spoje.net:5434/api/VitexSoftware/MultiFlexi/1.0.0 \
