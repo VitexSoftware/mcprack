@@ -1,3 +1,9 @@
+mcprack (1.6.0-1) unstable; urgency=medium
+
+  * Release 1.6.0
+
+ -- vitex <info@vitexsoftware.cz>  Sun, 08 Nov 2026 19:58:05 +0100
+
 mcprack (1.5.9-1) unstable; urgency=medium
 
   * Optional MCP OAuth (OAUTH_ENABLED): built-in OAuth 2.1 Authorization
