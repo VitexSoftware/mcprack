@@ -245,6 +245,26 @@ mcprack server probe /usr/bin/mcp-server-<name> --set-env <PREFIX>_READ_ONLY=tru
 4. Never change tool names/parameters as part of this; propose separately.
 5. Follow the global commit rule (message via `mcp__cc-token-saver__generate_commit_message`).
 
+## 9. Forks — track upstream releases and security fixes
+
+If the project is a **fork** of an upstream project (e.g. under `Vitexus/` or `VitexSoftware/`
+with an `upstream` remote, or packaged from a third-party repo), it must not be left to go stale:
+
+- Whenever you touch a fork (adapt, upgrade, package, release), **first check whether upstream
+  published a new release, tag, or security fix** since our last sync
+  (`git remote -v` → add `upstream` if missing; `git fetch upstream --tags`;
+  `git log HEAD..upstream/<default-branch> --oneline`; compare latest upstream release/tag,
+  GitHub Security Advisories and CVEs for the project and its dependencies).
+- **Backport** new releases and every security fix into our fork — merge/rebase upstream, or
+  cherry-pick when our local changes (naming per §3a, annotations per §1, packaging) conflict.
+  Security fixes take priority over feature releases.
+- After the backport: re-verify the Definition of Done (tool annotations and naming can be
+  overwritten by a merge), bump the Debian version (`debian/changelog`, mention the upstream
+  version/CVE ids), update `debian/watch` so it follows the upstream, and release.
+- Record the upstream base in `debian/changelog` / README (upstream version + date of last sync).
+- If a backport is not possible or intentionally skipped, say so explicitly to the user and note
+  the reason (and any open CVE) in the README or changelog — never skip silently.
+
 ## Definition of Done
 
 - [ ] Every tool: title, description, parameter descriptions, four explicit annotation hints
@@ -259,6 +279,7 @@ mcprack server probe /usr/bin/mcp-server-<name> --set-env <PREFIX>_READ_ONLY=tru
 - [ ] `server.json` lists every env variable (name, required, secret, default, choices) and is installed to `/usr/share/<binary>/server.json`; a test asserts each name appears in the README env table
 - [ ] README, SKILL.md, lhm.plugin.json, metainfo, changelogs, mcprack README list updated
 - [ ] Annotation, name-consistency and read-only tests pass (`pytest`)
+- [ ] Fork only: upstream checked for new releases / security fixes, all backported (or skip reason documented), upstream base version recorded (§9)
 
 Verification commands:
 ```sh
