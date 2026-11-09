@@ -62,7 +62,7 @@ A tool must never be `read_only_hint=True` and `destructive_hint=True` at once.
 ## 3. Runtime / SDK
 
 - **stdio transport is mandatory** (mcprack proxies stdio servers). If the server defaults to HTTP, add an env-selected stdio path (see `mcp-server-redmine` main.py); reject OAuth-only auth on the stdio path.
-- Use the current `mcp`/`fastmcp` generation; upgrade the server code rather than pinning or downgrading the library. The current FastMCP release is **4.1.4** (https://github.com/PrefectHQ/fastmcp/releases/tag/v4.1.4). Depend on `fastmcp>=4.1.4` and, in `debian/control`, `python3-fastmcp (>= 4.1.4)`. Do not pin a pre-release (`4.0.0a2`, `4.0.0b1`, `4.0.0b3`).
+- Use the current `mcp`/`fastmcp` generation; upgrade the server code rather than pinning or downgrading the library. The dependency floor stays `fastmcp>=4.1.4` / `python3-fastmcp (>= 4.1.4)` in `debian/control`; do not pin old pre-releases (`4.0.0a2`, `4.0.0b1`, `4.0.0b3`). Our library packages track upstream per §9 and currently ship: `python3-fastmcp` = PrefectHQ/fastmcp main @ 4.2.0~a3-2 (upstream stable line is v4.1.6; all fastmcp GHSAs are patched ≤ 4.1.1) and `python3-mcp` = modelcontextprotocol/python-sdk v2.3.0 + main, packaged as `1:2.3.0-1` (all python-sdk GHSAs patched ≤ 2.2.0). Beware: **mcp SDK 2.x renamed `mcp.server.fastmcp.FastMCP` to `mcp.server.mcpserver.MCPServer`** — servers on the `mcp` package must use the 2.x API or depend on the `fastmcp` package instead.
 - Console-script entry point installed as `/usr/bin/mcp-server-<name>` (see §3a), supports `--version` and `--help`.
 - Implement resources/prompts only when useful; if present, list them in `lhm.plugin.json`.
 
