@@ -452,10 +452,18 @@ def _serve_user_proxy_mcp(user, server_id):
                 # we injected. Truncation stays after it, so the log keeps
                 # the whole message.
                 message = _redact_env_values(str(exc), env)
-                logger.error("Proxy start failed for server %s (user %s): %s", server.name, user.id, message)
-                if len(message) > _MAX_CLIENT_ERROR_CHARS:
-                    message = message[:_MAX_CLIENT_ERROR_CHARS] + "… (truncated; see the server log)"
-                return _jsonrpc_error_response(request_id, message)
+                logger.error(
+                    "Proxy start failed for server %s (user %s, %s): %s",
+                    server.name, user.id, getattr(exc, "kind", "unknown"), message,
+                )
+                # The administrator gets the whole story (log, audit entry,
+                # Admin -> Proxy instances); the end user's client gets the
+                # class of failure and who to ask - not log lines, which carry
+                # paths, host names and whatever the MCP server chose to print.
+                public = _redact_env_values(getattr(exc, "public_message", message), env)
+                if len(public) > _MAX_CLIENT_ERROR_CHARS:
+                    public = public[:_MAX_CLIENT_ERROR_CHARS] + "… (truncated; see the server log)"
+                return _jsonrpc_error_response(request_id, public)
 
             if request.method == "GET":
                 # A GET relay carries a long-lived SSE stream — holding

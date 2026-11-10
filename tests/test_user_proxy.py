@@ -251,7 +251,7 @@ def test_effective_args_reflects_env_vars_added_after_registration():
     assert "NEW_VAR" in result
 
 
-def _make_idle_instance(user_id, server_id, idle_seconds=10_000, pid=99999):
+def _make_idle_instance(user_id, server_id, idle_seconds=10_000, pid=9_099_999):  # above pid_max: never a real process
     paths = user_proxy._paths(user_id, server_id)
     paths["pid"].parent.mkdir(parents=True, exist_ok=True)
     paths["pid"].write_text(str(pid))
@@ -265,7 +265,7 @@ def test_cleanup_stops_idle_proxy(state_dir):
          patch("mcprack.user_proxy._stop_pid") as stop_pid:
         user_proxy.cleanup_idle_proxies()
 
-    stop_pid.assert_called_once_with(99999)
+    stop_pid.assert_called_once_with(9_099_999)
     # once the process is gone so are the files that held its credentials
     assert not paths["pid"].exists()
 
@@ -352,7 +352,7 @@ def test_cleanup_skips_busy_lock_without_raising_or_waiting(state_dir):
          patch("mcprack.user_proxy._stop_pid") as stop_pid:
         user_proxy.cleanup_idle_proxies()
 
-    stop_pid.assert_called_once_with(99999)
+    stop_pid.assert_called_once_with(9_099_999)
 
 
 def test_relay_guard_blocks_exclusive_lock(state_dir):
@@ -417,7 +417,7 @@ def test_cleanup_skips_pair_with_active_relay(state_dir):
 
         # Control: without the guard the idle instance is collected.
         user_proxy.cleanup_idle_proxies()
-        stop_pid.assert_called_once_with(99999)
+        stop_pid.assert_called_once_with(9_099_999)
 
 
 # The forked child only calls os._exit(0) — no locks are touched, so the
@@ -568,6 +568,7 @@ def test_stop_pid_signals_the_whole_process_group(state_dir):
     """fastmcp spawns the registered command as its own child, so signalling
     only fastmcp's pid leaves that child (node, python, uvx...) orphaned."""
     with patch("mcprack.user_proxy._pid_running", side_effect=[True, False]), \
+         patch("mcprack.user_proxy.os.getpgid", return_value=4242), \
          patch("mcprack.user_proxy.os.killpg") as killpg, \
          patch("mcprack.user_proxy.os.kill") as kill:
         user_proxy._stop_pid(4242)
@@ -578,6 +579,7 @@ def test_stop_pid_signals_the_whole_process_group(state_dir):
 
 def test_stop_pid_falls_back_to_the_bare_pid_when_there_is_no_group(state_dir):
     with patch("mcprack.user_proxy._pid_running", side_effect=[True, False]), \
+         patch("mcprack.user_proxy.os.getpgid", return_value=4242), \
          patch("mcprack.user_proxy.os.killpg", side_effect=ProcessLookupError), \
          patch("mcprack.user_proxy.os.kill") as kill:
         user_proxy._stop_pid(4242)

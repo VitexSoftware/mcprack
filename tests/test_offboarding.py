@@ -292,7 +292,7 @@ def test_keeping_a_user_enabled_does_not_stop_anything(app, client, stopped):
 def test_stop_user_proxies_stops_only_that_users_instances(app, monkeypatch):
     state = user_proxy.STATE_DIR
     state.mkdir(parents=True, exist_ok=True)
-    for key, pid in (("u5-s1", 111), ("u5-s2", 222), ("u6-s1", 333), ("u50-s1", 444)):
+    for key, pid in (("u5-s1", 9_000_111), ("u5-s2", 9_000_222), ("u6-s1", 9_000_333), ("u50-s1", 9_000_444)):
         (state / f"{key}.pid").write_text(str(pid))
         (state / f"{key}.meta.json").write_text("{}")
     stopped = []
@@ -301,7 +301,7 @@ def test_stop_user_proxies_stops_only_that_users_instances(app, monkeypatch):
     with app.app_context():
         user_proxy.stop_user_proxies(5)
 
-    assert sorted(stopped) == [111, 222]  # not u6, and not u50 (prefix of the id)
+    assert sorted(stopped) == [9_000_111, 9_000_222]  # not u6, and not u50 (prefix of the id)
     assert not (state / "u5-s1.pid").exists()
     assert not (state / "u5-s1.meta.json").exists()
     assert (state / "u6-s1.pid").exists()

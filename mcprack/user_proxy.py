@@ -82,7 +82,37 @@ RELAY_GUARD_WAIT = int(os.environ.get("MCP_PROXY_RELAY_GUARD_WAIT", "5"))  # sec
 
 
 class UserProxyError(RuntimeError):
-    pass
+    """A proxy instance could not be started or reached.
+
+    `kind` says which class of failure it is (docs/AUDIT-2026-11.md B-13), so
+    "the binary is missing", "the process died while starting", "it is alive
+    but never answered", "it answered with an error" and "it started but has no
+    tools" are no longer one undifferentiated message:
+
+        spawn_failed       fastmcp (or the OS) refused to launch the process
+        exited_early       the process died during startup - see its log
+        startup_timeout    alive, but never answered on its port in time
+        unreachable        the port could not be connected to / spoke no HTTP
+        http_error         initialize returned an HTTP error status
+        handshake_error    initialize returned a JSON-RPC error
+        no_tools           initialize worked, tools/list is empty (crash on load)
+        tools_list_failed  tools/list itself failed
+        handshake_failed   generic (older code paths)
+        unknown            anything raised without a class
+
+    `str(exc)` is the administrator's view and may end with the tail of the
+    instance log. `public_message` is what an end user's client gets: the class
+    of failure and who to ask, without log lines (paths, host names, and
+    whatever the MCP server decided to print)."""
+
+    def __init__(self, message="", kind="unknown", public=None):
+        super().__init__(message)
+        self.kind = kind
+        self._public = public
+
+    @property
+    def public_message(self):
+        return self._public if self._public is not None else str(self)
 
 
 # What a spawned fastmcp process (and, through it, the MCP server) may inherit
@@ -306,17 +336,41 @@ def _read_text(path):
         return None
 
 
+def _process_is_ours(pid, config_path):
+    """Whether `pid` is the fastmcp instance started from `config_path`.
+
+    True / False when /proc can tell, None when it cannot (the process is gone,
+    or there is no /proc). The instance's command line contains its own config
+    file as an argument, which a recycled pid - a gunicorn worker, sshd, anything
+    else of the same uid - never will."""
+    try:
+        with open(f"/proc/{int(pid)}/cmdline", "rb") as handle:
+            arguments = handle.read().split(b"\0")
+    except (OSError, ValueError):
+        return None
+    return os.fsencode(str(config_path)) in arguments
+
+
 def _read_pid(path):
     """The pid recorded for an instance, or None when the file is missing,
-    empty or corrupt. A half-written file during a crash must read as "no
-    instance", not raise."""
+    empty or corrupt - or when the pid now belongs to some other process.
+
+    A half-written file during a crash must read as "no instance", not raise.
+    And a pid file that outlived its process (crash, hard restart) must never
+    make the stop path signal whatever has since been given that pid: after
+    `kill(pid)` and `killpg(pid)` we would be shooting at a stranger
+    (docs/AUDIT-2026-11.md B-12)."""
     raw = _read_text(path)
     if not raw:
         return None
     try:
-        return int(raw.strip())
+        pid = int(raw.strip())
     except ValueError:
         return None
+    if _process_is_ours(pid, Path(path).with_suffix(".json")) is False:
+        logger.warning("pid %s recorded in %s is not that instance any more (recycled pid) - ignoring it", pid, path)
+        return None
+    return pid
 
 
 def _read_port(path):
@@ -342,6 +396,23 @@ def _read_float(path):
         return float(raw.strip())
     except ValueError:
         return None
+
+
+# The instances this worker process started. A child nobody wait()s for stays
+# a zombie - in the process table, and (since it does not count as running)
+# invisible to every check - until its parent collects it. Only the parent can,
+# so each worker keeps its own children and polls them whenever it passes
+# through the proxy code (docs/AUDIT-2026-11.md B-12).
+_CHILDREN = {}
+
+
+def _reap_children():
+    for pid, proc in list(_CHILDREN.items()):
+        try:
+            if proc.poll() is not None:
+                del _CHILDREN[pid]
+        except Exception:  # noqa: BLE001 - housekeeping must never break a relay
+            _CHILDREN.pop(pid, None)
 
 
 def _pid_running(pid):
@@ -381,11 +452,21 @@ def _stop_pid(pid, timeout=3.0):
         fastmcp runs with start_new_session=True so its process group is
         pid; signalling the group is what stops the stdio MCP server it
         spawned from being orphaned."""
+        # killpg(pid) only means "the instance's group" when the instance leads
+        # it. If the pid has been recycled into somebody else's group (or the
+        # instance was somehow not started in a new session) never signal that
+        # group - signal the pid alone.
+        leads_its_group = True
         try:
-            os.killpg(pid, sig)
-            return
-        except (OSError, ProcessLookupError) as exc:
-            logger.debug("killpg(%s, %s) failed (%s), signalling the pid alone", pid, sig, exc)
+            leads_its_group = os.getpgid(pid) == pid
+        except OSError:
+            pass  # gone already: the calls below are harmless
+        if leads_its_group:
+            try:
+                os.killpg(pid, sig)
+                return
+            except (OSError, ProcessLookupError) as exc:
+                logger.debug("killpg(%s, %s) failed (%s), signalling the pid alone", pid, sig, exc)
         try:
             os.kill(pid, sig)
         except OSError:
@@ -395,9 +476,11 @@ def _stop_pid(pid, timeout=3.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
         if not _pid_running(pid):
+            _reap_children()
             return
         time.sleep(0.1)
     _send_signal(signal.SIGKILL)
+    _reap_children()
 
 
 def _desired_config(server_name, command, args, env):
@@ -413,7 +496,7 @@ def _desired_config(server_name, command, args, env):
     }
 
 
-def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False):
+def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False, proc=None, report=None):
     """Bounded, best-effort liveness probe against a fastmcp proxy
     instance — does its backing stdio command actually respond, or does
     every real request fail? A broken backend (crashes on import, wrong
@@ -439,7 +522,19 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
     easily take longer than the old single-shot ~0.2s grace period,
     which made cold spawns fail the handshake even though the backend
     would have come up fine a second later.
+
+    `proc` (the Popen of the instance being started, when there is one) is
+    polled on every round: a process that has died will never bind its port, so
+    waiting out the whole timeout for it only delays the real answer - which is
+    in its log. `report`, when given, is a dict that receives `kind` and
+    `detail` for a failure (see UserProxyError); the return value stays a bool.
     """
+    def fail(kind, detail=""):
+        if report is not None:
+            report["kind"] = kind
+            report["detail"] = detail
+        return False
+
     payload = json.dumps(
         {
             "jsonrpc": "2.0",
@@ -455,9 +550,11 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
 
     deadline = time.monotonic() + timeout
     while True:
+        if proc is not None and proc.poll() is not None:
+            return fail("exited_early", f"exit status {proc.poll()}")
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            return False
+            return fail("startup_timeout", f"no answer on port {port} within {timeout:g}s")
         conn = http.client.HTTPConnection("127.0.0.1", port, timeout=remaining)
         try:
             conn.request(
@@ -474,8 +571,10 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
         except ConnectionRefusedError:
             time.sleep(min(0.1, max(remaining, 0)))
             continue
-        except (OSError, http.client.HTTPException):
-            return False
+        except TimeoutError:
+            return fail("startup_timeout", f"port {port} accepted the connection but did not answer within {timeout:g}s")
+        except (OSError, http.client.HTTPException) as exc:
+            return fail("unreachable", f"{type(exc).__name__}: {exc}")
         finally:
             conn.close()
         break
@@ -483,20 +582,28 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
     try:
         data = json.loads(body)
     except ValueError:
+        status = getattr(resp, "status", None)
+        if isinstance(status, int) and status >= 400:
+            return fail("http_error", f"initialize returned HTTP {status}")
         return True
 
     if isinstance(data, dict) and "error" in data:
-        return False
+        error = data["error"]
+        message = error.get("message") if isinstance(error, dict) else error
+        return fail("handshake_error", str(message)[:200] if message else "")
 
     if require_tools:
         # initialize alone proves nothing about the wrapped backend (see
         # health.probe_tools). Spawn time is the one moment where a cold
         # backend start is expected anyway, so the deeper check lives here
         # and not in the frequent recheck path.
-        ok, _count, _error = health.probe_tools(
+        ok, _count, error = health.probe_tools(
             "127.0.0.1", port, timeout=max(deadline - time.monotonic(), 1.0)
         )
-        return ok
+        if not ok:
+            error = str(error or "")
+            return fail("no_tools" if "no tools" in error else "tools_list_failed", error)
+        return True
     return True
 
 
@@ -591,6 +698,55 @@ def _find_available_port(user_id, server_id):
     )
 
 
+_ASK_ADMIN = " Ask an administrator to check the instance log (Admin → Proxy instances)."
+
+
+def _startup_failure(kind, server_name, paths, detail=""):
+    """Clean up after a failed start and build the UserProxyError for it.
+
+    The administrator's message (str) names the failure class, carries the
+    detail and the tail of the instance log; the public message names the class
+    and who to ask - no log lines, no file system paths (B-13)."""
+    recent_log = _read_recent_log(paths["log"])
+    _clear_state_files(paths)
+    name = server_name
+    detail_suffix = f" ({detail})" if detail else ""
+    if kind == "exited_early":
+        summary = f"User proxy process exited early for {name}{detail_suffix}"
+        public = f"The MCP server '{name}' exited right after it was started - its command, a missing dependency or its configuration is probably wrong."
+    elif kind == "startup_timeout":
+        summary = f"Upstream MCP server '{name}' failed its startup handshake within {HANDSHAKE_TIMEOUT}s: it is running but never answered{detail_suffix}"
+        public = f"The MCP server '{name}' started but did not answer within {HANDSHAKE_TIMEOUT}s."
+    elif kind == "handshake_error":
+        summary = f"Upstream MCP server '{name}' failed its startup handshake: initialize returned an error{detail_suffix}"
+        public = f"The MCP server '{name}' answered the start-up handshake with an error."
+    elif kind == "http_error":
+        summary = f"Upstream MCP server '{name}' failed its startup handshake: {detail or 'HTTP error'}"
+        public = f"The MCP server '{name}' answered the start-up handshake with an HTTP error."
+    elif kind == "unreachable":
+        summary = f"Upstream MCP server '{name}' failed its startup handshake: could not talk to it{detail_suffix}"
+        public = f"The MCP server '{name}' started but could not be reached."
+    elif kind == "no_tools":
+        summary = f"Upstream MCP server '{name}' failed its startup handshake: it started but serves no tools (it probably crashed while loading)"
+        public = f"The MCP server '{name}' started but serves no tools - it probably crashed while loading."
+    elif kind == "tools_list_failed":
+        summary = f"Upstream MCP server '{name}' failed its startup handshake: tools/list failed{detail_suffix}"
+        public = f"The MCP server '{name}' started but could not list its tools."
+    else:
+        kind = "handshake_failed"
+        summary = (
+            f"Upstream MCP server '{name}' failed its startup handshake within "
+            f"{HANDSHAKE_TIMEOUT}s (or serves no tools) — the registered command is likely broken."
+        )
+        public = f"The MCP server '{name}' failed its start-up handshake."
+    err = summary
+    if recent_log:
+        err += f":\n{recent_log}" if kind == "exited_early" else f"\nLast log lines:\n{recent_log}"
+    else:
+        err += f" (check its log at {paths['log']}, or its registration in Admin → Servers)."
+    return UserProxyError(err, kind=kind, public=public + _ASK_ADMIN)
+
+
 def _spawn(paths, port, server_name, desired_config, desired_json):
     """Write the instance's config and start fastmcp on `port`. The config
     and meta files are written first so a worker that finds the pid can
@@ -602,51 +758,51 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
     fastmcp_bin = _resolve_fastmcp_bin()
     spawn_env = _child_environment()
 
-    with paths["log"].open("a") as log_file:
-        proc = subprocess.Popen(
-            [
-                fastmcp_bin,
-                "run",
-                str(paths["config"]),
-                "--transport",
-                "http",
-                "--host",
-                "127.0.0.1",
-                "--port",
-                str(port),
-                "--log-level",
-                "INFO",
-            ],
-            stdout=log_file,
-            stderr=log_file,
-            env=spawn_env,
-            start_new_session=True,
-        )
+    _reap_children()
+    try:
+        with paths["log"].open("a") as log_file:
+            proc = subprocess.Popen(
+                [
+                    fastmcp_bin,
+                    "run",
+                    str(paths["config"]),
+                    "--transport",
+                    "http",
+                    "--host",
+                    "127.0.0.1",
+                    "--port",
+                    str(port),
+                    "--log-level",
+                    "INFO",
+                ],
+                stdout=log_file,
+                stderr=log_file,
+                env=spawn_env,
+                start_new_session=True,
+            )
+    except OSError as exc:
+        # Not found / not executable / out of processes: nothing was started,
+        # so there is no log to read - the OS error is the whole story.
+        _clear_state_files(paths)
+        raise UserProxyError(
+            f"Could not launch fastmcp for {server_name}: {exc.strerror or exc}",
+            kind="spawn_failed",
+            public=f"The MCP server '{server_name}' could not be launched on this host.{_ASK_ADMIN}",
+        ) from exc
+    _CHILDREN[proc.pid] = proc
 
     _write_private(paths["pid"], str(proc.pid))
     _write_private(paths["last_used"], str(int(time.time())))
     time.sleep(0.2)
     if proc.poll() is not None:
-        recent_log = _read_recent_log(paths["log"])
-        _clear_state_files(paths)
-        err = f"User proxy process exited early for {server_name}"
-        if recent_log:
-            err += f":\n{recent_log}"
-        raise UserProxyError(err)
+        raise _startup_failure("exited_early", server_name, paths, f"exit status {proc.poll()}")
 
-    if not _probe_upstream_health(port, require_tools=True):
-        recent_log = _read_recent_log(paths["log"])
-        _stop_pid(proc.pid)
-        _clear_state_files(paths)
-        err = (
-            f"Upstream MCP server '{server_name}' failed its startup handshake within "
-            f"{HANDSHAKE_TIMEOUT}s (or serves no tools) — the registered command is likely broken."
-        )
-        if recent_log:
-            err += f"\nLast log lines:\n{recent_log}"
-        else:
-            err += f" (check its log at {paths['log']}, or its registration in Admin → Servers)."
-        raise UserProxyError(err)
+    report = {}
+    if not _probe_upstream_health(port, require_tools=True, proc=proc, report=report):
+        kind = report.get("kind", "handshake_failed")
+        if kind != "exited_early":
+            _stop_pid(proc.pid)  # alive but useless: free its port for the respawn
+        raise _startup_failure(kind, server_name, paths, report.get("detail", ""))
 
     _write_private(paths["healthy_at"], str(time.time()))
 
@@ -692,6 +848,7 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
     # env_keys covers keys that exist only in this user's personal override -
     # server.env_var_names/env_config alone would miss them.
     args = _effective_args(server, args, env_keys=(env or {}).keys())
+    _reap_children()
 
     with _serialized(user_id, server_id):
         paths = _paths(user_id, server_id)
@@ -741,11 +898,12 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
                     user_id=user_id,
                     server_id=server_id,
                     server_name=server_name,
-                    error_message=str(exc)[:500],
+                    error_message=(f"[{exc.kind}] " if exc.kind != "unknown" else "") + str(exc)[:480],
                     duration_ms=int((time.monotonic() - start_time) * 1000),
                 )
                 if current_span is not None:
                     current_span.set_attribute("mcp.result", "error")
+                    current_span.set_attribute("mcp.failure_kind", exc.kind)
                 raise
             audit.log_audit_event(
                 "proxy_start",
@@ -788,6 +946,7 @@ def mark_proxy_used(user_id, server_id):
 
 
 def cleanup_idle_proxies(max_idle_seconds=900):
+    _reap_children()
     if not STATE_DIR.exists():
         return
 
