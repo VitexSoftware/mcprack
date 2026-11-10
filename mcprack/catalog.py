@@ -34,6 +34,7 @@ from . import user_proxy
 from . import vaultwarden
 from .config_formats import render_claude_config, render_copilot_config
 from .extensions import csrf, db
+from .urls import external_url
 from .models import (
     ApiToken,
     McpServer,
@@ -305,11 +306,7 @@ def _external_proxy_url(endpoint, **kwargs):
     whatever the request happens to carry. Behind a reverse proxy the
     request's own host and scheme are the internal ones, so a config
     generated from them points clients at an address they cannot reach."""
-    base_url = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
-    if base_url:
-        rel = url_for(endpoint, **kwargs)
-        return f"{base_url}{rel}"
-    return url_for(endpoint, _external=True, **kwargs)
+    return external_url(endpoint, **kwargs)
 
 
 def _proxy_relay_url(user, server):

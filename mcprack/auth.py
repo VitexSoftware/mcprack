@@ -1,3 +1,5 @@
+import hashlib
+import hmac
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -10,6 +12,7 @@ from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
 from . import audit, mailer
+from .urls import external_url
 from .extensions import db, limiter, login_manager
 from .models import User
 
@@ -55,8 +58,19 @@ def _reset_serializer():
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=_RESET_TOKEN_SALT)
 
 
+def _password_fingerprint(user):
+    """A keyed fingerprint of the current password hash. The token has to stop
+    working once the password changes, but it is signed, not encrypted: it
+    must not carry the hash itself (anyone holding the link could read it)."""
+    return hmac.new(
+        current_app.config["SECRET_KEY"].encode(),
+        b"password-reset-fingerprint:" + (user.password_hash or "").encode(),
+        hashlib.sha256,
+    ).hexdigest()[:32]
+
+
 def _generate_reset_token(user):
-    return _reset_serializer().dumps({"user_id": user.id, "password_hash": user.password_hash})
+    return _reset_serializer().dumps({"user_id": user.id, "fp": _password_fingerprint(user)})
 
 
 def _verify_reset_token(token, max_age):
@@ -69,7 +83,11 @@ def _verify_reset_token(token, max_age):
     except (BadSignature, SignatureExpired):
         return None
     user = db.session.get(User, data.get("user_id"))
-    if user is None or user.password_hash != data.get("password_hash"):
+    fingerprint = data.get("fp")
+    # tokens of the previous format (raw hash, no "fp") are not honoured
+    if user is None or not isinstance(fingerprint, str):
+        return None
+    if not hmac.compare_digest(fingerprint, _password_fingerprint(user)):
         return None
     return user
 
@@ -275,7 +293,7 @@ def forgot_password():
         # those is false would let them enumerate accounts/emails.
         if user is not None and user.auth_type == "local" and user.email:
             token = _generate_reset_token(user)
-            reset_url = url_for("auth.reset_password", token=token, _external=True)
+            reset_url = external_url("auth.reset_password", token=token)
             max_age_minutes = current_app.config["PASSWORD_RESET_MAX_AGE"] // 60
             mailer.send_email(
                 user.email,

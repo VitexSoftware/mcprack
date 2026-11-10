@@ -63,6 +63,12 @@ class Config:
     # this with no permission rows granted locks everyone out of everything.
     STRICT_SERVER_PERMISSIONS = os.environ.get("STRICT_SERVER_PERMISSIONS", "false").lower() in ("true", "1", "yes")
 
+    # Hosts the application answers to (Flask TRUSTED_HOSTS; comma separated,
+    # a leading dot allows subdomains). Empty = derived from PUBLIC_BASE_URL
+    # (plus localhost for health checks from the reverse proxy host); with
+    # neither set, any Host is accepted (development).
+    TRUSTED_HOSTS = [h.strip() for h in os.environ.get("TRUSTED_HOSTS", "").split(",") if h.strip()] or None
+
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "SQLALCHEMY_DATABASE_URI", "sqlite:////var/lib/mcprack/mcprack.db"
     )

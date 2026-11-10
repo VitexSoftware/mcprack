@@ -1,10 +1,12 @@
 import os
+from urllib.parse import urlsplit
 
 import click
-from flask import current_app, Flask, jsonify, render_template, request, session
+from flask import current_app, Flask, jsonify, render_template, request, Response, session
 from flask_babel import gettext as _
 from flask_migrate import stamp
 from sqlalchemy import inspect
+from werkzeug.exceptions import SecurityError
 
 from .config import Config
 from .extensions import babel, csrf, db, limiter, login_manager, migrate
@@ -69,6 +71,18 @@ def _enforce_secret_key(app):
         raise RuntimeError(error_msg)
 
 
+def _derive_trusted_hosts(app):
+    """With a public URL configured, refuse requests for any other Host
+    (docs/AUDIT-2026-11.md A-05: Host-header poisoning of links, redirects and
+    OAuth metadata). Loopback names stay valid so the reverse proxy host's own
+    health checks keep working. An explicit TRUSTED_HOSTS wins."""
+    if app.config.get("TRUSTED_HOSTS"):
+        return
+    public = urlsplit(app.config.get("PUBLIC_BASE_URL") or "").hostname
+    if public:
+        app.config["TRUSTED_HOSTS"] = [public, "localhost", "127.0.0.1", "[::1]"]
+
+
 def get_locale():
     # If a locale is manually stored in the session, use it
     loc = session.get("locale")
@@ -85,6 +99,7 @@ def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
     _enforce_secret_key(app)
+    _derive_trusted_hosts(app)
 
     db.init_app(app)
     migrate.init_app(app, db, directory=MIGRATIONS_DIR)
@@ -192,6 +207,12 @@ def create_app(config_object=Config):
             or request.path.startswith("/oauth/")
             or request.accept_mimetypes.best == "application/json"
         )
+
+    @app.errorhandler(SecurityError)
+    def handle_untrusted_host(err):
+        """A Host header outside TRUSTED_HOSTS. Answered without a template:
+        rendering the error page would itself need request.host / url_for."""
+        return Response("Bad Request: unknown host\n", status=400, mimetype="text/plain")
 
     @app.errorhandler(400)
     def handle_bad_request(err):
