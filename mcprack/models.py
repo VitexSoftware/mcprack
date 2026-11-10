@@ -60,6 +60,15 @@ class User(UserMixin, db.Model):
     # (auth.load_user); changing it kills every session of the account.
     # Accounts from before this column existed are 0, as are their cookies.
     session_version = db.Column(db.Integer, nullable=False, default=new_token_version, server_default="0")
+    # Second factor (TOTP, docs/AUDIT-2026-11.md B-03). The shared secret is
+    # stored encrypted (mfa.py); `totp_enabled` flips only once the user has
+    # proved they can produce a code, so a half-finished enrolment locks nobody
+    # out. `totp_last_step` is the time step of the last accepted code - a code
+    # is good once. `recovery_codes` is a JSON list of keyed hashes.
+    totp_secret = db.Column(db.String(255), nullable=True)
+    totp_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    totp_last_step = db.Column(db.BigInteger, nullable=False, default=0, server_default="0")
+    recovery_codes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
     # Which ConfigTemplate (if any) was last applied to this user — purely
@@ -522,6 +531,7 @@ class AuditLogEntry(db.Model):
         "oauth_client_registered",
         "oauth_consent",
         "oauth_token_issued",
+        "mfa_change",
     )
     RESULTS = ("success", "error")
 

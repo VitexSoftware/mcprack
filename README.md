@@ -80,6 +80,35 @@ default they use a signed path token in `/proxy/mcp/<token>/<id>`; with
 `OAUTH_ENABLED=true` they use Bearer tokens via the MCP Authorization Spec
 flow (see [Optional MCP OAuth](#optional-mcp-oauth)).
 
+### Two-factor authentication (TOTP)
+
+Every account — local or LDAP — can protect its sign-in with a time-based
+one-time code (RFC 6238: FreeOTP, Aegis, Google Authenticator, any authenticator
+app) from the user menu → *Two-factor authentication*. With it on, signing in is
+two steps: the password, then the 6-digit code (or one of ten single-use
+**recovery codes**, shown once when you turn it on). A code works once, wrong
+codes count toward the same lock-out as wrong passwords, and a password reset
+does not bypass the second factor. Setup is by typing the key into the app (or
+importing the displayed `otpauth://` address) — there is no QR code.
+
+**Administrators must have it** (`MFA_REQUIRED_FOR_ADMINS`, default `true`): an
+administrator without it is sent to the setup page instead of the admin area, in
+the browser and for the admin REST API alike, and cannot turn it off. API tokens
+are not asked for a code — they are created from an already signed-in session.
+Set `MFA_REQUIRED_FOR_ADMINS=false` only on a trusted private network. The public
+demo (`DEMO_MODE`) is exempt.
+
+A user who has lost both device and recovery codes: an administrator can reset
+the factor (Admin → Users → *Reset two-factor authentication*, or
+`POST /api/v1/admin/users/{id}/mfa-reset`); a locked-out administrator uses
+`mcprack user mfa-reset USERNAME` on the server (`mfa-status` shows the state).
+Resetting ends the user's sessions and is audited (`mfa_change`).
+
+The shared secret is stored encrypted with the same keys as the local secret
+store, so `SECRET_KEY_FALLBACKS` keeps enrolments valid across a key rotation.
+Further options: `MFA_ISSUER` (the name shown in the app), `MFA_PENDING_SECONDS`
+(time allowed between password and code, default 300), `MFA_RECOVERY_CODE_COUNT`.
+
 ### Forgot-password email
 
 The "Forgot your password?" link on the login page only works if outbound

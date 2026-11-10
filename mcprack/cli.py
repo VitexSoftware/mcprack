@@ -202,6 +202,32 @@ def user_revoke_tokens(username):
     click.echo(f"All tokens of '{username}' revoked; they must download a new configuration.")
 
 
+@user_cli.command("mfa-reset")
+@click.argument("username")
+def user_mfa_reset(username):
+    """Switch off a user's two-factor authentication (lost device and recovery
+    codes) and end their sessions. The way back in for a locked-out
+    administrator - it needs shell access to the server, as it should."""
+    from . import mfa
+
+    user = _get_user_or_fail(username)
+    mfa.disable(user)
+    accounts.invalidate_sessions(user)
+    db.session.commit()
+    click.echo(f"Two-factor authentication of '{username}' is off; their sessions were ended.")
+
+
+@user_cli.command("mfa-status")
+@click.argument("username")
+def user_mfa_status(username):
+    """Show whether a user has two-factor authentication and how many recovery codes are left."""
+    from . import mfa
+
+    user = _get_user_or_fail(username)
+    state = "on" if mfa.is_enabled(user) else ("being set up" if mfa.is_enrolling(user) else "off")
+    click.echo(f"{username}: two-factor authentication {state}; {mfa.remaining_recovery_codes(user)} recovery code(s) left")
+
+
 @user_cli.command("promote")
 @click.argument("username")
 def user_promote(username):

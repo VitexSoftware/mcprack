@@ -54,6 +54,19 @@ class Config:
     # when a real MCP backend lives there. (mcprack/endpoint_policy.py)
     BACKEND_ALLOW_LINK_LOCAL = os.environ.get("BACKEND_ALLOW_LINK_LOCAL", "false").lower() in ("true", "1", "yes")
 
+    # --- Second factor (TOTP) ------------------------------------------------
+    # Administrators must have MFA enabled to use the admin pages and the admin
+    # REST API in a browser session: an administrator without it is sent to the
+    # enrolment page instead. (API tokens are not affected - they are created
+    # from an already authenticated session. Ignored in DEMO_MODE.) Set false
+    # only on a trusted private network.
+    MFA_REQUIRED_FOR_ADMINS = os.environ.get("MFA_REQUIRED_FOR_ADMINS", "true").lower() in ("true", "1", "yes")
+    # The name an authenticator app shows next to the account.
+    MFA_ISSUER = os.environ.get("MFA_ISSUER", "mcprack")
+    # How long a user has between a correct password and the code (seconds).
+    MFA_PENDING_SECONDS = int(os.environ.get("MFA_PENDING_SECONDS", "300"))
+    MFA_RECOVERY_CODE_COUNT = int(os.environ.get("MFA_RECOVERY_CODE_COUNT", "10"))
+
     # --- Login brute-force protection (database backed, see throttle.py) ---
     LOGIN_THROTTLE_ENABLED = os.environ.get("LOGIN_THROTTLE_ENABLED", "true").lower() in ("true", "1", "yes")
     # per account AND client address: stops guessing from one place without

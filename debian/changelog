@@ -12,6 +12,12 @@ mcprack (1.7.0-1) UNRELEASED; urgency=medium
     API, `mcprack user revoke-tokens`), disabling/deleting a user stops their
     MCP servers; MCP servers no longer inherit mcprack's secrets and keep their
     credentials in /run/mcprack (RuntimeDirectory), removed when reaped.
+  * Two-factor authentication (TOTP, RFC 6238, no new dependency) for local and
+    LDAP accounts with single-use recovery codes, a code accepted only once,
+    throttled like passwords; REQUIRED for administrators by default
+    (MFA_REQUIRED_FOR_ADMINS) - they are sent to the setup page on first use of
+    the admin area, in the browser and for the admin API. Reset by an
+    administrator (UI, API) or `mcprack user mfa-reset`. New migration add_user_mfa.
   * Backend URLs: only http(s), no credentials, no link-local/metadata/unspecified
     destinations (BACKEND_ALLOW_LINK_LOCAL to allow).
   * MCP server start-up: failures are classified (spawn_failed, exited_early,

@@ -759,6 +759,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorEnvelope"
 
+  /admin/users/{userId}/mfa-reset:
+    post:
+      operationId: resetAdminUserMfa
+      tags: [admin-users]
+      summary: Switch off a user's two-factor authentication (admin)
+      description: >
+        For a user who has lost both their authenticator device and their
+        recovery codes. Removes the secret and the recovery codes and ends all
+        of the user's sessions; they sign in with the password alone until
+        they set it up again. Audited.
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: "#/components/schemas/UserDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /admin/users/{userId}/revoke-tokens:
     post:
       operationId: revokeAdminUserTokens
@@ -1221,6 +1250,9 @@ components:
           type: boolean
         is_active:
           type: boolean
+        mfa_enabled:
+          type: boolean
+          description: Whether the user has two-factor authentication (TOTP) switched on.
         created_at:
           type: string
           format: date-time

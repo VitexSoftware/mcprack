@@ -20,6 +20,9 @@ class TestConfig(Config):
     # seeing every enabled server; tests of the production default and of
     # strict behaviour set it explicitly (tests/test_strict_server_permissions.py).
     STRICT_SERVER_PERMISSIONS = False
+    # The existing suite signs administrators in with a password only; the MFA
+    # tests (tests/test_mfa.py) turn the production default back on.
+    MFA_REQUIRED_FOR_ADMINS = False
     BW_SERVER = "https://vault.example.test"
     BW_CLIENTID = "test-client-id"
     BW_CLIENTSECRET = "test-client-secret"

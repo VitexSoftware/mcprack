@@ -28,6 +28,7 @@ from . import admin
 from . import audit
 from . import catalog
 from . import env_policy
+from . import mfa
 from . import passwords
 from . import secret_store
 from . import vaultwarden
@@ -80,6 +81,18 @@ def api_admin_required(view):
     def wrapped(*args, **kwargs):
         if not current_user.is_admin:
             return api_error(403, "forbidden", "Admin privileges required")
+        # A browser session of an administrator without a second factor does
+        # not reach the admin API either (MFA_REQUIRED_FOR_ADMINS). A bearer
+        # token is not affected: it was created from an authenticated session.
+        if getattr(g, "api_token", None) is None:
+            from .auth import mfa_enrollment_required
+
+            if mfa_enrollment_required():
+                return api_error(
+                    403,
+                    "mfa_required",
+                    "Administrators must set up two-factor authentication first (/account/mfa)",
+                )
         # A bearer token must additionally carry an admin scope: admin:write
         # for mutating methods, admin:read (or admin:write) for GETs.
         # Session-cookie users are interactive and always pass.
@@ -181,6 +194,7 @@ def _user_summary(user):
         "auth_type": user.auth_type,
         "is_admin": user.is_admin,
         "is_active": user.is_active,
+        "mfa_enabled": mfa.is_enabled(user),
         "created_at": _iso(user.created_at),
         "config_template_id": user.config_template_id,
     }
@@ -991,6 +1005,22 @@ def admin_user_revoke_tokens(user_id):
     accounts.stop_processes(user)
     audit.log_audit_event(
         "admin_change", "success", user=current_user, error_message=f"tokens of '{user.username}' revoked via API"
+    )
+    return api_ok(_user_detail(user))
+
+
+@bp.route("/admin/users/<int:user_id>/mfa-reset", methods=["POST"])
+@api_admin_required
+def admin_user_mfa_reset(user_id):
+    """Switch off a user's second factor (lost device and recovery codes) and end
+    their sessions."""
+    user = db.get_or_404(User, user_id)
+    mfa.disable(user)
+    accounts.invalidate_sessions(user)
+    db.session.commit()
+    audit.log_audit_event(
+        "mfa_change", "success", user=current_user,
+        error_message=f"two-factor authentication of '{user.username}' reset by an administrator via API",
     )
     return api_ok(_user_detail(user))
 

@@ -146,6 +146,14 @@ New behaviour you should know about (details: `docs/AUDIT-2026-11.md`):
 * **Login throttling** is stored in the database, so it holds across workers and
   restarts; failed logins no longer put the typed name into the audit log.
   Locked-out users see HTTP 429 with `Retry-After`.
+* **Two-factor authentication (TOTP)** is available to every account and
+  **required for administrators** (`MFA_REQUIRED_FOR_ADMINS=true`, the default):
+  on upgrade an existing administrator is sent to *Account → Two-factor
+  authentication* the first time they open the admin area, and cannot use it
+  until they have set up an authenticator app. Nothing else changes for anybody
+  until they enrol, and the migration only adds columns (it is reversible). The
+  way back for a locked-out administrator is `mcprack user mfa-reset USERNAME` on
+  the server. Set `MFA_REQUIRED_FOR_ADMINS=false` only on a trusted private network.
 * **Logout** (the menu button) ends the account's sessions everywhere; changing
   the password does too. A copy of a session cookie no longer outlives either.
 * **Taking access away**: disabling or deleting a user stops their running MCP

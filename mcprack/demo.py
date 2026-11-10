@@ -37,6 +37,9 @@ BLOCKED_ENDPOINTS = frozenset(
         # creates or demotes accounts, or moves the secret store around would
         # take the demo over for everybody else.
         "auth.account_password",
+        "auth.account_mfa",
+        "admin.user_mfa_reset",
+        "api.admin_user_mfa_reset",
         "admin.user_new",
         "admin.user_edit",
         "admin.vaultwarden_migrate_to_vaultwarden",
@@ -57,6 +60,7 @@ REVIEWED_SAFE = {
     # authentication / own account
     "auth.login": "authentication",
     "auth.logout": "ends the caller's own sessions",
+    "auth.login_mfa": "second step of a login; nobody has a second factor on the demo",
     "auth.forgot_password": "reset request, rate limited",
     "auth.reset_password": "reset completion with a signed token",
     # per-user catalog state - overrides are constrained by env_policy

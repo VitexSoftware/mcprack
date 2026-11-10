@@ -27,6 +27,7 @@ class OAuthConfig(Config):
     RATELIMIT_ENABLED = False
     OAUTH_ENABLED = True
     STRICT_SERVER_PERMISSIONS = False  # these tests predate the fail-closed default
+    MFA_REQUIRED_FOR_ADMINS = False
     OAUTH_ALLOWED_REDIRECT_HOSTS = "client.test"
     PUBLIC_BASE_URL = "https://mcprack.test"
     BW_SERVER = ""

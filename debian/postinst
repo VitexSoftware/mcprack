@@ -233,6 +233,8 @@ with app.app_context():
         install -m 0600 -o root -g root /dev/null /etc/mcprack/admin-credentials
         printf 'username=admin\npassword=%s\n' "$ADMIN_PASS" > /etc/mcprack/admin-credentials
         echo "✅ Initial admin account created (username: admin). Credentials saved to /etc/mcprack/admin-credentials"
+        echo "   Administrators must set up two-factor authentication (an authenticator app) at their first sign-in."
+        echo "   Locked out later? 'mcprack user mfa-reset admin' on this server switches it off again."
       else
         rm -rf "$ADMIN_PASS_DIR"
         echo "ℹ️  Admin account setup deferred (likely missing SECRET_KEY). Run after 'mcprack-init-config':" >&2

@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import ssl
+import time
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -12,7 +13,8 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import accounts, audit, mailer, passwords, throttle
+from . import accounts, audit, mailer, mfa, passwords, throttle
+from .totp import group as totp_group
 from .urls import external_url
 from .extensions import db, limiter, login_manager
 from .models import User
@@ -119,6 +121,20 @@ def _start_session(user):
     session["sv"] = user.session_version or 0
 
 
+def mfa_mandatory(user):
+    """Whether `user` must have a second factor: an administrator, when
+    MFA_REQUIRED_FOR_ADMINS is on. The public demo's shared login is exempt -
+    nobody can enrol it, it is not a person."""
+    cfg = current_app.config
+    return bool(cfg.get("MFA_REQUIRED_FOR_ADMINS", True) and not cfg.get("DEMO_MODE") and user.is_admin)
+
+
+def mfa_enrollment_required():
+    """True when the signed-in user has to enrol a second factor before using
+    administrative functions."""
+    return bool(current_user.is_authenticated and mfa_mandatory(current_user) and not mfa.is_enabled(current_user))
+
+
 def admin_required(view):
     @wraps(view)
     @login_required
@@ -127,6 +143,9 @@ def admin_required(view):
             from flask import abort
 
             abort(403)
+        if mfa_enrollment_required():
+            flash(_("Administrators must set up two-factor authentication before using the admin area."), "error")
+            return redirect(url_for("auth.account_mfa"))
         return view(*args, **kwargs)
 
     return wrapped
@@ -198,6 +217,103 @@ def _ldap_authenticate(username, password):
     }
 
 
+def _is_shared_demo_login(user):
+    return bool(current_app.config.get("DEMO_MODE")) and user.username == current_app.config.get("DEMO_USERNAME")
+
+
+def _complete_password_login(user, username, next_url):
+    """The password (or the LDAP bind) was right. Log in - or, when the account
+    has a second factor, park the login until the code has been given.
+
+    Parked means: no session for the user yet, only a signed note in the cookie
+    saying "this browser passed the password step for account N, until T". The
+    throttle is deliberately NOT cleared here: a correct password is not a
+    finished login, and clearing the counters now would let anybody who knows
+    the password guess the six-digit code without limit."""
+    if mfa.is_enabled(user) and not _is_shared_demo_login(user):
+        locale = session.get("locale")
+        session.clear()
+        if locale:
+            session["locale"] = locale
+        session["mfa_uid"] = user.id
+        session["mfa_sv"] = user.session_version or 0
+        session["mfa_exp"] = int(time.time()) + int(current_app.config.get("MFA_PENDING_SECONDS", 300))
+        session["mfa_next"] = next_url
+        return redirect(url_for("auth.login_mfa"))
+    throttle.success(username, user, request.remote_addr)
+    _start_session(user)
+    audit.log_audit_event("login", "success", user=user)
+    return redirect(next_url)
+
+
+def _clear_pending_mfa():
+    for key in ("mfa_uid", "mfa_sv", "mfa_exp", "mfa_next"):
+        session.pop(key, None)
+
+
+def _pending_mfa_user():
+    """The account whose password step this browser has passed, or None when
+    there is none, it has run out, or the account changed meanwhile (password
+    change, disabled, tokens revoked)."""
+    uid = session.get("mfa_uid")
+    if not uid or int(session.get("mfa_exp", 0)) < time.time():
+        _clear_pending_mfa()
+        return None
+    user = db.session.get(User, int(uid))
+    if user is None or not user.is_active or (user.session_version or 0) != session.get("mfa_sv", -1) or not mfa.is_enabled(user):
+        _clear_pending_mfa()
+        return None
+    return user
+
+
+def _pending_next_url():
+    target = session.get("mfa_next") or url_for("catalog.index")
+    # it was validated when it was stored; checked again because it lives in a cookie
+    if not isinstance(target, str) or not target.startswith("/") or target.startswith("//") or "\\" in target:
+        return url_for("catalog.index")
+    return target
+
+
+@bp.route("/login/mfa", methods=["GET", "POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+def login_mfa():
+    """Second step of the login for an account with MFA: the code from the
+    authenticator app, or one of the recovery codes."""
+    if current_user.is_authenticated:
+        return redirect(url_for("catalog.index"))
+    user = _pending_mfa_user()
+    if user is None:
+        flash(_("Your sign-in expired. Please enter your password again."), "error")
+        return redirect(url_for("auth.login"))
+
+    if request.method == "POST":
+        # Each code attempt is counted like a password attempt, before it is checked.
+        wait = throttle.begin(user.username, user, request.remote_addr)
+        if wait:
+            audit.log_audit_event("login_failed", "error", user=user, error_message="second factor refused: too many failures")
+            flash(_("Too many failed attempts. Try again in a few minutes."), "error")
+            response = current_app.make_response((render_template("login_mfa.html"), 429))
+            response.headers["Retry-After"] = str(wait)
+            return response
+
+        method = mfa.verify_login(user, request.form.get("code", ""))
+        if method:
+            next_url = _pending_next_url()
+            throttle.success(user.username, user, request.remote_addr)
+            _start_session(user)  # clears the pending note with everything else
+            audit.log_audit_event("login", "success", user=user, error_message=f"second factor: {method}")
+            if method == "recovery":
+                flash(
+                    _("You signed in with a recovery code. %(count)d left - consider generating new ones.",
+                      count=mfa.remaining_recovery_codes(user)),
+                    "warning",
+                )
+            return redirect(next_url)
+        audit.log_audit_event("login_failed", "error", user=user, error_message="second factor rejected")
+        flash(_("That code is not valid."), "error")
+    return render_template("login_mfa.html")
+
+
 @bp.route("/login", methods=["GET", "POST"])
 @limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
 def login():
@@ -225,10 +341,7 @@ def login():
 
         if user is not None and user.auth_type == "local" and user.password_hash:
             if user.check_password(password) and user.is_active:
-                throttle.success(username, user, request.remote_addr)
-                _start_session(user)
-                audit.log_audit_event("login", "success", user=user)
-                return redirect(next_url)
+                return _complete_password_login(user, username, next_url)
             # Never write what was typed into the audit trail: the username
             # field often holds a password pasted into the wrong box.
             audit.log_audit_event(
@@ -259,10 +372,7 @@ def login():
                 )
                 flash(_("This account has been deactivated."), "error")
                 return render_template("login.html", next=next_url)
-            throttle.success(username, user, request.remote_addr)
-            _start_session(user)
-            audit.log_audit_event("login", "success", user=user)
-            return redirect(next_url)
+            return _complete_password_login(user, username, next_url)
 
         audit.log_audit_event(
             "login_failed",
@@ -348,6 +458,94 @@ def account_password():
             return redirect(url_for("catalog.index"))
 
     return render_template("account_password.html")
+
+
+def _reauthenticate(user, password):
+    """The current password, checked again before something that weakens or
+    replaces the second factor - a hijacked session alone must not be enough."""
+    if user.auth_type == "local":
+        return bool(user.password_hash) and user.check_password(password)
+    if current_app.config["LDAP_ENABLED"]:
+        return _ldap_authenticate(user.username, password) is not None
+    return False
+
+
+def _mfa_page(**context):
+    return render_template(
+        "account_mfa.html",
+        enabled=mfa.is_enabled(current_user),
+        remaining=mfa.remaining_recovery_codes(current_user),
+        required=mfa_mandatory(current_user),
+        **context,
+    )
+
+
+@bp.route("/account/mfa", methods=["GET", "POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+@login_required
+def account_mfa():
+    """Set up, check or switch off the second factor."""
+    user = current_user
+    if request.method == "GET":
+        enrolling = mfa.pending_secret(user)
+        if enrolling:
+            return _mfa_page(secret=totp_group(enrolling), uri=mfa.provisioning_uri(user, enrolling))
+        return _mfa_page()
+
+    action = request.form.get("action", "")
+
+    if action == "begin":
+        if mfa.is_enabled(user):
+            flash(_("Two-factor authentication is already on. Turn it off first to set it up again."), "error")
+            return _mfa_page()
+        secret, uri = mfa.begin_enrollment(user)
+        return _mfa_page(secret=totp_group(secret), uri=uri)
+
+    if action == "confirm":
+        secret = mfa.pending_secret(user)
+        codes = mfa.confirm_enrollment(user, request.form.get("code", ""))
+        if codes is None:
+            flash(_("That code is not valid. Check the time on your phone and try again."), "error")
+            return _mfa_page(secret=totp_group(secret), uri=mfa.provisioning_uri(user, secret)) if secret else _mfa_page()
+        # Everything else this account has signed in on must prove the factor next time.
+        accounts.invalidate_sessions(user, keep_current=True)
+        db.session.commit()
+        audit.log_audit_event("mfa_change", "success", user=user, error_message="two-factor authentication enabled")
+        return _mfa_page(codes=codes, just_enabled=True)
+
+    if action in ("disable", "regenerate"):
+        if not mfa.is_enabled(user):
+            flash(_("Two-factor authentication is not on."), "error")
+            return _mfa_page()
+        if action == "disable" and mfa_mandatory(user):
+            # the page does not offer it; a hand-made POST must not get it either
+            flash(_("Administrators cannot turn two-factor authentication off."), "error")
+            return _mfa_page()
+        wait = throttle.begin(user.username, user, request.remote_addr)
+        if wait:
+            audit.log_audit_event("login_failed", "error", user=user, error_message="mfa change refused: too many failures")
+            flash(_("Too many failed attempts. Try again in a few minutes."), "error")
+            return _mfa_page()
+        password_ok = _reauthenticate(user, request.form.get("current_password", ""))
+        method = mfa.verify_login(user, request.form.get("code", "")) if password_ok else None
+        if not (password_ok and method):
+            audit.log_audit_event("login_failed", "error", user=user, error_message=f"mfa {action} refused: re-authentication failed")
+            flash(_("Your password or the code is not correct."), "error")
+            return _mfa_page()
+        throttle.success(user.username, user, request.remote_addr)
+        if action == "regenerate":
+            codes = mfa.regenerate_recovery_codes(user)
+            audit.log_audit_event("mfa_change", "success", user=user, error_message="recovery codes regenerated")
+            return _mfa_page(codes=codes)
+        mfa.disable(user)
+        accounts.invalidate_sessions(user, keep_current=True)
+        db.session.commit()
+        audit.log_audit_event("mfa_change", "success", user=user, error_message="two-factor authentication disabled by the user")
+        flash(_("Two-factor authentication is now off."), "success")
+        return redirect(url_for("auth.account_mfa"))
+
+    flash(_("Unknown action."), "error")
+    return _mfa_page()
 
 
 @bp.route("/forgot-password", methods=["GET", "POST"])

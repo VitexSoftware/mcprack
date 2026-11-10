@@ -14,6 +14,7 @@ from . import endpoint_policy
 from . import env_detection
 from . import health
 from . import installer
+from . import mfa
 from . import passwords
 from . import appstream_icons
 from . import secret_store
@@ -1411,6 +1412,23 @@ def user_revoke_tokens(user_id):
         f"All tokens of '{user.username}' were revoked. They must download a new configuration.",
         "success",
     )
+    return redirect(url_for("admin.user_edit", user_id=user_id))
+
+
+@bp.route("/users/<int:user_id>/mfa-reset", methods=["POST"])
+@admin_required
+def user_mfa_reset(user_id):
+    """Switch a user's second factor off - for somebody who has lost both their
+    device and their recovery codes. Their sessions end, so the change cannot
+    be preceded by one the previous holder of a stolen device still has open."""
+    user = db.get_or_404(User, user_id)
+    mfa.disable(user)
+    accounts.invalidate_sessions(user)
+    db.session.commit()
+    audit.log_audit_event(
+        "mfa_change", "success", user=current_user, error_message=f"two-factor authentication of '{user.username}' reset by an administrator"
+    )
+    flash(f"Two-factor authentication of '{user.username}' was reset.", "success")
     return redirect(url_for("admin.user_edit", user_id=user_id))
 
 
