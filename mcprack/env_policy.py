@@ -15,9 +15,14 @@ The policy has three parts:
 * names in the process-altering families below are refused;
 * values must be plain single-line strings of sane length.
 
-Keys the **admin** declared on the server (plain config, secret names,
-required keys, the auth key) are exempt from the denylist: the admin chose
-them. In DEMO_MODE a user may additionally only set keys the server declares.
+A user may only set names the server declares (admin config, secret names,
+required keys, the auth key, manifest-detected variables) - plus, by default,
+credential-looking names (``*_TOKEN``, ``*_KEY``, ``*_PAT`` ...) which is how a
+user brings their own credentials to a server that declares none. Operators
+who want free-form variables set OVERRIDE_UNDECLARED_KEYS=any; DEMO_MODE
+always allows declared names only. The denylist applies to every
+user-submitted name, declared or not: an admin-set HTTPS_PROXY stays the
+admin's, a user cannot replace it.
 """
 
 import re
@@ -40,9 +45,10 @@ _DENIED_EXACT = frozenset(
         "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE",
         "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "FTP_PROXY", "NO_PROXY", "WS_PROXY", "WSS_PROXY",
         # other runtimes
-        "CLASSPATH", "PERL5OPT", "PERL5LIB", "PERLLIB", "RUBYOPT", "RUBYLIB", "PHPRC", "PHP_INI_SCAN_DIR",
+        "CLASSPATH", "PHPRC", "PHP_INI_SCAN_DIR",
         "GOPROXY", "GOFLAGS", "GOPATH", "GOROOT", "GOSUMDB", "GONOSUMDB", "GOPRIVATE",
-        "KUBECONFIG",
+        "KUBECONFIG", "SSLKEYLOGFILE", "AWS_CA_BUNDLE", "TERMINFO", "MANPATH",
+        "BROWSER", "EDITOR", "VISUAL", "PAGER", "LESSOPEN", "LESSCLOSE",
         "GIT_SSH", "GIT_SSH_COMMAND", "GIT_ASKPASS", "GIT_EXEC_PATH", "GIT_DIR", "GIT_WORK_TREE",
         "GIT_PROXY_COMMAND", "GIT_EXTERNAL_DIFF", "GIT_PAGER", "GIT_EDITOR", "GIT_TEMPLATE_DIR",
     }
@@ -53,6 +59,16 @@ _DENIED_PREFIXES = (
     "LD_",  # dynamic linker: LD_PRELOAD, LD_LIBRARY_PATH, LD_AUDIT, ...
     "DYLD_",
     "MALLOC_",
+    "GLIBC_",  # GLIBC_TUNABLES
+    "OPENSSL_",  # OPENSSL_CONF can load engines
+    "LUA_",
+    "BUN_",
+    "DENO_",
+    "GRPC_",
+    "ELECTRON_",
+    "NIX_",
+    "PERL",  # PERL5OPT, PERL5LIB, PERL5DB, ...
+    "RUBY",  # RUBYOPT, RUBYLIB, ...
     "GCONV",
     "PYTHON",  # PYTHONPATH, PYTHONHOME, PYTHONSTARTUP, PYTHONWARNINGS, ...
     "NODE_",  # NODE_OPTIONS, NODE_PATH, NODE_EXTRA_CA_CERTS, ...
@@ -96,7 +112,10 @@ class EnvPolicyError(ValueError):
 
 def _is_denied(name):
     upper = name.upper()
-    return upper in _DENIED_EXACT or upper.startswith(_DENIED_PREFIXES)
+    if upper in _DENIED_EXACT or upper.startswith(_DENIED_PREFIXES):
+        return True
+    # anything that configures a proxy puts a third party between the server and its API
+    return "PROXY" in upper.split("_")
 
 
 def check_key_name(name):
@@ -138,12 +157,20 @@ def admin_declared_keys(server):
 
 def is_endpoint_key(name):
     """Whether `name` says where the server connects (``ZABBIX_URL``,
-    ``MASTODON_INSTANCE``, ``API_BASE_URL``, ...). Names that look like
-    credentials are never endpoints."""
-    words = set(name.upper().split("_"))
-    if words & _CREDENTIAL_WORDS:
-        return False
-    return bool(words & _ENDPOINT_WORDS)
+    ``MASTODON_INSTANCE``, ``API_BASE_URL``, ``OAUTH_TOKEN_URL``, ...). A name
+    whose last word is a credential word (``SERVER_TOKEN``) is not one."""
+    words = [word for word in name.upper().split("_") if word]
+    if not words or words[-1] in _CREDENTIAL_WORDS:
+        return False  # the last word says what the value *is*: SERVER_TOKEN is a credential
+    return any(word in _ENDPOINT_WORDS for word in words)
+
+
+def is_credential_key(name):
+    """Whether `name` reads as a credential (``API_TOKEN``, ``JENKINS_PAT``):
+    its last underscore-separated word names a kind of secret. Judged by
+    words, not substrings - SSLKEYLOGFILE is not a credential."""
+    words = [word for word in name.upper().split("_") if word]
+    return bool(words) and words[-1] in _CREDENTIAL_WORDS
 
 
 def _known_keys(server):
@@ -157,20 +184,31 @@ def validate_override(server, values, *, demo_mode=None):
     messages (empty when it is fine)."""
     if demo_mode is None:
         demo_mode = bool(current_app.config.get("DEMO_MODE"))
+    any_key = current_app.config.get("OVERRIDE_UNDECLARED_KEYS", "credentials") == "any"
 
     errors = []
     if len(values) > MAX_KEYS:
         errors.append(f"Too many variables (limit {MAX_KEYS}).")
     declared = admin_declared_keys(server)
-    known = _known_keys(server) if demo_mode else set()
+    known = None  # manifest lookup only when needed
 
     for name, value in values.items():
-        if name in declared:
-            problem = check_value(name, value)
-        else:
-            problem = check_key_name(name) or check_value(name, value)
-            if not problem and demo_mode and name not in known:
-                problem = f"On this demo instance only the variables the server declares can be set; '{name}' is not one."
+        # The denylist and the value rules apply to everything a user submits,
+        # declared or not: a declared HTTPS_PROXY is the admin's to set.
+        problem = check_key_name(name) or check_value(name, value)
+        if not problem and name not in declared and (demo_mode or not (any_key or is_credential_key(name))):
+            if known is None:
+                known = _known_keys(server)
+            if name not in known:
+                if demo_mode:
+                    problem = (
+                        f"On this demo instance only the variables the server declares can be set; '{name}' is not one."
+                    )
+                else:
+                    problem = (
+                        f"'{name}' is not a setting this server declares. Ask an administrator to add it, "
+                        "or use a credential-style name such as MY_API_TOKEN."
+                    )
         if problem:
             errors.append(problem)
     return errors
@@ -184,14 +222,14 @@ def require_valid_override(server, values):
         raise EnvPolicyError(" ".join(errors))
 
 
-def strip_denied(server, env):
-    """`env` without user-supplied variables the policy forbids. Rows stored
-    before the policy existed must not reach a process; admin-declared keys
-    are kept. Returns (clean_env, dropped_names)."""
-    declared = admin_declared_keys(server)
+def strip_denied(values):
+    """`values` (a user's stored override layer) without the names the
+    denylist forbids, so rows saved before the policy existed never reach a
+    process. Returns (clean, dropped_names). The admin's own configuration is
+    never passed through this - it is theirs to set."""
     clean, dropped = {}, []
-    for name, value in env.items():
-        if name not in declared and check_key_name(name):
+    for name, value in values.items():
+        if check_key_name(name):
             dropped.append(name)
         else:
             clean[name] = value

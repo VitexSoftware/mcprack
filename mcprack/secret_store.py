@@ -108,19 +108,26 @@ def _env_cache_key(server, user):
 
 
 def _get_cached_secrets(key):
+    """(admin default secrets, the user's own secrets) cached for `key`, or
+    None. The two layers are cached apart so the rule in _compose_env() also
+    holds on a cache hit. An entry written by an older version (one flat,
+    merged dict) cannot be split, so it counts as a miss."""
     entry = _load_env_cache().get(key)
     if entry is None:
         return None
     expires_at, values = entry
     if time.time() >= expires_at:
         return None
-    return values
+    if not (isinstance(values, dict) and set(values) == {"d", "u"}
+            and isinstance(values["d"], dict) and isinstance(values["u"], dict)):
+        return None
+    return values["d"], values["u"]
 
 
-def _set_cached_secrets(key, values):
+def _set_cached_secrets(key, default_values, user_values=None):
     ttl = float(current_app.config.get("BW_ENV_CACHE_TTL", 60.0))
     cache = _load_env_cache()
-    cache[key] = [time.time() + ttl, values]
+    cache[key] = [time.time() + ttl, {"d": dict(default_values or {}), "u": dict(user_values or {})}]
     _save_env_cache(cache)
 
 
@@ -192,13 +199,13 @@ def resolve_server_env(server, user=None):
     vaultwarden.py or the local encrypted columns directly."""
     from .models import UserServerOverride
 
-    env = dict(server.env_config or {})
-
     override_row = None
     if user is not None:
         override_row = UserServerOverride.query.filter_by(
             user_id=user.id, server_id=server.id
         ).first()
+
+    default_secrets, user_secrets = {}, {}
 
     # A user may add a secret key to a server the admin declared none for, so
     # an override row is reason enough to look. With Vaultwarden the values
@@ -210,41 +217,77 @@ def resolve_server_env(server, user=None):
     ):
         if is_vaultwarden_configured():
             key = _env_cache_key(server, user)
-            secrets = _get_cached_secrets(key)
-            if secrets is None:
+            layers = _get_cached_secrets(key)
+            if layers is None:
                 # Acquire vaultwarden's own cross-process lock directly (instead
                 # of going through session(), which would unlock() first) so we
                 # can re-check the shared cache *after* getting exclusive access.
                 with vaultwarden._serialized():
-                    secrets = _get_cached_secrets(key)
-                    if secrets is None:
+                    layers = _get_cached_secrets(key)
+                    if layers is None:
                         sess = vaultwarden.unlock()
                         try:
-                            secrets = vaultwarden.resolve_env(sess, server, user=user)
+                            layers = vaultwarden.resolve_env_layers(sess, server, user=user)
                         finally:
                             vaultwarden.lock(sess)
-                        _set_cached_secrets(key, secrets)
-            env.update(secrets)
+                        _set_cached_secrets(key, *layers)
+            default_secrets, user_secrets = layers
         else:
             if server.env_secrets_encrypted:
-                env.update(_decrypt(server.env_secrets_encrypted))
+                default_secrets = _decrypt(server.env_secrets_encrypted)
             if override_row and override_row.env_secrets_encrypted:
-                env.update(_decrypt(override_row.env_secrets_encrypted))
+                user_secrets = _decrypt(override_row.env_secrets_encrypted)
 
+    user_non_secret = override_row.env_config if override_row else {}
+    return _compose_env(server, default_secrets, user_secrets, user_non_secret)
+
+
+def _repoints_endpoint(baseline, user_values):
+    """Whether the user's override sets an endpoint-like key (ZABBIX_URL,
+    MASTODON_INSTANCE, ...) to something other than what the admin
+    configured."""
+    return any(
+        env_policy.is_endpoint_key(name) and value != baseline.get(name)
+        for name, value in user_values.items()
+    )
+
+
+def _compose_env(server, default_secrets, user_secrets, user_non_secret):
+    """The environment handed to a server process: the admin's plain config,
+    the admin's shared secrets, then the user's own secrets and plain values
+    on top.
+
+    Shared secrets belong to the endpoint they were issued for. A user who
+    re-points that endpoint (ZABBIX_URL=https://their.host) must not receive
+    the admin's token along with it - the server would send it straight to
+    the host they chose (docs/AUDIT-2026-11.md A-09) - so in that case the
+    shared secrets are withheld and the user supplies their own."""
+    admin_env = dict(server.env_config or {})
+    user_secrets = _drop_denied(server, user_secrets)
+    user_non_secret = _drop_denied(server, user_non_secret)
+    user_values = {**user_secrets, **user_non_secret}
+    if default_secrets and _repoints_endpoint({**admin_env, **default_secrets}, user_values):
+        logger.info(
+            "withholding the shared secrets of server '%s' from a user who overrides its endpoint",
+            server.name,
+        )
+        default_secrets = {}
+
+    env = dict(admin_env)
+    env.update(default_secrets)
+    env.update(user_secrets)
     # User's non-secret overrides take precedence over inherited admin config
-    if override_row and override_row.env_config:
-        env.update(override_row.env_config)
-
-    return _drop_denied(server, env)
+    env.update(user_non_secret)
+    return env
 
 
-def _drop_denied(server, env):
-    """Rows stored before env_policy existed may hold variables that change
-    how the server process starts; never hand those to a process."""
-    clean, dropped = env_policy.strip_denied(server, env)
+def _drop_denied(server, values):
+    """A user's stored override layer without the variable names env_policy
+    forbids: rows saved before the policy existed must not reach a process."""
+    clean, dropped = env_policy.strip_denied(values)
     if dropped:
         logger.warning(
-            "ignoring forbidden variable name(s) %s in the stored configuration of server '%s'",
+            "ignoring forbidden variable name(s) %s in a user's stored configuration of server '%s'",
             ", ".join(sorted(dropped)),
             server.name,
         )
@@ -277,21 +320,18 @@ def resolve_server_envs(servers, user=None):
     overrides = _user_override_configs(user, [server.id for server in servers])
     results, pending = {}, []
     for server in servers:
-        env = dict(server.env_config or {})
         try:
             if not server_needs_secrets(server) or not is_vaultwarden_configured():
                 results[server.id] = resolve_server_env(server, user=user)
                 continue
-            secrets = _get_cached_secrets(_env_cache_key(server, user))
+            layers = _get_cached_secrets(_env_cache_key(server, user))
         except Exception as exc:  # e.g. local-store decrypt failure
             results[server.id] = exc
             continue
-        if secrets is None:
+        if layers is None:
             pending.append(server)
         else:
-            env.update(secrets)
-            env.update(overrides.get(server.id, {}))
-            results[server.id] = _drop_denied(server, env)
+            results[server.id] = _compose_env(server, *layers, overrides.get(server.id, {}))
     if not pending:
         return results
 
@@ -300,15 +340,11 @@ def resolve_server_envs(servers, user=None):
             # Another worker may have filled the cache while we waited.
             todo = []
             for server in pending:
-                secrets = _get_cached_secrets(_env_cache_key(server, user))
-                if secrets is None:
+                layers = _get_cached_secrets(_env_cache_key(server, user))
+                if layers is None:
                     todo.append(server)
                 else:
-                    results[server.id] = _drop_denied(server, {
-                        **(server.env_config or {}),
-                        **secrets,
-                        **overrides.get(server.id, {}),
-                    })
+                    results[server.id] = _compose_env(server, *layers, overrides.get(server.id, {}))
             if todo:
                 sess = vaultwarden.unlock()
                 try:
@@ -323,18 +359,15 @@ def resolve_server_envs(servers, user=None):
     learned = False
     for server in todo:
         default = notes.get(server.vault_item)
-        values = vaultwarden.parse_notes(default[1]) if default else {}
+        default_values = vaultwarden.parse_notes(default[1]) if default else {}
+        user_values = {}
         if user is not None:
             override = notes.get(f"{server.vault_item}-user-{user.username}")
             if override:
-                values.update(vaultwarden.parse_notes(override[1]))
+                user_values = vaultwarden.parse_notes(override[1])
         audit.log_audit_event("credential_access", "success", user=user, server=server)
-        _set_cached_secrets(_env_cache_key(server, user), values)
-        results[server.id] = _drop_denied(server, {
-            **(server.env_config or {}),
-            **values,
-            **overrides.get(server.id, {}),
-        })
+        _set_cached_secrets(_env_cache_key(server, user), default_values, user_values)
+        results[server.id] = _compose_env(server, default_values, user_values, overrides.get(server.id, {}))
         if default and server.vault_item_id != default[0]:
             server.vault_item_id = default[0]
             learned = True

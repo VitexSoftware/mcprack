@@ -13,6 +13,9 @@ class TestConfig(Config):
     SECRET_KEY = "test-secret"
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
+    # The existing suite uses free-form override keys (REGION, CUSTOM, ...);
+    # tests of the production default ("credentials") set it explicitly.
+    OVERRIDE_UNDECLARED_KEYS = "any"
     BW_SERVER = "https://vault.example.test"
     BW_CLIENTID = "test-client-id"
     BW_CLIENTSECRET = "test-client-secret"

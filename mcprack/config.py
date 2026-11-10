@@ -49,6 +49,12 @@ class Config:
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(2 * 1024 * 1024)))
 
     # --- Per-user MCP server access control ---
+    # Which variable names a user may add to an MCP server beyond those the
+    # server declares: "credentials" (default) = credential-looking names such
+    # as MY_API_TOKEN only; "any" = free-form names, minus the process-altering
+    # denylist in env_policy.py (intranet / trusted-users opt-in).
+    OVERRIDE_UNDECLARED_KEYS = os.environ.get("OVERRIDE_UNDECLARED_KEYS", "credentials").strip().lower()
+
     # False (default) preserves existing installs' behavior: a user with no
     # UserServerPermission rows at all sees every enabled server. Set true
     # for a fail-closed internet-facing deployment - but only after

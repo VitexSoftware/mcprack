@@ -114,17 +114,35 @@ def test_non_string_values_are_rejected():
     assert env_policy.check_value("API_TOKEN", None)
 
 
-def test_admin_declared_keys_are_exempt_from_the_denylist(app):
-    """The admin configured these on the server themselves; the policy is
-    about what a *user* may add."""
+def test_users_cannot_override_a_denylisted_name_even_if_the_admin_declared_it(app):
+    """The admin set HTTPS_PROXY on the server; that stays the admin's. A
+    user replacing it would put their own proxy between the server and its
+    API (and every credential it sends)."""
     with app.app_context():
         server = _server()
         server.env_config = {"HTTPS_PROXY": "http://proxy.corp:3128"}
         server.env_var_names = ["NPM_TOKEN"]
         db.session.commit()
 
-        assert env_policy.validate_override(server, {"HTTPS_PROXY": "http://other:3128", "NPM_TOKEN": "t"}) == []
-        assert env_policy.validate_override(server, {"HTTP_PROXY": "x"})  # not declared -> still refused
+        assert env_policy.validate_override(server, {"HTTPS_PROXY": "http://evil:3128"})
+        assert env_policy.validate_override(server, {"NPM_TOKEN": "t"})  # NPM_* is a denied family
+
+
+def test_admin_set_values_survive_and_a_users_denied_override_is_dropped(app):
+    with app.app_context():
+        app.config["BW_SERVER"] = ""
+        server = _server()
+        server.env_config = {"HTTPS_PROXY": "http://proxy.corp:3128"}
+        db.session.commit()
+        user = _user()
+        row = UserServerOverride(user_id=user.id, server_id=server.id)
+        row.env_config = {"HTTPS_PROXY": "http://evil:3128"}
+        db.session.add(row)
+        db.session.commit()
+
+        env = secret_store.resolve_server_env(server, user=user)
+
+    assert env == {"HTTPS_PROXY": "http://proxy.corp:3128"}
 
 
 def test_validate_override_reports_every_problem(app):
@@ -146,6 +164,42 @@ def test_demo_mode_only_accepts_keys_the_server_declares(app):
         assert env_policy.validate_override(server, {"SOMETHING_ELSE": "1"}, demo_mode=True)
         # outside demo mode a free-form, harmless key is fine
         assert env_policy.validate_override(server, {"SOMETHING_ELSE": "1"}, demo_mode=False) == []
+
+
+# --- which undeclared names a user may add -----------------------------------
+
+
+def test_default_mode_allows_undeclared_credential_names_only(app):
+    app.config["OVERRIDE_UNDECLARED_KEYS"] = "credentials"
+    with app.app_context():
+        server = _server()
+
+        assert env_policy.validate_override(server, {"MY_API_TOKEN": "x", "JENKINS_PAT": "y"}) == []
+        assert env_policy.validate_override(server, {"SOMETHING_ELSE": "1"})
+        # judged by words, not substrings: SSLKEYLOGFILE is not a credential
+        assert env_policy.validate_override(server, {"SSLKEYLOGFILE": "/tmp/k"})
+        assert env_policy.validate_override(server, {"OPENSSL_CONF": "/tmp/c"})
+
+
+def test_default_mode_allows_names_the_server_declares(app):
+    app.config["OVERRIDE_UNDECLARED_KEYS"] = "credentials"
+    with app.app_context():
+        server = _server()
+        server.env_config = {"REGION": "eu"}
+        server.detected_env_vars = [{"name": "TIMEOUT_SECONDS", "required": False, "secret": False}]
+        db.session.commit()
+
+        assert env_policy.validate_override(server, {"REGION": "us"}) == []
+        assert env_policy.validate_override(server, {"TIMEOUT_SECONDS": "30"}) == []  # manifest/detected
+
+
+def test_any_mode_allows_free_form_names_but_still_not_the_denylist(app):
+    app.config["OVERRIDE_UNDECLARED_KEYS"] = "any"
+    with app.app_context():
+        server = _server()
+
+        assert env_policy.validate_override(server, {"SOMETHING_ELSE": "1"}) == []
+        assert env_policy.validate_override(server, {"NODE_OPTIONS": "x"})
 
 
 # --- entry points ----------------------------------------------------------

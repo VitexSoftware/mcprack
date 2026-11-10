@@ -339,25 +339,34 @@ def missing_credential_keys(server, values):
     return sorted(key for key in expected if not values.get(key))
 
 
-def resolve_env(session, server, user=None):
-    """Fetch a server's default env values, merged with the user's personal
-    override (if any) — override keys win per-key, not all-or-nothing.
+def resolve_env_layers(session, server, user=None):
+    """Fetch a server's secrets as two separate layers: (admin defaults,
+    the user's own override). Keeping them apart is what lets secret_store
+    withhold the admin's shared credentials from a user who re-points an
+    endpoint (docs/AUDIT-2026-11.md A-09).
 
     Logs only that a credential access happened (server + user) — never the
     resolved values themselves."""
     try:
-        values = get_notes(session, server.vault_item, item_id=server.vault_item_id)
+        defaults = get_notes(session, server.vault_item, item_id=server.vault_item_id)
+        overrides = {}
         if user is not None:
             override_item = f"{server.vault_item}-user-{user.username}"
             overrides = get_notes(session, override_item)
-            values.update(overrides)
     except VaultwardenError as exc:
         audit.log_audit_event(
             "credential_access", "error", user=user, server=server, error_message=str(exc)[:500]
         )
         raise
     audit.log_audit_event("credential_access", "success", user=user, server=server)
-    return values
+    return defaults, overrides
+
+
+def resolve_env(session, server, user=None):
+    """The two layers of resolve_env_layers() merged — override keys win
+    per-key, not all-or-nothing."""
+    defaults, overrides = resolve_env_layers(session, server, user=user)
+    return {**defaults, **overrides}
 
 
 def diagnose():
