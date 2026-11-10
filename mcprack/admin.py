@@ -328,6 +328,11 @@ def server_edit(server_id):
             {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
             for k, v in secret_values.items()
         ]
+        if secret_values:
+            audit.log_audit_event(
+                "credential_access", "success", user=current_user, server=server,
+                error_message="server secrets shown in the edit form",
+            )
         secrets_loaded = True
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         t_secrets_end = time.time()

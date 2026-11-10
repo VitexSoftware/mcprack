@@ -232,7 +232,7 @@ def _server_detail(server, reveal_secrets=False):
         try:
             data["secrets"] = secret_store.load_server_secrets(server)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            data["secrets_error"] = str(exc)
+            data["secrets_error"] = secret_store.public_error(exc)
     return data
 
 
@@ -594,6 +594,14 @@ def admin_servers():
 def admin_server_detail(server_id):
     server = db.get_or_404(McpServer, server_id)
     reveal = request.args.get("reveal_secrets") == "1"
+    if reveal:
+        # Reading every credential of a server back in clear text is the one
+        # administrator action that must always leave a trace (B-10): who, which
+        # server, when - never the values.
+        audit.log_audit_event(
+            "credential_access", "success", user=current_user, server=server,
+            error_message="server secrets read by an administrator (reveal_secrets=1)",
+        )
     return api_ok(_server_detail(server, reveal_secrets=reveal))
 
 
@@ -785,6 +793,11 @@ def admin_user_override_get(user_id, server_id):
     data, error = _override_response(server, target_user, reveal)
     if error:
         return error
+    if reveal and data.get("has_override"):
+        audit.log_audit_event(
+            "credential_access", "success", user=current_user, server=server,
+            error_message=f"override values of user #{target_user.id} read by an administrator (reveal=1)",
+        )
     return api_ok(data)
 
 
