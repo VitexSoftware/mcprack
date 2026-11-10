@@ -520,6 +520,10 @@ def register_cli(app):
         if report.missing_in_db:
             click.echo(f"DELETED: {len(report.missing_in_db)} event(s) are in the log but not in the database: "
                        + listing(report.missing_in_db))
+        if report.reused_ids:
+            click.echo(f"REUSED ID: {len(report.reused_ids)} id(s) belong to two different events in the log - a row was "
+                       "deleted and its id given to a later event (after restoring a database backup this is expected: "
+                       "start a new log): " + listing(report.reused_ids))
         if report.altered:
             click.echo(f"ALTERED: {len(report.altered)} row(s) differ from the log: "
                        + listing([f"{rid} ({', '.join(fields)})" for rid, fields in report.altered]))

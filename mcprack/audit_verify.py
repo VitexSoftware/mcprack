@@ -5,6 +5,9 @@ What it can tell you, and what it cannot:
 * a mirror line whose MAC is wrong      -> the LOG was edited (or SECRET_KEY changed
                                            without SECRET_KEY_FALLBACKS)
 * a line with no row in the table       -> the row was DELETED
+* two lines with the same id but different
+  content                              -> a row was deleted and a later event was given
+                                           its id (SQLite re-uses the highest id)
 * a line whose row differs              -> the row was ALTERED
 * a row with no (authentic) line        -> the row was INSERTED, or the mirror was
                                            not running then
@@ -45,13 +48,14 @@ class Report:
     checked: int = 0
     window_start: datetime | None = None
     missing_in_db: list = field(default_factory=list)  # ids
+    reused_ids: list = field(default_factory=list)  # ids that two different events carry
     altered: list = field(default_factory=list)  # (id, [field names])
     unmirrored: list = field(default_factory=list)  # ids
 
     @property
     def tampering(self):
         """Evidence that something was changed: exit status 1."""
-        return bool(self.bad_mac or self.missing_in_db or self.altered)
+        return bool(self.bad_mac or self.missing_in_db or self.altered or self.reused_ids)
 
     @property
     def warnings(self):
@@ -106,6 +110,15 @@ def verify(paths, *, keys, retention_days, now=None, max_ids=None):
             if record.get("id") is None:
                 report.unwritten += 1
                 continue
+            earlier = authentic.get(record["id"])
+            if earlier is not None and audit_mirror._canonical(earlier) != audit_mirror._canonical(record):
+                # Keeping only the last line for an id would hide the first event: a
+                # row deleted, its id handed to the next event, and the table looks
+                # complete. (The same event seen twice - journal and file - is identical
+                # and fine; the MAC is left out of the comparison so a key rotation does
+                # not make it look different.)
+                if record["id"] not in report.reused_ids:
+                    report.reused_ids.append(record["id"])
             authentic[record["id"]] = record
 
     stamps = [stamp for stamp in (_utc(r.get("ts")) for r in authentic.values()) if stamp is not None]

@@ -532,19 +532,26 @@ def test_a_hard_link_to_another_file_is_refused(app, tmp_path):
 
 @pytest.mark.parametrize("kind", ["directory", "fifo"])
 def test_something_that_is_not_a_plain_file_is_refused(app, tmp_path, kind):
+    import threading
+
     path = tmp_path / "audit.log"
     if kind == "directory":
         path.mkdir()
     else:
         os.mkfifo(path)
 
+    # Opening a FIFO for writing blocks until somebody reads it. A regression
+    # here would hang the whole test run, so the open runs in a thread that is
+    # given a few seconds.
+    worker = threading.Thread(target=_try_open, args=(app, path), daemon=True)
+    worker.start()
+    worker.join(5)
     try:
-        _try_open(app, path)
+        assert not worker.is_alive(), "opening a planted FIFO blocks - the service would hang at start-up"
         entry = _event("login")
+        assert entry is not None
     finally:
         audit_mirror.shutdown()
-
-    assert entry is not None  # and nothing hung waiting for a FIFO reader
 
 
 def test_ownership_is_set_on_the_descriptor_of_a_file_root_just_created(app, tmp_path, monkeypatch):
@@ -594,3 +601,55 @@ def test_a_write_error_is_reported_once_not_for_every_event(app, mirror, caplog)
 
     assert caplog.text.count("cannot be written") == 1
     assert AuditLogEntry.query.count() == 3
+
+
+# --- an id given to two different events --------------------------------------------------------
+
+
+def test_a_deleted_last_row_whose_id_is_reused_is_not_hidden(app, mirror, user):
+    """SQLite hands out max(id)+1, so after the newest row is deleted the next
+    event gets the same id. Keeping only the last log line per id would then make
+    the table look complete although the first event is gone."""
+    entries = _several(user, count=3)
+    victim = entries[-1]
+    victim_id = victim.id
+    AuditLogEntry.query.filter_by(id=victim_id).delete()
+    db.session.commit()
+    replacement = _event("admin_change", user=user, error_message="an innocent event")
+    assert replacement.id == victim_id  # the precondition of the attack
+
+    result = _verify(app, mirror)
+
+    assert result.exit_code == 1
+    assert "REUSED ID: 1 id(s) belong to two different events" in result.output and str(victim_id) in result.output
+
+
+def test_the_same_event_in_two_logs_is_not_a_conflict(app, mirror, user, tmp_path):
+    """The journal copy and the file copy of one event are identical."""
+    _several(user, count=3)
+    second = tmp_path / "journal-export.log"
+    second.write_text(mirror.read_text())
+
+    result = app.test_cli_runner().invoke(args=["audit-verify", "--log", str(mirror), "--log", str(second)])
+
+    assert result.exit_code == 0 and "REUSED" not in result.output, result.output
+
+
+def test_a_key_rotation_does_not_make_one_event_look_like_two(app, mirror, user, tmp_path):
+    _several(user, count=2)
+    old = app.config["SECRET_KEY"]
+    original = mirror.read_text()
+    # the same events, signed again under a new key (e.g. re-exported after a rotation)
+    app.config["SECRET_KEY"] = "a-brand-new-secret-key-0123456789abcdef"
+    app.config["SECRET_KEY_FALLBACKS"] = [old]
+    resigned = []
+    for line in original.splitlines():
+        record = audit_mirror.parse_line(line)
+        record.pop("mac")
+        resigned.append(audit_mirror.format_line(record, audit_mirror._keys(app.config)))
+    second = tmp_path / "resigned.log"
+    second.write_text("\n".join(resigned) + "\n")
+
+    result = app.test_cli_runner().invoke(args=["audit-verify", "--log", str(mirror), "--log", str(second)])
+
+    assert result.exit_code == 0 and "REUSED" not in result.output, result.output

@@ -565,7 +565,11 @@ its line, with the fields), **TAMPERED LOG** (a line whose MAC is wrong) and row
 **without any line** (inserted, or written while the mirror was off — a warning,
 a failure with `--strict`). Exit status 1 on the first three. Lines older than
 `AUDIT_RETENTION_DAYS` are not checked, because `audit-archive` legitimately
-removes those rows. A deleted *user* blanks the reference in old rows
+removes those rows. **REUSED ID** means two different events carry the same id —
+a row was deleted and the next event was given its id (SQLite re-uses the highest
+id), which would otherwise hide the deletion. After *restoring a database backup*
+this is expected (new events reuse the ids of the ones the backup lost): rotate
+the log when you restore, and verify the new one. A deleted *user* blanks the reference in old rows
 (`ON DELETE SET NULL`); that is not reported as tampering.
 
 This is tamper-**evidence**, not prevention, and it only means something if the
