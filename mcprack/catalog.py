@@ -86,6 +86,7 @@ def _parse_proxy_token(token):
 # of hanging the whole worker (and, transitively, every other request
 # queued behind it) until the worker gets killed.
 _PROXY_REQUEST_TIMEOUT = 10  # seconds
+_PROXY_STREAM_IDLE_TIMEOUT = 60
 
 
 def _jsonrpc_request_id(body):
@@ -146,20 +147,48 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
         headers.update(extra_headers)
 
     start_time = time.monotonic()
+    streaming = False
     with telemetry.span(
         "mcp.server.call", {"server_name": server_name, "transport": transport}
     ) as current_span:
         try:
             conn.request(request.method, path, body=body, headers=headers)
             upstream = conn.getresponse()
-            payload = upstream.read()
-            response = Response(payload, status=upstream.status)
+            content_type = upstream.getheader("Content-Type")
+            is_sse = isinstance(content_type, str) and content_type.split(";", 1)[0].strip().lower() == "text/event-stream"
+            if is_sse:
+                if conn.sock is not None:
+                    conn.sock.settimeout(_PROXY_STREAM_IDLE_TIMEOUT)
+
+                def stream_response():
+                    try:
+                        while True:
+                            chunk = upstream.read1(65536)
+                            if not chunk:
+                                break
+                            yield chunk
+                    except (OSError, http.client.HTTPException):
+                        logger.warning("MCP stream for '%s' disconnected", server_name)
+                    finally:
+                        conn.close()
+
+                payload = b""
+                response = Response(stream_response(), status=upstream.status)
+                response.call_on_close(conn.close)
+                streaming = True
+            else:
+                payload = upstream.read()
+                response = Response(payload, status=upstream.status)
 
             for key, value in upstream.getheaders():
                 key_lower = key.lower()
                 if key_lower in {"transfer-encoding", "connection", "keep-alive"}:
                     continue
+                if is_sse and key_lower == "content-length":
+                    continue
                 response.headers[key] = value
+            if is_sse:
+                response.headers["X-Accel-Buffering"] = "no"
 
             result = "success" if upstream.status < 400 else "error"
             if result == "success" and _is_empty_tools_list(body, payload):
@@ -186,7 +215,8 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
                 f"Upstream MCP server did not respond within {_PROXY_REQUEST_TIMEOUT}s: {exc}",
             )
         finally:
-            conn.close()
+            if not streaming:
+                conn.close()
 
 
 def _forward_to_user_proxy(port, server_name=None):

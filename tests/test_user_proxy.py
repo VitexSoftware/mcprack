@@ -188,6 +188,22 @@ def test_probe_treats_clean_result_as_healthy():
         assert user_proxy._probe_upstream_health(12345) is True
 
 
+def test_probe_reads_sse_result_without_waiting_for_stream_to_close():
+    import io
+
+    resp = MagicMock()
+    resp.status = 200
+    resp.getheader.return_value = "text/event-stream"
+    resp.read.side_effect = AssertionError("SSE streams need not close after a result")
+    resp.readline.side_effect = io.BytesIO(
+        b'event: message\ndata: {"jsonrpc":"2.0","id":"mcprack-health-probe","result":{}}\n\n'
+    ).readline
+
+    with patch("mcprack.user_proxy.http.client.HTTPConnection") as mock_conn_cls:
+        mock_conn_cls.return_value.getresponse.return_value = resp
+        assert user_proxy._probe_upstream_health(12345) is True
+
+
 def test_probe_fails_open_on_non_json_body():
     resp = MagicMock()
     resp.status = 200

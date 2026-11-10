@@ -86,6 +86,14 @@ whatever is actually allowed to reach it, e.g. for a proxy on another host:
 
     nft add rule inet filter input tcp dport 8912 ip saddr != <proxy-ip> drop
 
+The service uses four Gunicorn `gthread` workers with eight threads each.
+MCP SSE connections are streamed without nginx buffering; do not switch to
+`sync` workers, where a long-lived MCP connection monopolizes a worker.
+The worker heartbeat timeout is 120 seconds; upstream connection and stream
+idle timeouts are handled separately by the relay. Allow at least 60 seconds
+for the reverse proxy's read timeout. The `X-Accel-Buffering: no` response
+header must not be ignored or removed by nginx.
+
 `SESSION_COOKIE_SECURE=true` (the default) means the browser will not send
 the session cookie back except over HTTPS, so mcprack must sit behind a
 TLS-terminating reverse proxy that sets `X-Forwarded-Proto: https` — a

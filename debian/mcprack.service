@@ -12,9 +12,10 @@ StateDirectory=mcprack
 ExecStart=/usr/bin/gunicorn \
     --bind ${GUNICORN_BIND} \
     --workers 4 \
-    --worker-class sync \
+    --worker-class gthread \
+    --threads 8 \
     --worker-tmp-dir /dev/shm \
-    --timeout 30 \
+    --timeout 120 \
     --access-logfile /var/log/mcprack/access.log \
     --error-logfile /var/log/mcprack/error.log \
     --log-level info \

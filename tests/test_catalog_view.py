@@ -491,6 +491,56 @@ def test_user_proxy_route_returns_clean_jsonrpc_error_on_broken_upstream(app, cl
     assert "failed its startup handshake" in payload["error"]["message"]
 
 
+def test_relay_streams_sse_before_upstream_closes(app):
+    from unittest.mock import MagicMock
+
+    from mcprack import catalog
+
+    conn = MagicMock()
+    upstream = conn.getresponse.return_value
+    upstream.status = 200
+    upstream.getheader.return_value = "text/event-stream"
+    upstream.getheaders.return_value = [
+        ("Content-Type", "text/event-stream"),
+        ("Mcp-Session-Id", "session-123"),
+        ("Content-Length", "999"),
+    ]
+    upstream.read.side_effect = AssertionError("Must not buffer SSE")
+    upstream.read1.side_effect = [b'data: {"result":{}}\n\n', b""]
+
+    with app.test_request_context("/", method="POST", json={"id": 1}):
+        response = catalog._relay_request(conn, "/mcp")
+
+    assert response.is_streamed
+    assert response.headers["X-Accel-Buffering"] == "no"
+    assert response.headers["Mcp-Session-Id"] == "session-123"
+    assert "Content-Length" not in response.headers
+    conn.close.assert_not_called()
+    assert b"".join(response.response) == b'data: {"result":{}}\n\n'
+    conn.close.assert_called()
+    upstream.read.assert_not_called()
+
+
+def test_relay_closes_sse_upstream_when_client_disconnects(app):
+    from unittest.mock import MagicMock
+
+    from mcprack import catalog
+
+    conn = MagicMock()
+    upstream = conn.getresponse.return_value
+    upstream.status = 200
+    upstream.getheader.return_value = "text/event-stream"
+    upstream.getheaders.return_value = [("Content-Type", "text/event-stream")]
+    upstream.read1.return_value = b": keepalive\n\n"
+
+    with app.test_request_context("/"):
+        response = catalog._relay_request(conn, "/mcp")
+
+    assert next(iter(response.response)) == b": keepalive\n\n"
+    response.close()
+    conn.close.assert_called()
+
+
 def test_forward_to_user_proxy_returns_clean_jsonrpc_error_on_timeout(app, client):
     import socket as _socket
 

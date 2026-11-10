@@ -373,11 +373,11 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
                 },
             )
             resp = conn.getresponse()
-            body = resp.read()
+            body = health._read_mcp_response(resp, "mcprack-health-probe")
         except ConnectionRefusedError:
             time.sleep(min(0.1, max(remaining, 0)))
             continue
-        except (OSError, http.client.HTTPException):
+        except (OSError, http.client.HTTPException, ValueError):
             return False
         finally:
             conn.close()
@@ -386,7 +386,7 @@ def _probe_upstream_health(port, timeout=HANDSHAKE_TIMEOUT, require_tools=False)
     try:
         data = json.loads(body)
     except ValueError:
-        return True
+        data = None
 
     if isinstance(data, dict) and "error" in data:
         return False

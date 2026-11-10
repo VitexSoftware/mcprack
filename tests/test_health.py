@@ -1,3 +1,5 @@
+import io
+import json
 from unittest.mock import MagicMock, patch
 
 from mcprack import health
@@ -140,6 +142,34 @@ def test_parse_mcp_body_sse_wrapped():
     capabilities" until this was handled."""
     raw = 'event: message\r\ndata: {"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}\r\n\r\n'
     assert health._parse_mcp_body(raw) == {"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}
+
+
+def test_read_mcp_response_skips_notifications_and_other_request_ids():
+    response = MagicMock()
+    response.getheader.return_value = "text/event-stream; charset=utf-8"
+    response.read.side_effect = AssertionError("Must not wait for SSE EOF")
+    response.readline.side_effect = io.BytesIO(
+        b': keepalive\n\n'
+        b'data: {"jsonrpc":"2.0","method":"notifications/progress"}\n\n'
+        b'data: {"jsonrpc":"2.0","id":99,"result":{}}\n\n'
+        b'event: message\ndata: {"jsonrpc":"2.0","id":1,\n'
+        b'data: "result":{"tools":[]}}\n\n'
+    ).readline
+
+    payload = health._read_mcp_response(response, 1)
+
+    assert json.loads(payload) == {"jsonrpc": "2.0", "id": 1, "result": {"tools": []}}
+    response.read.assert_not_called()
+
+
+def test_read_mcp_response_returns_sse_jsonrpc_error():
+    response = MagicMock()
+    response.getheader.return_value = "text/event-stream"
+    response.readline.side_effect = io.BytesIO(
+        b'data: {"jsonrpc":"2.0","id":1,"error":{"code":-32000}}\n\n'
+    ).readline
+
+    assert b'"error"' in health._read_mcp_response(response, 1)
 
 
 def _fake_conn(status, body, headers=None):
