@@ -250,6 +250,15 @@ class Config:
     # authlib requires HTTPS for authorize/token. Leave false in production
     # (terminate TLS at the reverse proxy). Set true only for plain-HTTP
     # lab installs — never on the public internet.
+    # Redirect URI policy for dynamic client registration (oauth_policy.py):
+    # loopback is always allowed; https only to these hosts ("*.suffix" ok);
+    # extra prefixes allow custom schemes such as "vscode://".
+    OAUTH_ALLOWED_REDIRECT_HOSTS = os.environ.get("OAUTH_ALLOWED_REDIRECT_HOSTS", "claude.ai,claude.com")
+    OAUTH_ALLOWED_REDIRECT_PREFIXES = os.environ.get("OAUTH_ALLOWED_REDIRECT_PREFIXES", "")
+    # Registrations are open to anyone who can reach the server, so they are
+    # capped; clients that never received a token are dropped after this long.
+    OAUTH_MAX_CLIENTS = int(os.environ.get("OAUTH_MAX_CLIENTS", "500"))
+    OAUTH_CLIENT_TTL_DAYS = int(os.environ.get("OAUTH_CLIENT_TTL_DAYS", "30"))
     OAUTH_ALLOW_INSECURE_TRANSPORT = os.environ.get(
         "OAUTH_ALLOW_INSECURE_TRANSPORT", "false"
     ).lower() in ("true", "1", "yes")

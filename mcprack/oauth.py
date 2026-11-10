@@ -11,7 +11,10 @@ Path-token URLs keep working either way; this only adds the Bearer path.
 
 from __future__ import annotations
 
+import hashlib
+import re
 import time
+from urllib.parse import urlsplit
 
 from authlib.integrations.flask_oauth2 import AuthorizationServer
 from authlib.integrations.sqla_oauth2 import (
@@ -20,12 +23,14 @@ from authlib.integrations.sqla_oauth2 import (
     create_save_token_func,
 )
 from authlib.oauth2 import OAuth2Error
+from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from authlib.oauth2.rfc6749 import grants
 from authlib.oauth2.rfc7591 import ClientRegistrationEndpoint as _ClientRegistrationEndpoint
 from authlib.oauth2.rfc7636 import CodeChallenge as _CodeChallenge
 from flask import Blueprint, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
+from . import audit, oauth_policy
 from .extensions import csrf, db, limiter
 from .models import (
     OAUTH_MCP_SCOPE,
@@ -37,7 +42,51 @@ from .models import (
 
 bp = Blueprint("oauth", __name__)
 
+
+class TemporarilyUnavailableError(OAuth2Error):
+    """RFC 6749 section 4.1.2.1 temporary_unavailable, answered with 503."""
+
+    error = "temporarily_unavailable"
+    status_code = 503
+
 authorization = AuthorizationServer()
+
+
+def hash_token(raw):
+    """What is stored for a token: its SHA-256. The tokens are random and long,
+    so (as for API tokens) an unsalted hash is enough, and a database leak no
+    longer hands out working credentials (docs/AUDIT-2026-11.md B-15)."""
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+
+_HASH_SHAPE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _token_candidates(raw):
+    """Values a presented token may be stored as: its hash, or - for tokens
+    issued by the previous release, which stored them in clear text - itself.
+    Legacy rows disappear as they expire. A value shaped like a SHA-256 is
+    never tried as itself: otherwise somebody who can read the table could
+    present a stored hash as if it were the token."""
+    if _HASH_SHAPE.match(raw):
+        return [hash_token(raw)]
+    return [hash_token(raw), raw]
+
+
+def _find_token(raw, hint=None):
+    candidates = _token_candidates(raw)
+    if hint != "refresh_token":
+        found = OAuthToken.query.filter(OAuthToken.access_token.in_(candidates)).first()
+        if found:
+            return found
+    if hint != "access_token":
+        return OAuthToken.query.filter(OAuthToken.refresh_token.in_(candidates)).first()
+    return None
+
+
+def _refresh_token_expired(token):
+    lifetime = int(current_app.config.get("OAUTH_REFRESH_TOKEN_EXPIRES", 30 * 86400))
+    return (token.issued_at or 0) + lifetime < time.time()
 
 
 def _public_base_url():
@@ -67,10 +116,10 @@ def init_oauth(app):
 
         os.environ.setdefault("AUTHLIB_INSECURE_TRANSPORT", "1")
 
-    query_client = create_query_client_func(db.session, OAuthClient)
-    save_token = create_save_token_func(db.session, OAuthToken)
-    authorization.init_app(app, query_client=query_client, save_token=save_token)
-
+    # These must be in place BEFORE authorization.init_app(): authlib reads the
+    # token generators once, at init. They used to be set after it, so no
+    # refresh token was ever issued and every client had to repeat the whole
+    # browser authorization each hour (docs/AUDIT-2026-11.md B-15).
     app.config.setdefault(
         "OAUTH2_ACCESS_TOKEN_GENERATOR",
         True,  # use authlib's default random token generator
@@ -86,6 +135,25 @@ def init_oauth(app):
             "refresh_token": app.config["OAUTH_ACCESS_TOKEN_EXPIRES"],
         },
     )
+
+    query_client = create_query_client_func(db.session, OAuthClient)
+
+    def save_token(token, request):
+        """Store the token HASHED (the plaintext only ever goes back to the
+        client in the response) and audit the issue."""
+        user_id = request.user.get_user_id() if request.user else None
+        stored = dict(token)
+        stored["access_token"] = hash_token(stored["access_token"])
+        if stored.get("refresh_token"):
+            stored["refresh_token"] = hash_token(stored["refresh_token"])
+        db.session.add(OAuthToken(client_id=request.client.client_id, user_id=user_id, **stored))
+        db.session.commit()
+        audit.log_audit_event(
+            "oauth_token_issued", "success", user_id=user_id,
+            error_message=f"client {request.client.client_name or request.client.client_id}"[:500],
+        )
+
+    authorization.init_app(app, query_client=query_client, save_token=save_token)
 
     class AuthorizationCodeGrant(grants.AuthorizationCodeGrant):
         TOKEN_ENDPOINT_AUTH_METHODS = ["client_secret_basic", "client_secret_post", "none"]
@@ -129,8 +197,11 @@ def init_oauth(app):
         INCLUDE_NEW_REFRESH_TOKEN = True
 
         def authenticate_refresh_token(self, refresh_token):
-            item = OAuthToken.query.filter_by(refresh_token=refresh_token).first()
-            if item and item.is_refresh_token_active() and not item.is_expired():
+            item = _find_token(refresh_token, hint="refresh_token")
+            # The refresh token has its OWN lifetime (OAUTH_REFRESH_TOKEN_EXPIRES).
+            # is_expired() is the ACCESS token's, which made every refresh token
+            # useless an hour after it was issued.
+            if item and item.is_refresh_token_active() and not _refresh_token_expired(item):
                 return item
             return None
 
@@ -146,7 +217,25 @@ def init_oauth(app):
 
     authorization.register_grant(AuthorizationCodeGrant, [CodeChallenge(required=True)])
     authorization.register_grant(RefreshTokenGrant)
-    authorization.register_endpoint(create_revocation_endpoint(db.session, OAuthToken))
+    from authlib.oauth2.rfc7009 import RevocationEndpoint
+
+    class HashedRevocationEndpoint(RevocationEndpoint):
+        # MCP clients are public clients (no secret); the default accepted
+        # only client_secret_basic, so they could not revoke at all.
+        CLIENT_AUTH_METHODS = ["client_secret_basic", "client_secret_post", "none"]
+
+        def query_token(self, token, token_type_hint):
+            return _find_token(token, hint=token_type_hint)
+
+        def revoke_token(self, token, request):
+            now = int(time.time())
+            token.access_token_revoked_at = now
+            if request.form.get("token_type_hint") != "access_token":
+                token.refresh_token_revoked_at = now
+            db.session.add(token)
+            db.session.commit()
+
+    authorization.register_endpoint(HashedRevocationEndpoint)
 
     class ClientRegistrationEndpoint(_ClientRegistrationEndpoint):
         """Open Dynamic Client Registration — MCP clients have no prior
@@ -174,8 +263,13 @@ def init_oauth(app):
             }
 
         def save_client(self, client_info, client_metadata, request):
-            # Default MCP-friendly metadata when the client omits fields.
+            cfg = current_app.config
             metadata = dict(client_metadata or {})
+            problem = oauth_policy.check_redirect_uris(metadata.get("redirect_uris"), cfg)
+            if problem:
+                raise InvalidRedirectURIError(description=problem)
+            _make_room_for_a_client(cfg)
+            # Default MCP-friendly metadata when the client omits fields.
             metadata.setdefault("scope", OAUTH_MCP_SCOPE)
             metadata.setdefault("grant_types", ["authorization_code", "refresh_token"])
             metadata.setdefault("response_types", ["code"])
@@ -189,6 +283,13 @@ def init_oauth(app):
             client.set_client_metadata(metadata)
             db.session.add(client)
             db.session.commit()
+            audit.log_audit_event(
+                "oauth_client_registered", "success",
+                error_message=(
+                    f"client '{(metadata.get('client_name') or '')[:80]}' redirect "
+                    + ", ".join(urlsplit(u).netloc or u for u in metadata["redirect_uris"])
+                )[:500],
+            )
             return client
 
     authorization.register_endpoint(ClientRegistrationEndpoint)
@@ -201,6 +302,21 @@ def init_oauth(app):
     csrf.exempt(issue_token)
     csrf.exempt(register_client)
     csrf.exempt(revoke_token)
+
+
+def _make_room_for_a_client(cfg):
+    """Registration is open, so it is capped. Clients that never obtained a
+    token and are older than OAUTH_CLIENT_TTL_DAYS are dropped first; if the
+    table is still full the registration is refused."""
+    ttl = int(cfg.get("OAUTH_CLIENT_TTL_DAYS", 30)) * 86400
+    used = db.session.query(OAuthToken.client_id).distinct()
+    OAuthClient.query.filter(
+        OAuthClient.client_id_issued_at < int(time.time()) - ttl,
+        ~OAuthClient.client_id.in_(used),
+    ).delete(synchronize_session=False)
+    db.session.commit()
+    if OAuthClient.query.count() >= int(cfg.get("OAUTH_MAX_CLIENTS", 500)):
+        raise TemporarilyUnavailableError(description="too many registered clients; try again later")
 
 
 def oauth_unauthorized_response(server_id=None):
@@ -222,7 +338,7 @@ def oauth_unauthorized_response(server_id=None):
 
 def resolve_oauth_bearer_user(raw_token):
     """Validate an OAuth access token string; return the owning User or None."""
-    token = OAuthToken.query.filter_by(access_token=raw_token).first()
+    token = _find_token(raw_token, hint="access_token")
     if token is None or token.is_revoked() or token.is_expired():
         return None
     scopes = set((token.scope or "").split())
@@ -297,15 +413,29 @@ def authorize():
         return authorization.handle_error_response(request, error)
 
     client = grant.client
+    payload = getattr(grant.request, "payload", None)
+    redirect_uri = (getattr(payload, "redirect_uri", None) if payload is not None else None) or request.values.get(
+        "redirect_uri", ""
+    )
+    where = urlsplit(redirect_uri).netloc or redirect_uri
     if request.method == "GET":
         return render_template(
             "oauth_consent.html",
             grant=grant,
             client=client,
             scopes=(getattr(grant.request, "scope", None) or OAUTH_MCP_SCOPE).split(),
+            redirect_uri=redirect_uri,
+            redirect_host=where,
+            loopback_redirect=oauth_policy.is_loopback(redirect_uri),
         )
 
-    if request.form.get("confirm") != "yes":
+    # The decision is audited with the host the code is sent to.
+    allowed = request.form.get("confirm") == "yes"
+    audit.log_audit_event(
+        "oauth_consent", "success" if allowed else "error", user=current_user,
+        error_message=f"{'allowed' if allowed else 'denied'} client '{(client.client_name or '')[:80]}' -> {where}"[:500],
+    )
+    if not allowed:
         return authorization.create_authorization_response(grant=grant, grant_user=None)
     return authorization.create_authorization_response(grant=grant, grant_user=current_user)
 

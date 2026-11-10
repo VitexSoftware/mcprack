@@ -519,6 +519,9 @@ class AuditLogEntry(db.Model):
         "login",
         "login_failed",
         "password_change",
+        "oauth_client_registered",
+        "oauth_consent",
+        "oauth_token_issued",
     )
     RESULTS = ("success", "error")
 
