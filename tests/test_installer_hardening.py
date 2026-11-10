@@ -222,11 +222,11 @@ def test_state_paths_refuse_unsafe_names(tmp_path):
 
 
 def _login_admin(client):
-    client.application.app_context().push()
-    user = User(username="boss", auth_type="local", is_admin=True)
-    user.set_password("boss-long-password-12")
-    db.session.add(user)
-    db.session.commit()
+    with client.application.app_context():
+        user = User(username="boss", auth_type="local", is_admin=True)
+        user.set_password("boss-long-password-12")
+        db.session.add(user)
+        db.session.commit()
     client.post("/login", data={"username": "boss", "password": "boss-long-password-12"})
 
 

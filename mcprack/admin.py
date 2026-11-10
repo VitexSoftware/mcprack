@@ -770,6 +770,10 @@ def _create_install_server(form, install_method):
     name = (form.get("name") or "").strip()
     if not name:
         raise ValueError("Server name is required.")
+    try:
+        installer.validate_name(name)
+    except installer.InstallError as exc:
+        raise ValueError(str(exc))
     if _installable_name_taken(name):
         raise ValueError(f"A server named '{name}' is already registered.")
 
@@ -813,6 +817,12 @@ def install_pip():
     if not package_spec or not expected_binary:
         flash("Package spec and expected binary name are both required.", "error")
         return redirect(url_for("admin.install_wizard"))
+    try:
+        installer.validate_pip_spec(package_spec)
+        installer.validate_binary_name(expected_binary)
+    except installer.InstallError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
 
     try:
         server = _create_install_server(request.form, "pip")
@@ -855,6 +865,12 @@ def install_npm():
     if not package_spec or not expected_binary:
         flash("Package spec and expected binary name are both required.", "error")
         return redirect(url_for("admin.install_wizard"))
+    try:
+        installer.validate_npm_spec(package_spec)
+        installer.validate_binary_name(expected_binary)
+    except installer.InstallError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
 
     try:
         server = _create_install_server(request.form, "npm")
@@ -895,6 +911,11 @@ def install_docker():
     image_ref = (request.form.get("image_ref") or "").strip()
     if not image_ref:
         flash("Docker image reference is required.", "error")
+        return redirect(url_for("admin.install_wizard"))
+    try:
+        installer.validate_image_ref(image_ref)
+    except installer.InstallError as exc:
+        flash(str(exc), "error")
         return redirect(url_for("admin.install_wizard"))
 
     if not installer.docker_available():

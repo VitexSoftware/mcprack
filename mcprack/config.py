@@ -67,6 +67,13 @@ class Config:
     # page - without this the rendered page would carry no backoff hint.
     RATELIMIT_HEADERS_ENABLED = True
 
+    # --- Package installer (docs/AUDIT-2026-11.md B-07) ---
+    # Require an exact version / tag / digest for pip, npm and Docker installs.
+    INSTALL_REQUIRE_PINNED = os.environ.get("INSTALL_REQUIRE_PINNED", "true").lower() in ("true", "1", "yes")
+    # Let pip build source distributions (their setup code runs at install
+    # time). Default: wheels only.
+    INSTALL_ALLOW_SOURCE_BUILDS = os.environ.get("INSTALL_ALLOW_SOURCE_BUILDS", "false").lower() in ("true", "1", "yes")
+
     # --- Request body size cap ---
     MAX_CONTENT_LENGTH = int(os.environ.get("MAX_CONTENT_LENGTH", str(2 * 1024 * 1024)))
 

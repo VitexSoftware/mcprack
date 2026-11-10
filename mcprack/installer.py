@@ -26,8 +26,10 @@ import contextlib
 import fcntl
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -44,8 +46,113 @@ class InstallError(RuntimeError):
     failure, which is inherently asynchronous; see get_install_status()."""
 
 
+# --- input validation (docs/AUDIT-2026-11.md B-07) --------------------------
+#
+# Everything an admin types here ends up in a command that downloads and runs
+# third-party code as the service user, and some of it in filesystem paths. It
+# is validated strictly BEFORE anything is created, and never parsed by a
+# shell. Sources are limited to registry packages: no URLs, paths, VCS
+# references or option-looking strings.
+
+_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
+_BINARY_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+_PIP_NAME = r"[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?"
+_PIP_CLAUSE = r"(?:==|>=|<=|~=|!=|<|>)\s*[A-Za-z0-9][A-Za-z0-9.*+!_-]*"
+_PIP_RE = re.compile(rf"^{_PIP_NAME}(?:\[[A-Za-z0-9,._-]+\])?(?:\s*{_PIP_CLAUSE}(?:\s*,\s*{_PIP_CLAUSE})*)?$")
+_PIP_PINNED_RE = re.compile(r"^[^<>=!~,]+==\s*[A-Za-z0-9][A-Za-z0-9.+!_-]*$")  # one exact version, no wildcard
+_NPM_RE = re.compile(r"^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(?:@[A-Za-z0-9][A-Za-z0-9.+-]*)?$")
+_NPM_PINNED_RE = re.compile(r"@\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.+-]+)?$")
+_IMAGE_RE = re.compile(
+    r"^[a-z0-9][a-z0-9._-]*(?::[0-9]{1,5})?(?:/[a-z0-9][a-z0-9._-]*)*"
+    r"(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,127})?(?:@sha256:[a-f0-9]{64})?$"
+)
+
+
+def _config(key, default):
+    try:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            return current_app.config.get(key, default)
+    except Exception:  # pragma: no cover - installer works without Flask too
+        pass
+    return default
+
+
+def _require_pinned(explicit):
+    return _config("INSTALL_REQUIRE_PINNED", True) if explicit is None else explicit
+
+
+def validate_name(name):
+    """A new install's server name: lowercase letters, digits, '.', '_', '-';
+    it becomes a directory name, so no path separators, no leading dot."""
+    if not isinstance(name, str) or not _NAME_RE.match(name):
+        raise InstallError(
+            "The server name must be 1-63 characters: lowercase letters, digits, '.', '_' or '-', "
+            "starting with a letter or digit."
+        )
+
+
+def validate_binary_name(binary):
+    if not isinstance(binary, str) or not _BINARY_RE.match(binary):
+        raise InstallError("The expected binary must be a plain file name (letters, digits, '.', '_', '-').")
+
+
+def validate_pip_spec(spec, require_pinned=None):
+    """A PyPI requirement: name, optional extras, optional version clauses.
+    Refuses URLs, paths, VCS references and anything option-looking."""
+    if not isinstance(spec, str) or not _PIP_RE.match(spec.strip()):
+        raise InstallError(
+            "The pip package must be a plain PyPI requirement such as 'name==1.2.3' - no URLs, paths, "
+            "VCS references or options."
+        )
+    if _require_pinned(require_pinned) and not _PIP_PINNED_RE.match(spec.strip()):
+        raise InstallError(
+            "Pin the pip package to an exact version ('name==1.2.3'); set INSTALL_REQUIRE_PINNED=false to allow ranges."
+        )
+
+
+def validate_npm_spec(spec, require_pinned=None):
+    if not isinstance(spec, str) or not _NPM_RE.match(spec):
+        raise InstallError(
+            "The npm package must be a plain registry name such as '@scope/name@1.2.3' - no URLs, paths or options."
+        )
+    if _require_pinned(require_pinned) and not _NPM_PINNED_RE.search(spec):
+        raise InstallError(
+            "Pin the npm package to an exact version ('name@1.2.3'); set INSTALL_REQUIRE_PINNED=false to allow tags/ranges."
+        )
+
+
+def validate_image_ref(ref, require_pinned=None):
+    if not isinstance(ref, str) or not _IMAGE_RE.match(ref):
+        raise InstallError("The Docker image reference is not valid (registry/name:tag or name@sha256:digest).")
+    if _require_pinned(require_pinned):
+        has_digest = "@sha256:" in ref
+        tag = ref.rsplit(":", 1)[1] if re.search(r":[^/:@]+$", ref) and not has_digest else None
+        if not has_digest and (tag is None or tag == "latest"):
+            raise InstallError(
+                "Pin the Docker image to a version tag (not 'latest') or a digest; "
+                "set INSTALL_REQUIRE_PINNED=false to allow it."
+            )
+
+
+def _safe_component(server_name):
+    """State paths are built from the server name. Servers registered before
+    the strict rule may use other characters, so this only guarantees the
+    name is ONE path component."""
+    if (
+        not isinstance(server_name, str)
+        or server_name in ("", ".", "..")
+        or "/" in server_name
+        or "\\" in server_name
+        or "\0" in server_name
+    ):
+        raise InstallError("Unsafe server name.")
+    return server_name
+
+
 def _paths(server_name):
-    base = STATE_DIR / server_name
+    base = STATE_DIR / _safe_component(server_name)
     return {
         "dir": base,
         "pid": base / "install.pid",
@@ -55,7 +162,7 @@ def _paths(server_name):
 
 
 def _lock_path(server_name):
-    return STATE_DIR / f"{server_name}.lock"
+    return STATE_DIR / f"{_safe_component(server_name)}.lock"
 
 
 @contextlib.contextmanager
@@ -111,12 +218,37 @@ def _tail(path, max_bytes=8192):
         return ""
 
 
-def _spawn_detached(server_name, install_dir, shell_command):
-    """Launches `shell_command` as a detached bash child that appends its
-    combined stdout/stderr to the log file and atomically writes its own
-    exit code to the exitcode file when done — the only way to observe a
-    detached child's outcome later without blocking a gunicorn worker on
-    it now."""
+# Runs the install steps one after another WITHOUT a shell: every step is an
+# argv list, executed with subprocess.run(list). It writes the combined output
+# to the log and the exit code of the first failing step (or 0) atomically to
+# the exitcode file - the same files get_install_status() has always read. The
+# job travels as one JSON argument, so nothing an admin typed is ever parsed
+# as code.
+_RUNNER = r"""
+import json, os, subprocess, sys
+job = json.loads(sys.argv[1])
+code = 0
+with open(job["log"], "ab") as log:
+    for argv, cwd in job["steps"]:
+        log.write(("$ " + " ".join(argv) + "\n").encode()); log.flush()
+        try:
+            rc = subprocess.run(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT).returncode
+        except OSError as exc:
+            log.write((str(exc) + "\n").encode()); rc = 127
+        if rc != 0:
+            code = rc
+            break
+tmp = job["exitcode"] + ".tmp"
+with open(tmp, "w") as fh:
+    fh.write(str(code) + "\n")
+os.replace(tmp, job["exitcode"])
+"""
+
+
+def _spawn_detached(server_name, install_dir, steps):
+    """Launch `steps` - a list of (argv list, cwd or None) - as a detached
+    runner and return immediately; the outcome is read later from the state
+    files by get_install_status()."""
     paths = _paths(server_name)
     paths["dir"].mkdir(parents=True, exist_ok=True)
     install_dir.mkdir(parents=True, exist_ok=True)
@@ -127,15 +259,13 @@ def _spawn_detached(server_name, install_dir, shell_command):
         except OSError:
             pass
 
-    wrapper = (
-        "set -o pipefail\n"
-        f"{{ {shell_command} ; }} >> {json.dumps(str(paths['log']))} 2>&1\n"
-        f"echo $? > {json.dumps(str(paths['exitcode']) + '.tmp')}\n"
-        f"mv {json.dumps(str(paths['exitcode']) + '.tmp')} {json.dumps(str(paths['exitcode']))}\n"
-    )
-
+    job = {
+        "log": str(paths["log"]),
+        "exitcode": str(paths["exitcode"]),
+        "steps": [[list(argv), cwd] for argv, cwd in steps],
+    }
     proc = subprocess.Popen(
-        ["bash", "-c", wrapper],
+        [sys.executable, "-c", _RUNNER, json.dumps(job)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
@@ -147,35 +277,47 @@ def start_pip_install(server_name, package_spec, expected_binary):
     """Creates a fresh venv under STATE_DIR/<name>/venv and installs
     `package_spec` into it, detached. Returns the venv path immediately —
     it is NOT yet installed when this returns; poll get_install_status()."""
+    validate_name(server_name)
+    validate_pip_spec(package_spec)
+    validate_binary_name(expected_binary)
     if shutil.which("python3") is None:
         raise InstallError("python3 not found on PATH.")
 
     with _serialized(server_name):
         install_dir = STATE_DIR / server_name / "venv"
-        command = (
-            f"python3 -m venv {json.dumps(str(install_dir))} && "
-            f"{json.dumps(str(install_dir / 'bin' / 'pip'))} install --no-input "
-            f"{json.dumps(package_spec)}"
+        install = [str(install_dir / "bin" / "pip"), "install", "--no-input"]
+        if not _config("INSTALL_ALLOW_SOURCE_BUILDS", False):
+            # a source distribution runs its setup code while building
+            install.append("--only-binary=:all:")
+        install.append(package_spec.strip())
+        _spawn_detached(
+            server_name,
+            install_dir,
+            [(["python3", "-m", "venv", str(install_dir)], None), (install, None)],
         )
-        _spawn_detached(server_name, install_dir, command)
     return str(install_dir)
 
 
 def start_npm_install(server_name, package_spec, expected_binary):
     """Creates a fresh, isolated (non-global) npm project directory and
     installs `package_spec` into it, detached."""
+    validate_name(server_name)
+    validate_npm_spec(package_spec)
+    validate_binary_name(expected_binary)
     if shutil.which("npm") is None:
         raise InstallError("npm not found on PATH.")
 
     with _serialized(server_name):
         install_dir = STATE_DIR / server_name / "npm"
-        quoted_dir = json.dumps(str(install_dir))
-        command = (
-            f"cd {quoted_dir} && "
-            f"npm init -y --silent > /dev/null && "
-            f"npm install --no-audit --no-fund {json.dumps(package_spec)}"
+        _spawn_detached(
+            server_name,
+            install_dir,
+            [
+                (["npm", "init", "-y", "--silent"], str(install_dir)),
+                # lifecycle scripts (preinstall/postinstall) are arbitrary code
+                (["npm", "install", "--no-audit", "--no-fund", "--ignore-scripts", package_spec], str(install_dir)),
+            ],
         )
-        _spawn_detached(server_name, install_dir, command)
     return str(install_dir)
 
 
@@ -204,10 +346,11 @@ def start_docker_pull(server_name, image_ref):
     first — this does not re-check, so a caller that skips the gate could
     end up with a permission-denied failure captured in the log instead of
     a clean pre-flight rejection."""
+    validate_name(server_name)
+    validate_image_ref(image_ref)
     with _serialized(server_name):
         install_dir = STATE_DIR / server_name
-        command = f"docker pull {json.dumps(image_ref)}"
-        _spawn_detached(server_name, install_dir, command)
+        _spawn_detached(server_name, install_dir, [(["docker", "pull", image_ref], None)])
 
 
 def get_install_status(server_name):
@@ -345,4 +488,11 @@ def uninstall(server):
     # install_path (the venv/ or npm/ subdirectory) lives inside this
     # server's whole state directory, alongside its install log/pid files —
     # removing the parent covers both in one step.
-    shutil.rmtree(STATE_DIR / server.name, ignore_errors=True)
+    try:
+        target = (STATE_DIR / _safe_component(server.name)).resolve()
+    except InstallError:
+        return
+    root = STATE_DIR.resolve()
+    if root not in target.parents:  # never delete anything outside the install directory
+        return
+    shutil.rmtree(target, ignore_errors=True)
