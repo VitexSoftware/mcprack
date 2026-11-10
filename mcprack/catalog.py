@@ -78,8 +78,6 @@ def _signing_keys():
 
 
 def _proxy_serializer():
-    from flask import current_app
-
     return URLSafeTimedSerializer(_signing_keys(), salt=PROXY_TOKEN_SALT)
 
 

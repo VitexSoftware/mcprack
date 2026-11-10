@@ -12,7 +12,6 @@
 
 import hashlib
 import time
-from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -23,10 +22,9 @@ from mcprack.models import (
     AuditLogEntry,
     OAuthClient,
     OAuthToken,
-    User,
 )
 
-from test_oauth_proxy import OAuthConfig, _login, _make_server, _make_user, _pkce_pair
+from test_oauth_proxy import OAuthConfig, _login, _make_user, _pkce_pair
 
 CALLBACK = "https://app.client.test/cb"
 

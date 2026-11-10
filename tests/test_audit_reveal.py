@@ -5,7 +5,7 @@ import pytest
 
 from mcprack import secret_store
 from mcprack.extensions import db
-from mcprack.models import AuditLogEntry, McpServer, User, UserServerOverride
+from mcprack.models import AuditLogEntry, McpServer, User
 
 PW = "admin-long-password-1"
 SECRET = "S3CR3T-TOKEN-VALUE"

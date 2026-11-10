@@ -14,8 +14,6 @@ import os
 import stat
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from mcprack import user_proxy
 
 SECRETS = {

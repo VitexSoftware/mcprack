@@ -18,11 +18,7 @@ import time
 from urllib.parse import urlsplit
 
 from authlib.integrations.flask_oauth2 import AuthorizationServer
-from authlib.integrations.sqla_oauth2 import (
-    create_query_client_func,
-    create_revocation_endpoint,
-    create_save_token_func,
-)
+from authlib.integrations.sqla_oauth2 import create_query_client_func
 from authlib.oauth2 import OAuth2Error
 from authlib.oauth2.rfc7591 import InvalidRedirectURIError
 from authlib.oauth2.rfc6749 import grants

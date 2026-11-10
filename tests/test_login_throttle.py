@@ -62,7 +62,7 @@ def test_a_stranger_cannot_lock_the_real_owner_out(frank, client):
     for _ in range(5):
         _try(client, ip="203.0.113.66")  # the attacker
 
-    owner = app_client = frank.test_client()
+    owner = frank.test_client()
     assert _try(owner, password=GOOD, ip=HOME).status_code == 302
 
 
