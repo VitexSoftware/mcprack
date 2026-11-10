@@ -19,6 +19,7 @@ from flask.cli import AppGroup
 
 from . import admin
 from . import catalog
+from . import env_policy
 from . import health
 from . import secret_store
 from . import vaultwarden
@@ -289,6 +290,9 @@ def user_override_set(username, server_name, pairs):
         for raw_pair in pairs:
             key, value = _parse_key_value_pair(raw_pair, "KEY=VALUE")
             values[key] = value
+        problems = env_policy.validate_override(server, values)
+        if problems:
+            raise click.ClickException(" ".join(problems))
         non_secret, secret = secret_store.split_override_values(
             server, values, secret_keys=existing_secret.keys()
         )

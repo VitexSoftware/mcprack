@@ -26,6 +26,7 @@ from flask_login import current_user
 from . import admin
 from . import audit
 from . import catalog
+from . import env_policy
 from . import secret_store
 from . import vaultwarden
 from .extensions import db, limiter
@@ -327,6 +328,9 @@ def _override_put_payload(server, target_user):
     values = data.get("env")
     if not isinstance(values, dict):
         return None, None, api_error(400, "invalid_request", "env must be an object of key/value pairs")
+    problems = env_policy.validate_override(server, values)
+    if problems:
+        return None, None, api_error(400, "invalid_env", " ".join(problems))
 
     explicit = data.get("secret_keys")
     if explicit is None:

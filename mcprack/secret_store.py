@@ -31,6 +31,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from flask import current_app
 
 from . import audit
+from . import env_policy
 from . import vaultwarden
 
 logger = logging.getLogger(__name__)
@@ -234,7 +235,20 @@ def resolve_server_env(server, user=None):
     if override_row and override_row.env_config:
         env.update(override_row.env_config)
 
-    return env
+    return _drop_denied(server, env)
+
+
+def _drop_denied(server, env):
+    """Rows stored before env_policy existed may hold variables that change
+    how the server process starts; never hand those to a process."""
+    clean, dropped = env_policy.strip_denied(server, env)
+    if dropped:
+        logger.warning(
+            "ignoring forbidden variable name(s) %s in the stored configuration of server '%s'",
+            ", ".join(sorted(dropped)),
+            server.name,
+        )
+    return clean
 
 
 def _user_override_configs(user, server_ids):
@@ -277,7 +291,7 @@ def resolve_server_envs(servers, user=None):
         else:
             env.update(secrets)
             env.update(overrides.get(server.id, {}))
-            results[server.id] = env
+            results[server.id] = _drop_denied(server, env)
     if not pending:
         return results
 
@@ -290,11 +304,11 @@ def resolve_server_envs(servers, user=None):
                 if secrets is None:
                     todo.append(server)
                 else:
-                    results[server.id] = {
+                    results[server.id] = _drop_denied(server, {
                         **(server.env_config or {}),
                         **secrets,
                         **overrides.get(server.id, {}),
-                    }
+                    })
             if todo:
                 sess = vaultwarden.unlock()
                 try:
@@ -316,11 +330,11 @@ def resolve_server_envs(servers, user=None):
                 values.update(vaultwarden.parse_notes(override[1]))
         audit.log_audit_event("credential_access", "success", user=user, server=server)
         _set_cached_secrets(_env_cache_key(server, user), values)
-        results[server.id] = {
+        results[server.id] = _drop_denied(server, {
             **(server.env_config or {}),
             **values,
             **overrides.get(server.id, {}),
-        }
+        })
         if default and server.vault_item_id != default[0]:
             server.vault_item_id = default[0]
             learned = True
@@ -465,6 +479,14 @@ def save_user_override(server, user, non_secret, secret):
     and secret config in Vaultwarden or local encrypted store."""
     from .extensions import db
     from .models import UserServerOverride
+
+    # Last line of defence (A-02): the entry points validate on the way in,
+    # but whatever calls this must not be able to store a variable that
+    # changes how the server process starts.
+    try:
+        env_policy.require_valid_override(server, {**non_secret, **secret})
+    except env_policy.EnvPolicyError as exc:
+        raise SecretStoreError(str(exc)) from exc
 
     override_row = UserServerOverride.query.filter_by(
         user_id=user.id, server_id=server.id

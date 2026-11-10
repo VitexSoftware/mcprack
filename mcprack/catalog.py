@@ -26,6 +26,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 from . import appstream_icons
 from . import audit
 from . import env_detection
+from . import env_policy
 from . import health
 from . import secret_store
 from . import telemetry
@@ -679,6 +680,22 @@ def _override_row_ids(form):
 
 
 def parse_user_override_form(server, form):
+    """The override editor's submitted rows -> (non_secret, secret, error),
+    validated against env_policy (A-02): a submission that sets a variable
+    which changes how the server process starts is rejected as a whole.
+
+    Rows -> values parsing is _parse_override_rows(); this adds the policy.
+    """
+    non_secret, secret, error = _parse_override_rows(server, form)
+    if error:
+        return non_secret, secret, error
+    problems = env_policy.validate_override(server, {**non_secret, **secret})
+    if problems:
+        return {}, {}, " ".join(problems)
+    return non_secret, secret, None
+
+
+def _parse_override_rows(server, form):
     """The override editor's submitted rows -> (non_secret, secret, error).
     Shared by catalog.override and admin.user_override so the self-service
     and admin editors cannot drift apart.
