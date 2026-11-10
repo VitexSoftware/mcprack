@@ -330,6 +330,12 @@ def _make_room_for_a_client(cfg):
     now = int(time.time())
     ttl = int(cfg.get("OAUTH_UNUSED_CLIENT_TTL_HOURS", 24)) * 3600
     min_age = int(cfg.get("OAUTH_CLIENT_MIN_AGE_SECONDS", 900))
+    # Authorization codes live five minutes (authlib: auth_time + 300). An
+    # expired one proves nothing and must not keep its client in the table
+    # for ever, so they are purged first.
+    OAuthAuthorizationCode.query.filter(OAuthAuthorizationCode.auth_time < now - 300).delete(
+        synchronize_session=False
+    )
     # "unused": no token issued and no authorization code waiting to be
     # redeemed - a client in the middle of its browser flow is NOT unused.
     unused = ~OAuthClient.client_id.in_(db.session.query(OAuthToken.client_id).distinct()) & ~OAuthClient.client_id.in_(
@@ -487,8 +493,24 @@ def issue_token():
     return authorization.create_token_response()
 
 
+def _register_limit_key():
+    """Rate-limit key for registration: the client address, but an IPv6
+    address counts as its /64 - a single machine routinely owns billions of
+    addresses in one, so per-address limits would mean no limit."""
+    import ipaddress
+
+    address = request.remote_addr or "-"
+    try:
+        ip = ipaddress.ip_address(address)
+    except ValueError:
+        return address
+    if ip.version == 6:
+        return str(ipaddress.ip_network(f"{ip}/64", strict=False))
+    return address
+
+
 @bp.route("/oauth/register", methods=["POST"])
-@limiter.limit(lambda: current_app.config["OAUTH_REGISTER_RATE_LIMIT"])
+@limiter.limit(lambda: current_app.config["OAUTH_REGISTER_RATE_LIMIT"], key_func=_register_limit_key)
 def register_client():
     return authorization.create_endpoint_response("client_registration")
 

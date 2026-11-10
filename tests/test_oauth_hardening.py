@@ -189,10 +189,39 @@ def test_a_client_with_a_pending_authorization_code_is_not_evicted(oauth_app, oa
 
 
 def test_registration_has_its_own_tighter_rate_limit(oauth_app):
-    from mcprack.app import create_app
-    from mcprack.extensions import limiter  # noqa: F401
-
     assert oauth_app.config["OAUTH_REGISTER_RATE_LIMIT"] == "10 per minute;100 per hour"
+
+
+@pytest.mark.parametrize(
+    "address,key",
+    [
+        ("203.0.113.9", "203.0.113.9"),
+        ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64"),
+        ("2001:db8:1:2:1111:2222:3333:4444", "2001:db8:1:2::/64"),  # same /64, same key
+        ("::1", "::/64"),
+    ],
+)
+def test_registration_is_rate_limited_per_ipv6_64(oauth_app, address, key):
+    from mcprack import oauth
+
+    with oauth_app.test_request_context("/oauth/register", environ_overrides={"REMOTE_ADDR": address}):
+        assert oauth._register_limit_key() == key
+
+
+def test_an_expired_authorization_code_does_not_pin_a_client(oauth_app, oauth_client):
+    from mcprack.models import OAuthAuthorizationCode
+
+    oauth_app.config["OAUTH_MAX_CLIENTS"] = 1
+    pinned = _register(oauth_client, ["http://localhost:1/cb"]).get_json()["client_id"]
+    _age(pinned, 5000)
+    user = _make_user()
+    db.session.add(OAuthAuthorizationCode(code="old", client_id=pinned, redirect_uri="http://localhost:1/cb",
+                                          scope="mcp", user_id=user.id, auth_time=int(time.time()) - 3600))
+    db.session.commit()
+
+    assert _register(oauth_client, ["http://localhost:2/cb"]).status_code in (200, 201)
+    assert OAuthClient.query.filter_by(client_id=pinned).count() == 0
+    assert OAuthAuthorizationCode.query.filter_by(code="old").count() == 0  # purged
 
 
 def test_unused_clients_expire_after_the_unused_ttl(oauth_app, oauth_client):
