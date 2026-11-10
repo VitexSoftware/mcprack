@@ -266,6 +266,10 @@ class Config:
     # capped; clients that never received a token are dropped after this long.
     OAUTH_MAX_CLIENTS = int(os.environ.get("OAUTH_MAX_CLIENTS", "500"))
     OAUTH_UNUSED_CLIENT_TTL_HOURS = int(os.environ.get("OAUTH_UNUSED_CLIENT_TTL_HOURS", "24"))
+    # A client younger than this is never evicted to make room (it is probably
+    # about to authorize), and registration has its own, tighter rate limit.
+    OAUTH_CLIENT_MIN_AGE_SECONDS = int(os.environ.get("OAUTH_CLIENT_MIN_AGE_SECONDS", "900"))
+    OAUTH_REGISTER_RATE_LIMIT = os.environ.get("OAUTH_REGISTER_RATE_LIMIT", "10 per minute;100 per hour")
     OAUTH_ALLOW_INSECURE_TRANSPORT = os.environ.get(
         "OAUTH_ALLOW_INSECURE_TRANSPORT", "false"
     ).lower() in ("true", "1", "yes")

@@ -153,7 +153,7 @@ def test_a_full_table_evicts_the_oldest_unused_clients_instead_of_refusing(oauth
     oauth_app.config["OAUTH_MAX_CLIENTS"] = 3
     ids = [_register(oauth_client, [f"http://localhost:{i + 1}/cb"]).get_json()["client_id"] for i in range(3)]
     for position, client_id in enumerate(ids):
-        _age(client_id, 100 - position)  # ids[0] is the oldest
+        _age(client_id, 5000 - position)  # ids[0] is the oldest; all past the minimum age
 
     resp = _register(oauth_client, ["http://localhost:99/cb"])
 
@@ -161,6 +161,38 @@ def test_a_full_table_evicts_the_oldest_unused_clients_instead_of_refusing(oauth
     assert OAuthClient.query.count() == 3
     assert OAuthClient.query.filter_by(client_id=ids[0]).count() == 0  # the oldest went
     assert OAuthClient.query.filter_by(client_id=ids[2]).count() == 1
+
+
+def test_recently_registered_clients_are_never_evicted(oauth_app, oauth_client):
+    """A client that registered a moment ago is about to authorize; flooding
+    the table must not cycle it out."""
+    oauth_app.config["OAUTH_MAX_CLIENTS"] = 2
+    fresh = [_register(oauth_client, [f"http://localhost:{i + 1}/cb"]).get_json()["client_id"] for i in range(2)]
+
+    assert _register(oauth_client, ["http://localhost:99/cb"]).status_code == 503
+    assert OAuthClient.query.filter(OAuthClient.client_id.in_(fresh)).count() == 2
+
+
+def test_a_client_with_a_pending_authorization_code_is_not_evicted(oauth_app, oauth_client):
+    from mcprack.models import OAuthAuthorizationCode
+
+    oauth_app.config["OAUTH_MAX_CLIENTS"] = 1
+    mid_flow = _register(oauth_client, ["http://localhost:1/cb"]).get_json()["client_id"]
+    _age(mid_flow, 5000)
+    user = _make_user()
+    db.session.add(OAuthAuthorizationCode(code="c", client_id=mid_flow, redirect_uri="http://localhost:1/cb",
+                                          scope="mcp", user_id=user.id, auth_time=int(time.time())))
+    db.session.commit()
+
+    assert _register(oauth_client, ["http://localhost:2/cb"]).status_code == 503
+    assert OAuthClient.query.filter_by(client_id=mid_flow).count() == 1
+
+
+def test_registration_has_its_own_tighter_rate_limit(oauth_app):
+    from mcprack.app import create_app
+    from mcprack.extensions import limiter  # noqa: F401
+
+    assert oauth_app.config["OAUTH_REGISTER_RATE_LIMIT"] == "10 per minute;100 per hour"
 
 
 def test_unused_clients_expire_after_the_unused_ttl(oauth_app, oauth_client):

@@ -327,16 +327,26 @@ def _make_room_for_a_client(cfg):
     and when the table is still full the OLDEST unused ones are evicted to make
     room. Only when every slot belongs to a client that holds a token is the
     registration refused."""
+    now = int(time.time())
     ttl = int(cfg.get("OAUTH_UNUSED_CLIENT_TTL_HOURS", 24)) * 3600
-    unused = ~OAuthClient.client_id.in_(db.session.query(OAuthToken.client_id).distinct())
-    OAuthClient.query.filter(OAuthClient.client_id_issued_at < int(time.time()) - ttl, unused).delete(
-        synchronize_session=False
+    min_age = int(cfg.get("OAUTH_CLIENT_MIN_AGE_SECONDS", 900))
+    # "unused": no token issued and no authorization code waiting to be
+    # redeemed - a client in the middle of its browser flow is NOT unused.
+    unused = ~OAuthClient.client_id.in_(db.session.query(OAuthToken.client_id).distinct()) & ~OAuthClient.client_id.in_(
+        db.session.query(OAuthAuthorizationCode.client_id).distinct()
     )
+    OAuthClient.query.filter(OAuthClient.client_id_issued_at < now - ttl, unused).delete(synchronize_session=False)
     limit = int(cfg.get("OAUTH_MAX_CLIENTS", 500))
     overflow = OAuthClient.query.count() - limit + 1
     if overflow > 0:
+        # Only clients past a minimum age may be evicted, oldest first: a
+        # client that registered a moment ago is about to authorize, and
+        # whoever floods the table must not be able to cycle real clients out.
         victims = (
-            OAuthClient.query.filter(unused).order_by(OAuthClient.client_id_issued_at.asc()).limit(overflow).all()
+            OAuthClient.query.filter(unused, OAuthClient.client_id_issued_at < now - min_age)
+            .order_by(OAuthClient.client_id_issued_at.asc())
+            .limit(overflow)
+            .all()
         )
         for client in victims:
             db.session.delete(client)
@@ -478,7 +488,7 @@ def issue_token():
 
 
 @bp.route("/oauth/register", methods=["POST"])
-@limiter.limit(lambda: current_app.config["OAUTH_TOKEN_RATE_LIMIT"])
+@limiter.limit(lambda: current_app.config["OAUTH_REGISTER_RATE_LIMIT"])
 def register_client():
     return authorization.create_endpoint_response("client_registration")
 
