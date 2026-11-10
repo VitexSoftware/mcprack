@@ -20,7 +20,7 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 import yaml
-from flask import Blueprint, abort, g, jsonify, request
+from flask import Blueprint, abort, current_app, g, jsonify, request
 from flask_login import current_user
 
 from . import accounts
@@ -31,7 +31,7 @@ from . import env_policy
 from . import passwords
 from . import secret_store
 from . import vaultwarden
-from .extensions import db, limiter
+from .extensions import csrf, db, limiter
 from .models import (
     API_TOKEN_SCOPES,
     API_TOKEN_SCOPE_ALL,
@@ -116,6 +116,25 @@ def api_scope_required(*required_scopes):
             return view(*args, **kwargs)
         return wrapped
     return decorator
+
+
+@bp.before_request
+def _csrf_for_cookie_authentication():
+    """The blueprint is exempt from Flask-WTF's global CSRF check because
+    bearer-token requests carry no ambient credential. The session cookie *is*
+    one, and this API accepts it - so a cookie-authenticated mutation has to
+    carry a CSRF token (header X-CSRFToken) like any form post
+    (docs/AUDIT-2026-11.md B-06). SameSite=Lax alone is the only thing that
+    stood in the way before."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    if not current_app.config.get("WTF_CSRF_ENABLED", True):
+        return None
+    # resolving current_user loads the session user first and only then the
+    # bearer token (which sets g.api_token)
+    if current_user.is_authenticated and getattr(g, "api_token", None) is None:
+        csrf.protect()
+    return None
 
 
 @bp.errorhandler(400)

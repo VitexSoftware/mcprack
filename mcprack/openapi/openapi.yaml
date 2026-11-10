@@ -1023,7 +1023,12 @@ components:
       type: apiKey
       in: cookie
       name: session
-      description: The session cookie set by POST /login (flask_login).
+      description: >
+        The session cookie set by POST /login (flask_login). A request that
+        changes state (POST, PUT, PATCH, DELETE) and is authenticated by this
+        cookie must also send the session's CSRF token in an X-CSRFToken
+        header, otherwise it is rejected with 400. Bearer-token requests need
+        no CSRF token.
     bearerAuth:
       type: http
       scheme: bearer
