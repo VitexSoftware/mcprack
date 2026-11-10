@@ -13,6 +13,16 @@
     <textarea id="config-json" rows="20" readonly data-copy-fail-message="{{ _('Copy failed — select the text manually.') }}">{{ config_json }}</textarea>
   </div>
 
+  {% if commands %}
+  <div class="card mt-lg mb-lg">
+    <h2>{{ _('Or add the servers with the Claude Code CLI') }}</h2>
+    <p class="text-sm text-muted">
+      {{ _('Create an API token with the scope proxy:access and export it as MCPRACK_TOKEN first. The commands use user scope (all your projects); the token stays in your environment, never in a file.') }}
+    </p>
+    <textarea id="claude-commands" rows="{{ commands|length + 1 }}" readonly>{{ commands|join('\n') }}</textarea>
+  </div>
+  {% endif %}
+
   <div class="flex-gap-wrap mt-lg mb-lg">
     <button type="button" id="copy-button" class="btn btn-primary">
       📋 {{ _('Copy to clipboard') }}

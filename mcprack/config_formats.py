@@ -91,5 +91,45 @@ def render_claude_config(servers):
     return {"mcpServers": _render(servers, include_stdio_type=True)}
 
 
+# The environment variable a Claude Code configuration reads the credential
+# from. Claude Code reads credential-looking names (ANTHROPIC_API_KEY,
+# NPM_TOKEN, HTTPS_PROXY, ...) as empty inside the url/headers of a remote
+# server, so this one is deliberately our own.
+CLAUDE_CODE_TOKEN_VARIABLE = "MCPRACK_TOKEN"
+
+
+def render_claude_code_config(servers, header=True):
+    """A Claude Code `.mcp.json`: remote HTTP servers whose URL carries NO
+    secret. With `header` the credential is `Authorization: Bearer
+    ${MCPRACK_TOKEN}`, expanded by Claude Code from the environment - the file
+    can be committed. Without it (OAuth) Claude Code runs the login itself."""
+    result = {}
+    for server in servers:
+        entry = {"type": "http", "url": _normalized_url(server.get("url"))}
+        if header:
+            entry["headers"] = {"Authorization": f"Bearer ${{{CLAUDE_CODE_TOKEN_VARIABLE}}}"}
+        result[server["name"]] = entry
+    return {"mcpServers": result}
+
+
+def claude_code_commands(servers, header=True, scope="user"):
+    """`claude mcp add` command lines equivalent to the `.mcp.json`. Every
+    value is shell-quoted; the header is double-quoted so the user's own shell
+    expands $MCPRACK_TOKEN when they run it."""
+    import shlex
+
+    lines = []
+    for server in servers:
+        command = [
+            "claude", "mcp", "add", "--transport", "http", "--scope", scope,
+            shlex.quote(server["name"]), shlex.quote(server["url"]),
+        ]
+        line = " ".join(command)
+        if header:
+            line += f' --header "Authorization: Bearer ${CLAUDE_CODE_TOKEN_VARIABLE}"'
+        lines.append(line)
+    return lines
+
+
 def render_copilot_config(servers):
     return {"servers": _render(servers, include_stdio_type=False)}

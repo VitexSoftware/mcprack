@@ -41,6 +41,14 @@ class Config:
     # --- CSRF (Flask-WTF) ---
     WTF_CSRF_TIME_LIMIT = None
 
+    # The secret-free relay URL /proxy/mcp/<id> authenticated by Authorization:
+    # Bearer (an API token with the proxy:access scope). Always available next
+    # to the OAuth server; set false to allow it only when OAUTH_ENABLED.
+    PROXY_BEARER_ENABLED = os.environ.get("PROXY_BEARER_ENABLED", "true").lower() in ("true", "1", "yes")
+    # API tokens created without an explicit expiry expire after this many days
+    # (0 = never). A token is as good as a password.
+    API_TOKEN_DEFAULT_EXPIRY_DAYS = int(os.environ.get("API_TOKEN_DEFAULT_EXPIRY_DAYS", "90"))
+
     # --- Login brute-force protection (database backed, see throttle.py) ---
     LOGIN_THROTTLE_ENABLED = os.environ.get("LOGIN_THROTTLE_ENABLED", "true").lower() in ("true", "1", "yes")
     # per account AND client address: stops guessing from one place without

@@ -29,6 +29,21 @@
     </div>
 
     <div class="client-card">
+      <h4>Claude Code</h4>
+      <p class="text-sm text-muted">{{ _('A .mcp.json without secrets, plus claude mcp add commands. Needs an API token in MCPRACK_TOKEN.') }}</p>
+      <div class="client-card-actions">
+        <a href="{{ url_for('catalog.download', client='claude-code') }}" class="btn btn-secondary" download>
+          ⬇️ {{ _('Download Config') }}
+        </a>
+        <a href="{{ url_for('catalog.view', client='claude-code') }}" class="btn btn-secondary">
+          👁️ {{ _('View & Copy') }}
+        </a>
+      </div>
+      {% set client = 'claude-code' %}
+      {% include "_config_paths.html" %}
+    </div>
+
+    <div class="client-card">
       <h4>GitHub Copilot / VS Code</h4>
       <p class="text-sm text-muted">{{ _('Works with VS Code Copilot and other GitHub Copilot clients.') }}</p>
       <div class="client-card-actions">

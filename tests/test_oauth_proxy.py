@@ -97,10 +97,13 @@ def _pkce_pair():
     return verifier, challenge
 
 
-def test_tokenless_proxy_404_when_oauth_disabled(client, app):
-    """Default installs leave OAUTH_ENABLED off — no tokenless route."""
+def test_oauth_endpoints_404_when_oauth_disabled(client, app):
+    """Default installs leave OAUTH_ENABLED off — no authorization server. The
+    tokenless Bearer relay route exists regardless (API tokens with the
+    proxy:access scope), but never answers an unauthenticated caller with more
+    than a 401."""
     assert app.config.get("OAUTH_ENABLED") is False
-    assert client.get("/proxy/mcp/1").status_code == 404
+    assert client.get("/proxy/mcp/1").status_code == 401
     assert client.get("/.well-known/oauth-authorization-server").status_code == 404
 
 

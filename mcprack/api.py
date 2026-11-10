@@ -450,6 +450,13 @@ def tokens_create():
     expires_at, error = _parse_token_expiry(data)
     if error:
         return error
+    # No expiry asked for -> the configured default (a token is as good as a
+    # password). Remembered, because a default - unlike an explicit request -
+    # is silently capped by the creating token's own expiry below.
+    default_days = int(current_app.config.get("API_TOKEN_DEFAULT_EXPIRY_DAYS", 90))
+    defaulted = expires_at is None and default_days > 0 and "expires_at" not in data and "expires_in_days" not in data
+    if defaulted:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=default_days)
     scopes, error = _parse_token_scopes(data)
     if error:
         return error
@@ -472,6 +479,8 @@ def tokens_create():
                 f"Cannot grant scopes this token does not have: {', '.join(not_held)}",
             )
         creator_expires_at = creator.expires_at_utc
+        if defaulted and creator_expires_at is not None and expires_at > creator_expires_at:
+            expires_at = creator_expires_at  # the default never outlives the creator
         if creator_expires_at is not None and (expires_at is None or expires_at > creator_expires_at):
             return api_error(
                 403, "insufficient_scope", "Cannot create a token that outlives this token"
@@ -838,7 +847,9 @@ def admin_user_override_delete(user_id, server_id):
 @api_login_required
 @api_scope_required("config:read")
 def me_config(client):
-    config_json, filename, error_message = catalog._build_client_config_json(client, user=current_user)
+    config_json, filename, error_message = catalog._build_client_config_json(
+        client, user=current_user, auth=request.args.get("auth")
+    )
     if config_json is None:
         audit.log_audit_event(
             "config_download",

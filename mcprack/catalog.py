@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from flask import (
     Blueprint,
     abort,
+    jsonify,
     current_app,
     flash,
     redirect,
@@ -32,7 +33,12 @@ from . import secret_store
 from . import telemetry
 from . import user_proxy
 from . import vaultwarden
-from .config_formats import render_claude_config, render_copilot_config
+from .config_formats import (
+    claude_code_commands,
+    render_claude_code_config,
+    render_claude_config,
+    render_copilot_config,
+)
 from .extensions import csrf, db
 from .urls import external_url
 from .models import (
@@ -49,6 +55,9 @@ logger = logging.getLogger(__name__)
 
 RENDERERS = {
     "claude": (render_claude_config, "claude_desktop_config.json"),
+    # Claude Code: project-scope `.mcp.json`. No secret in the file - see
+    # config_formats.render_claude_code_config.
+    "claude-code": (render_claude_code_config, ".mcp.json"),
     "copilot": (render_copilot_config, "mcp.json"),
     # Cursor uses the Claude-shaped mcpServers map; VS Code Copilot uses
     # the servers map. Aliases so /download/cursor and /api/.../config/vscode
@@ -506,22 +515,30 @@ def user_proxy_mcp(token, server_id):
 
 @bp.route("/proxy/mcp/<int:server_id>", methods=["GET", "POST", "DELETE", "OPTIONS"])
 def user_proxy_mcp_oauth(server_id):
-    """Tokenless MCP relay — requires OAUTH_ENABLED and a Bearer credential.
-
-    MCP clients discover the Authorization Server via the 401
-    WWW-Authenticate challenge / Protected Resource Metadata, complete
-    the OAuth dance, then call this URL with Authorization: Bearer."""
+    """Tokenless MCP relay: the URL carries no secret, the caller presents
+    Authorization: Bearer - an OAuth access token when OAUTH_ENABLED (clients
+    discover the Authorization Server from the 401 challenge), or a personal
+    API token with the ``proxy:access`` scope (always). The second makes the
+    secret-free URL available without running an OAuth server, which is what
+    lets a `.mcp.json` be committed to git (docs/AUDIT-2026-11.md section 8).
+    PROXY_BEARER_ENABLED=false turns the route off unless OAuth is on."""
     if request.method == "OPTIONS":
         return Response(status=204)
 
-    if not current_app.config.get("OAUTH_ENABLED"):
+    oauth_on = bool(current_app.config.get("OAUTH_ENABLED"))
+    if not oauth_on and not current_app.config.get("PROXY_BEARER_ENABLED", True):
         abort(404)
 
     user = _resolve_bearer_proxy_user()
     if user is None:
-        from . import oauth
+        if oauth_on:
+            from . import oauth
 
-        return oauth.oauth_unauthorized_response(server_id)
+            return oauth.oauth_unauthorized_response(server_id)
+        response = jsonify({"error": "invalid_token", "error_description": "Bearer token required"})
+        response.status_code = 401
+        response.headers["WWW-Authenticate"] = 'Bearer realm="mcprack"'
+        return response
 
     return _serve_user_proxy_mcp(user, server_id)
 
@@ -934,7 +951,27 @@ def _selected_server_connectors(user):
     return [_server_connector(user, server) for server in _selected_enabled_allowed_servers(user)]
 
 
-def _build_client_config_json(client, user=None):
+# Clients whose generated file must not contain the per-user path token: they
+# get the secret-free Bearer URL instead.
+BEARER_CLIENTS = frozenset({"claude-code"})
+
+
+def _bearer_relay_url(server):
+    return _external_proxy_url("catalog.user_proxy_mcp_oauth", server_id=server.id)
+
+
+def _claude_code_uses_header(auth=None):
+    """Whether a Claude Code file carries the `Authorization: Bearer
+    ${MCPRACK_TOKEN}` header. With OAuth on, Claude Code does the login itself
+    and the file has no header; `auth=token` asks for the header anyway."""
+    if auth == "token":
+        return True
+    if auth == "oauth":
+        return False
+    return not current_app.config.get("OAUTH_ENABLED")
+
+
+def _build_client_config_json(client, user=None, auth=None):
     """Resolve `user`'s (default: the current user) selected+enabled servers
     into a rendered client config, as a pretty-printed JSON string. Returns
     (config_json, filename, error_message) — config_json is None and
@@ -972,7 +1009,7 @@ def _build_client_config_json(client, user=None):
         # string is a bearer credential for user_proxy_mcp — writing it
         # to a log file or stderr would leak a usable access credential
         # outside the config the user actually asked for.
-        relay_url = _proxy_relay_url(user, server)
+        relay_url = _bearer_relay_url(server) if client in BEARER_CLIENTS else _proxy_relay_url(user, server)
         entries.append(
             {
                 "name": server.name,
@@ -986,7 +1023,10 @@ def _build_client_config_json(client, user=None):
             }
         )
 
-    payload = render_fn(entries)
+    if client == "claude-code":
+        payload = render_fn(entries, header=_claude_code_uses_header(auth))
+    else:
+        payload = render_fn(entries)
     return json.dumps(payload, indent=2), filename, None
 
 
@@ -994,7 +1034,7 @@ def _build_client_config_json(client, user=None):
 @login_required
 def download(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename, error_message = _build_client_config_json(client)
+        config_json, filename, error_message = _build_client_config_json(client, auth=request.args.get("auth"))
     if config_json is None:
         flash(error_message, "error")
         audit.log_audit_event(
@@ -1018,11 +1058,18 @@ def download(client):
 @login_required
 def view(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename, error_message = _build_client_config_json(client)
+        config_json, filename, error_message = _build_client_config_json(client, auth=request.args.get("auth"))
     if config_json is None:
         flash(error_message, "error")
         return redirect(url_for("catalog.index"))
 
+    commands = None
+    if client == "claude-code":
+        servers = json.loads(config_json)["mcpServers"]
+        commands = claude_code_commands(
+            [{"name": name, "url": entry["url"]} for name, entry in servers.items()],
+            header=any("headers" in entry for entry in servers.values()),
+        )
     return render_template(
-        "view_config.html", client=client, filename=filename, config_json=config_json
+        "view_config.html", client=client, filename=filename, config_json=config_json, commands=commands
     )
