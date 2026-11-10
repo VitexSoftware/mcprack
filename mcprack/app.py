@@ -96,6 +96,15 @@ def create_app(config_object=Config):
     app.config.from_object(config_object)
     _enforce_secret_key(app)
     _derive_trusted_hosts(app)
+    if (
+        app.config.get("LDAP_ENABLED")
+        and not str(app.config.get("LDAP_SERVER", "")).lower().startswith("ldaps://")
+        and not app.config.get("LDAP_STARTTLS")
+    ):
+        app.logger.warning(
+            "LDAP is enabled over unencrypted ldap://: directory passwords (and the bind password) cross "
+            "the network in clear text. Use ldaps:// or set LDAP_STARTTLS=true."
+        )
 
     db.init_app(app)
     migrate.init_app(app, db, directory=MIGRATIONS_DIR)

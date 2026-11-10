@@ -116,6 +116,13 @@ class Config:
     # it, any directory account is provisioned an mcprack account on first
     # login (it sees no servers until granted, see STRICT_SERVER_PERMISSIONS).
     LDAP_REQUIRED_GROUP = os.environ.get("LDAP_REQUIRED_GROUP", "")
+    # Transport security (docs/AUDIT-2026-11.md B-11). Use ldaps:// in
+    # LDAP_SERVER, or keep ldap:// and set LDAP_STARTTLS=true. The directory's
+    # certificate is verified (LDAP_CA_FILE = the CA bundle to verify against,
+    # default: the system store); LDAP_TLS_VALIDATE=false is for a lab only.
+    LDAP_STARTTLS = os.environ.get("LDAP_STARTTLS", "false").lower() in ("true", "1", "yes")
+    LDAP_CA_FILE = os.environ.get("LDAP_CA_FILE", "")
+    LDAP_TLS_VALIDATE = os.environ.get("LDAP_TLS_VALIDATE", "true").lower() in ("true", "1", "yes")
     LDAP_BIND_DN = os.environ.get("LDAP_BIND_DN", "")
     LDAP_BIND_PASSWORD = os.environ.get("LDAP_BIND_PASSWORD", "")
 

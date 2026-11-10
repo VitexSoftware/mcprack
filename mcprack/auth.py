@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import ssl
 from functools import wraps
 from urllib.parse import urlparse
 
@@ -140,13 +141,25 @@ def _ldap_authenticate(username, password):
 
     cfg = current_app.config
     # Set connect_timeout to 5 seconds to prevent worker hangs
-    server = ldap3.Server(cfg["LDAP_SERVER"], get_info=None, connect_timeout=5)
+    tls_in_use = cfg["LDAP_SERVER"].lower().startswith("ldaps://") or cfg.get("LDAP_STARTTLS")
+    tls = None
+    if tls_in_use:
+        tls = ldap3.Tls(
+            validate=ssl.CERT_REQUIRED if cfg.get("LDAP_TLS_VALIDATE", True) else ssl.CERT_NONE,
+            ca_certs_file=cfg.get("LDAP_CA_FILE") or None,
+        )
+    server_kwargs = {"get_info": None, "connect_timeout": 5}
+    if tls is not None:
+        server_kwargs["tls"] = tls
+    server = ldap3.Server(cfg["LDAP_SERVER"], **server_kwargs)
+    # StartTLS: upgrade the plain connection BEFORE any credential is sent
+    auto_bind = ldap3.AUTO_BIND_TLS_BEFORE_BIND if cfg.get("LDAP_STARTTLS") else True
     search_filter = cfg["LDAP_USER_FILTER"] % {"user": escape_filter_chars(username)}
 
     try:
         bind_dn = cfg["LDAP_BIND_DN"] or None
         bind_pw = cfg["LDAP_BIND_PASSWORD"] or None
-        with ldap3.Connection(server, user=bind_dn, password=bind_pw, auto_bind=True) as search_conn:
+        with ldap3.Connection(server, user=bind_dn, password=bind_pw, auto_bind=auto_bind) as search_conn:
             search_conn.search(
                 search_base=cfg["LDAP_USER_OU"],
                 search_filter=search_filter,
@@ -157,7 +170,7 @@ def _ldap_authenticate(username, password):
             entry = search_conn.entries[0]
             user_dn = entry.entry_dn
 
-        with ldap3.Connection(server, user=user_dn, password=password, auto_bind=True):
+        with ldap3.Connection(server, user=user_dn, password=password, auto_bind=auto_bind):
             pass
     except LDAPBindError:
         return None
