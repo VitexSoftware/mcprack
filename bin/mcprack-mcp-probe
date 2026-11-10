@@ -28,6 +28,7 @@ so use a path-token URL (still valid) when diagnosing those installs.
 
 import argparse
 import json
+import os
 import re
 import sys
 import urllib.error
@@ -45,7 +46,7 @@ def redact(url):
     return _TOKEN_RE.sub(r"\1<token>\2", url)
 
 
-def post(url, payload, timeout, session=None):
+def post(url, payload, timeout, session=None, bearer=None):
     """Send one JSON-RPC message. Returns (status, parsed, session_id, raw).
 
     `parsed` is the first JSON-RPC object found in the body, handling both
@@ -59,6 +60,8 @@ def post(url, payload, timeout, session=None):
     request.add_header("Accept", "application/json, text/event-stream")
     if session:
         request.add_header("mcp-session-id", session)
+    if bearer:
+        request.add_header("Authorization", f"Bearer {bearer}")
 
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -120,9 +123,10 @@ def main():
 URL is a per-user proxy URL from a downloaded client config
 (/view/claude, /view/copilot), e.g.
 https://mcprack.example.com/proxy/mcp/<token>/7 - the path token is
-redacted from all output. With OAUTH_ENABLED prefer a path-token URL for
-probing (tokenless /proxy/mcp/<id> needs Authorization: Bearer, which this
-tool does not send). Exit status is 0 only if every step succeeded.
+redacted from all output. For the tokenless URL (/proxy/mcp/<id>, the one a
+Claude Code .mcp.json uses) pass --bearer: the API token (scope proxy:access)
+is read from the MCPRACK_TOKEN environment variable - never from the command
+line, where `ps` would show it. Exit status is 0 only if every step succeeded.
 """,
     )
     parser.add_argument("url", help="MCP endpoint URL")
@@ -144,7 +148,19 @@ tool does not send). Exit status is 0 only if every step succeeded.
         help="per-request timeout in seconds (default: 120; a cold proxy start can take ~15s)",
     )
     parser.add_argument("--raw", action="store_true", help="print the raw response body")
+    parser.add_argument(
+        "--bearer",
+        action="store_true",
+        help="send Authorization: Bearer $MCPRACK_TOKEN (the credential of a tokenless /proxy/mcp/<id> URL)",
+    )
     args = parser.parse_args()
+
+    bearer = None
+    if args.bearer:
+        bearer = os.environ.get("MCPRACK_TOKEN", "").strip()
+        if not bearer:
+            print("FAIL --bearer needs the token in the MCPRACK_TOKEN environment variable")
+            return 2
 
     url = args.url
     print(f"endpoint: {redact(url)}")
@@ -162,9 +178,17 @@ tool does not send). Exit status is 0 only if every step succeeded.
             },
         },
         args.timeout,
+        bearer=bearer,
     )
     if status is None:
         return fail("initialize: could not connect", raw)
+    if status == 401:
+        hint = (
+            "the token was not accepted - it must be an API token with the proxy:access scope, not expired or revoked"
+            if bearer
+            else "this URL needs a credential: use a path-token URL, or --bearer with MCPRACK_TOKEN set"
+        )
+        return fail(f"initialize: HTTP 401 - {hint}", raw)
     if status != 200 or not parsed:
         return fail(f"initialize: HTTP {status}", raw)
     if "error" in parsed:
@@ -186,7 +210,7 @@ tool does not send). Exit status is 0 only if every step succeeded.
 
     # Required by the spec before any further request; some servers reject
     # everything else until they have seen it.
-    post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, args.timeout, session)
+    post(url, {"jsonrpc": "2.0", "method": "notifications/initialized"}, args.timeout, session, bearer=bearer)
 
     if args.tools:
         method, params = "tools/list", None
@@ -210,7 +234,7 @@ tool does not send). Exit status is 0 only if every step succeeded.
     if params is not None:
         payload["params"] = params
 
-    status, parsed, _, raw = post(url, payload, args.timeout, session)
+    status, parsed, _, raw = post(url, payload, args.timeout, session, bearer=bearer)
     if status is None:
         return fail(f"{method}: could not connect", raw)
     if not parsed:

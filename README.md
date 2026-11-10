@@ -155,7 +155,7 @@ for humans is still a separate future improvement.)
 
 - **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed
 - **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden, or locally encrypted if Vaultwarden isn't configured)
-- **Multi-client support** — Generate configs for Claude Desktop, Cursor, VS Code / GitHub Copilot (`claude`, `cursor`, `vscode`/`copilot` API clients)
+- **Multi-client support** — Generate configs for Claude Desktop, Claude Code (secret-free `.mcp.json`, see [Claude Code](#claude-code)), Cursor, VS Code / GitHub Copilot (`claude`, `claude-code`, `cursor`, `vscode`/`copilot` API clients)
 - **Client sync utilities** — Companion packages `mcprack-sync-claude`, `mcprack-sync-cursor`, and `mcprack-sync-vscode` pull `/api/v1/me/config/<client>` with a personal API token and keep the local IDE/desktop config files up to date (optional systemd user timers)
 - **Admin config hand-off** — Admins can view and download any user's client config from Admin → Users, for users who never log into the web UI themselves
 - **Per-user proxy** — Every user connects remotely; stdio servers are spawned on demand, one isolated instance per (user, server) pair, with credentials resolved at spawn time — never embedded in a downloaded config
@@ -915,6 +915,58 @@ sees `Upstream MCP server did not respond within 10s` even though the
 backend would have answered, which can mask the backend's own error.
 
 See `debian/README.Debian` for more detail.
+
+### Claude Code
+
+Claude Code (the CLI) has its own format, separate from Claude Desktop's
+`claude_desktop_config.json`. mcprack generates it as the **`claude-code`**
+client (`/download/claude-code`, `/view/claude-code`,
+`GET /api/v1/me/config/claude-code`):
+
+```json
+{
+  "mcpServers": {
+    "zabbix": {
+      "type": "http",
+      "url": "https://mcprack.example.com/proxy/mcp/8",
+      "headers": { "Authorization": "Bearer ${MCPRACK_TOKEN}" }
+    }
+  }
+}
+```
+
+The file contains **no secret** — the URL is the plain relay route and the
+credential is read by Claude Code from the `MCPRACK_TOKEN` environment
+variable (`${VAR}` is expanded in `url` and `headers`). That makes it safe to
+save as `.mcp.json` in a project and commit (project scope; Claude Code asks
+each person to approve a project-scoped server before first use). The name is
+deliberately `MCPRACK_TOKEN`: Claude Code reads credential-looking variables
+such as `ANTHROPIC_API_KEY`, `NPM_TOKEN` or `HTTPS_PROXY` as empty inside the
+`url`/`headers` of a remote server.
+
+1. Create a token: Account → API tokens (or `POST /api/v1/tokens`) with the
+   scope **`proxy:access`**. Tokens expire after `API_TOKEN_DEFAULT_EXPIRY_DAYS`
+   (90) unless you ask for another lifetime.
+2. `export MCPRACK_TOKEN=<token>` (shell profile, direnv, a secret manager —
+   not the repository).
+3. Either save the download as `.mcp.json`, or use the copyable commands on the
+   *View & Copy* page, which add the servers for all your projects:
+
+       claude mcp add --transport http --scope user zabbix https://mcprack.example.com/proxy/mcp/8 --header "Authorization: Bearer $MCPRACK_TOKEN"
+
+   (`--scope local` is the default of `claude mcp add` and keeps it to the
+   current project in `~/.claude.json`; `--scope project` writes `.mcp.json`.)
+4. In Claude Code run `/mcp` to see the status. A server that is `failed`
+   can be diagnosed with `mcprack-mcp-probe` (below) using the same token.
+
+With [Optional MCP OAuth](#optional-mcp-oauth) enabled the generated file has
+**no `headers` at all**: Claude Code starts the OAuth login itself (`/mcp` →
+authenticate, or `claude mcp login`); `?auth=token` asks for the token header
+anyway. The tokenless route `/proxy/mcp/<id>` accepts an API token with
+`proxy:access` even when OAuth is off (`PROXY_BEARER_ENABLED=false` switches
+that off). The older path-token URL (`/proxy/mcp/<token>/<id>`, still used by
+the Claude Desktop, Cursor and VS Code downloads) carries a signed secret in
+the URL — do not commit those files.
 
 ### Diagnosing a proxy URL — `mcprack-mcp-probe`
 
