@@ -166,13 +166,36 @@ def test_post_logout_is_csrf_protected(app, erin):
     assert resp.status_code == 400
 
 
-def test_demo_mode_logout_does_not_log_other_visitors_out(app, erin):
+def test_demo_mode_logout_of_the_shared_login_does_not_log_other_visitors_out(app):
     """The demo login is shared: a POST /logout must only end this browser's
     session, not everybody's."""
     app.config["DEMO_MODE"] = True
+    app.config["DEMO_USERNAME"] = "demo"
+    with app.app_context():
+        shared = User(username="demo", auth_type="local")
+        shared.set_password("demo-long-password-1")
+        db.session.add(shared)
+        db.session.commit()
+
+    def login():
+        client = app.test_client()
+        resp = client.post("/login", data={"username": "demo", "password": "demo-long-password-1"})
+        return client, re.search(r"session=([^;]+)", " ".join(resp.headers.getlist("Set-Cookie"))).group(1)
+
+    first, _ = login()
+    _, other_cookie = login()
+
+    first.post("/logout")
+
+    assert _replay(app, other_cookie) == 200
+
+
+def test_demo_mode_does_not_weaken_logout_for_other_accounts(app, erin):
+    app.config["DEMO_MODE"] = True
+    app.config["DEMO_USERNAME"] = "demo"
     first, _ = _login(app)
     _, other_cookie = _login(app)
 
     first.post("/logout")
 
-    assert _replay(app, other_cookie) == 200
+    assert _replay(app, other_cookie) == 302
