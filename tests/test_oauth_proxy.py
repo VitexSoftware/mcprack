@@ -26,6 +26,7 @@ class OAuthConfig(Config):
     WTF_CSRF_ENABLED = False
     RATELIMIT_ENABLED = False
     OAUTH_ENABLED = True
+    STRICT_SERVER_PERMISSIONS = False  # these tests predate the fail-closed default
     PUBLIC_BASE_URL = "https://mcprack.test"
     BW_SERVER = ""
     BW_CLIENTID = ""

@@ -129,7 +129,7 @@ def _ldap_authenticate(username, password):
             search_conn.search(
                 search_base=cfg["LDAP_USER_OU"],
                 search_filter=search_filter,
-                attributes=["givenName", "sn", "mail"],
+                attributes=["givenName", "sn", "mail", "memberOf"],
             )
             if not search_conn.entries:
                 return None
@@ -147,6 +147,15 @@ def _ldap_authenticate(username, password):
     def _attr(name):
         values = entry[name].values if name in entry else []
         return values[0] if values else None
+
+    # Optional group restriction (LDAP_REQUIRED_GROUP): authenticating against
+    # the directory is not enough, the account must be in the group.
+    required_group = (cfg.get("LDAP_REQUIRED_GROUP") or "").strip().lower()
+    if required_group:
+        groups = {str(group).strip().lower() for group in (entry["memberOf"].values if "memberOf" in entry else [])}
+        if required_group not in groups:
+            current_app.logger.info("LDAP login of '%s' refused: not a member of the required group", username)
+            return None
 
     return {
         "first_name": _attr("givenName"),

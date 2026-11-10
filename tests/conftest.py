@@ -16,6 +16,10 @@ class TestConfig(Config):
     # The existing suite uses free-form override keys (REGION, CUSTOM, ...);
     # tests of the production default ("credentials") set it explicitly.
     OVERRIDE_UNDECLARED_KEYS = "any"
+    # The existing suite predates the fail-closed default and relies on users
+    # seeing every enabled server; tests of the production default and of
+    # strict behaviour set it explicitly (tests/test_strict_server_permissions.py).
+    STRICT_SERVER_PERMISSIONS = False
     BW_SERVER = "https://vault.example.test"
     BW_CLIENTID = "test-client-id"
     BW_CLIENTSECRET = "test-client-secret"

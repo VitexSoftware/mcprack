@@ -58,13 +58,14 @@ class Config:
     # denylist in env_policy.py (intranet / trusted-users opt-in).
     OVERRIDE_UNDECLARED_KEYS = os.environ.get("OVERRIDE_UNDECLARED_KEYS", "credentials").strip().lower()
 
-    # False (default) preserves existing installs' behavior: a user with no
-    # UserServerPermission rows at all sees every enabled server. Set true
-    # for a fail-closed internet-facing deployment - but only after
-    # confirming every user (including admins) has been explicitly granted
-    # access to the servers they need via Admin -> Users, since flipping
-    # this with no permission rows granted locks everyone out of everything.
-    STRICT_SERVER_PERMISSIONS = os.environ.get("STRICT_SERVER_PERMISSIONS", "false").lower() in ("true", "1", "yes")
+    # True (default, fail-closed): a user with no UserServerPermission rows
+    # sees NO server until an admin grants access (Admin -> Users, or apply a
+    # template) - docs/AUDIT-2026-11.md A-06. The upgrade migration
+    # `materialize_server_permissions` gives every existing user an explicit
+    # row per enabled server, so nobody loses what they had. Set false only
+    # for a trusted intranet where every user should implicitly see every
+    # enabled server (the behaviour before this release).
+    STRICT_SERVER_PERMISSIONS = os.environ.get("STRICT_SERVER_PERMISSIONS", "true").lower() in ("true", "1", "yes")
 
     # Hosts the application answers to (Flask TRUSTED_HOSTS; comma separated,
     # a leading dot allows subdomains). Empty = derived from PUBLIC_BASE_URL
@@ -90,6 +91,12 @@ class Config:
     LDAP_BASE_DN = os.environ.get("LDAP_BASE_DN", "dc=spojent,dc=cz")
     LDAP_USER_OU = os.environ.get("LDAP_USER_OU", "ou=Users,dc=spojent,dc=cz")
     LDAP_USER_FILTER = os.environ.get("LDAP_USER_FILTER", "(sAMAccountName=%(user)s)")
+    # Optional: DN of a group (matched against the user's memberOf values,
+    # case-insensitively) whose members are the only ones allowed to log in
+    # through LDAP. Empty = every account the directory authenticates. Without
+    # it, any directory account is provisioned an mcprack account on first
+    # login (it sees no servers until granted, see STRICT_SERVER_PERMISSIONS).
+    LDAP_REQUIRED_GROUP = os.environ.get("LDAP_REQUIRED_GROUP", "")
     LDAP_BIND_DN = os.environ.get("LDAP_BIND_DN", "")
     LDAP_BIND_PASSWORD = os.environ.get("LDAP_BIND_PASSWORD", "")
 
