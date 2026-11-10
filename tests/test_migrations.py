@@ -15,6 +15,10 @@ HARDENING_MIGRATIONS = [
     ("add_user_token_version", "add_user_override_env_config", "users", "token_version"),
     ("add_user_session_version", "materialize_server_permissions", "users", "session_version"),
     ("add_login_throttle", "add_user_session_version", "login_throttle", "locked_until"),
+    ("add_user_mfa", "add_login_throttle", "users", "totp_secret"),
+    ("add_user_mfa", "add_login_throttle", "users", "totp_enabled"),
+    ("add_user_mfa", "add_login_throttle", "users", "totp_last_step"),
+    ("add_user_mfa", "add_login_throttle", "users", "recovery_codes"),
 ]
 
 
@@ -76,3 +80,28 @@ def test_materialize_server_permissions_keeps_everybodys_current_access(file_app
     downgrade(revision="add_user_token_version")  # a no-op for data
     upgrade()
     assert rows() == [(1, 10, True), (1, 11, True), (2, 10, False)]  # not duplicated
+
+
+def test_add_user_mfa_leaves_existing_accounts_without_a_second_factor(file_app):
+    """The upgrade from a release without MFA: every existing account keeps
+    working with the password alone (MFA off, nothing stored), and the
+    migration can be undone without losing the account."""
+    from sqlalchemy import text
+
+    downgrade(revision="add_login_throttle")
+    assert "totp_enabled" not in _columns("users")
+    with db.engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, username, auth_type, is_admin, is_active, token_version, session_version) "
+                          "VALUES (1, 'old', 'local', 1, 1, 5, 7)"))
+
+    upgrade()
+
+    with db.engine.begin() as conn:
+        row = conn.execute(text("SELECT totp_enabled, totp_last_step, totp_secret, recovery_codes, is_admin FROM users WHERE id = 1")).one()
+    assert not row.totp_enabled and row.totp_last_step == 0 and row.totp_secret is None and row.recovery_codes is None
+    assert row.is_admin  # untouched
+
+    downgrade(revision="add_login_throttle")
+    with db.engine.begin() as conn:
+        assert conn.execute(text("SELECT username FROM users WHERE id = 1")).scalar() == "old"
+    upgrade()
