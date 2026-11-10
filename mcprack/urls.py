@@ -19,8 +19,10 @@ _SAFE_PREFIX = re.compile(r"^(?:/[A-Za-z0-9._~-]+)*$")
 
 
 def sanitize_script_name(wsgi_app):
-    """WSGI middleware, applied after ProxyFix: drop a SCRIPT_NAME that is not a
-    plain path prefix (docs/AUDIT-2026-11.md C-04)."""
+    """WSGI middleware: drop a SCRIPT_NAME that is not a plain path prefix
+    (docs/AUDIT-2026-11.md C-04). It must run AFTER ProxyFix has turned
+    X-Forwarded-Prefix into SCRIPT_NAME, i.e. sit *inside* it - see
+    `trust_one_proxy_hop`, which is the only place the two are composed."""
 
     def middleware(environ, start_response):
         prefix = environ.get("SCRIPT_NAME", "")
@@ -38,3 +40,20 @@ def external_url(endpoint, **values):
     if base_url:
         return f"{base_url}{url_for(endpoint, **values)}"
     return url_for(endpoint, _external=True, **values)
+
+
+def trust_one_proxy_hop(flask_app):
+    """Put the reverse-proxy handling in front of `flask_app` (wsgi.py calls
+    this; tests call it too, so the order is exercised, not just described).
+
+    ProxyFix trusts exactly one hop of X-Forwarded-For/-Proto/-Host/-Prefix.
+    The sanitizer is wrapped *inside* it: WSGI middleware run outermost-first,
+    so only a sanitizer that is called by ProxyFix sees the SCRIPT_NAME
+    ProxyFix has just derived from the client-controllable header. (Wrapped
+    outside, it ran first, saw an empty SCRIPT_NAME and did nothing.)"""
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
+    flask_app.wsgi_app = ProxyFix(
+        sanitize_script_name(flask_app.wsgi_app), x_for=1, x_proto=1, x_host=1, x_prefix=1
+    )
+    return flask_app

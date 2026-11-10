@@ -3,12 +3,13 @@ client-supplied X-Forwarded-Prefix, and the permissions of a downloaded config."
 
 import os
 import stat
+from urllib.parse import urlsplit
 
 import pytest
 
 from mcprack.extensions import db
 from mcprack.models import McpServer, User, UserServerSelection
-from mcprack.urls import sanitize_script_name
+from mcprack.urls import sanitize_script_name, trust_one_proxy_hop
 
 
 def _login(app, client):
@@ -98,3 +99,45 @@ def test_a_pre_existing_world_readable_file_is_tightened(app, tmp_path):
     assert result.exit_code == 0, result.output
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
     assert "mcpServers" in target.read_text()
+
+
+# --- the order of the middleware matters: exercised through the real stack ----------------------
+
+
+@pytest.mark.parametrize("prefix", ["//evil.example", "/../x", "javascript:alert(1)", "/a\\b", "///"])
+def test_a_hostile_forwarded_prefix_never_reaches_a_redirect(app, prefix):
+    """A request to a protected page redirects to the login page through
+    url_for(), which prepends SCRIPT_NAME. Whatever the client sent in
+    X-Forwarded-Prefix, the Location must stay on this host."""
+    trust_one_proxy_hop(app)
+
+    response = app.test_client().get("/", headers={"X-Forwarded-Prefix": prefix})
+
+    assert response.status_code in (301, 302, 303, 307)
+    target = urlsplit(response.headers["Location"])
+    assert target.scheme == "" and target.netloc == "", response.headers["Location"]  # stays on this host
+    assert target.path == "/login"
+    assert "evil" not in response.headers["Location"] and "javascript" not in response.headers["Location"]
+
+
+def test_a_legitimate_forwarded_prefix_still_mounts_the_app(app):
+    trust_one_proxy_hop(app)
+
+    response = app.test_client().get("/", headers={"X-Forwarded-Prefix": "/mcprack"})
+
+    assert urlsplit(response.headers["Location"]).path == "/mcprack/login"
+
+
+def test_the_sanitizer_must_sit_inside_proxyfix(app):
+    """Guards the ordering itself: composed the other way round the sanitizer
+    runs before ProxyFix has set SCRIPT_NAME and the hostile prefix gets
+    through. This is the bug the first version of this fix had."""
+    from werkzeug.middleware.proxy_fix import ProxyFix
+
+    wrong = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    wrong = sanitize_script_name(wrong)
+    app.wsgi_app = wrong
+
+    response = app.test_client().get("/", headers={"X-Forwarded-Prefix": "//evil.example"})
+
+    assert "evil.example" in response.headers["Location"]  # documents why the order is what it is
