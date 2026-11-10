@@ -1,3 +1,35 @@
+mcprack (1.7.0-1) UNRELEASED; urgency=medium
+
+  * Security hardening for internet-facing deployments (docs/AUDIT-2026-11.md).
+  * UPGRADE NOTES: STRICT_SERVER_PERMISSIONS now defaults to true (a data
+    migration grants every existing user the servers enabled today); passwords
+    need 12+ characters; weak or placeholder SECRET_KEY values refuse to start
+    (rotate with SECRET_KEY_FALLBACKS); per-user variable overrides are limited
+    to declared and credential-style names (OVERRIDE_UNDECLARED_KEYS=any
+    relaxes it); installs require pinned versions (INSTALL_REQUIRE_PINNED).
+  * DEMO_MODE guard now covers the REST API and account/password changes.
+  * Proxy access: disabled users are refused, per-user token revocation (UI,
+    API, `mcprack user revoke-tokens`), disabling/deleting a user stops their
+    MCP servers; MCP servers no longer inherit mcprack's secrets and keep their
+    credentials in /run/mcprack (RuntimeDirectory), removed when reaped.
+  * Relay forwards only protocol headers (no Authorization/Cookie to backends).
+  * Login: database-backed throttling, server-side session revocation (logout,
+    password change), clean session at login, CSRF token for cookie-authenticated
+    REST API writes, password-reset links from PUBLIC_BASE_URL with TRUSTED_HOSTS,
+    reset tokens without the password hash, LDAPS/StartTLS with certificate
+    validation and LDAP_REQUIRED_GROUP.
+  * OAuth: redirect URI policy, consent page shows the redirect, capped and
+    pruned registrations, hashed tokens, working refresh tokens, audit events.
+  * Vaultwarden session key no longer on the bw command line or in error
+    messages; users see a generic message for credential-store failures.
+  * Installer runs without a shell and validates every input.
+  * systemd: gthread workers, RuntimeDirectory; Apache vhost: dead-end default
+    vhost, forwarded-header hygiene, size limits; Docker demo runs as non-root
+    with dropped capabilities; postinst hides password input, quotes env values
+    and passes the admin password in a 0600 file.
+
+ -- Vítězslav Dvořák <info@vitexsoftware.cz>  Tue, 10 Nov 2026 17:54:26 +0100
+
 mcprack (1.6.0-1) unstable; urgency=medium
 
   * Release 1.6.0

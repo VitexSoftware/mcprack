@@ -4,15 +4,27 @@ After=network.target
 
 [Service]
 Environment=GUNICORN_BIND=127.0.0.1:8912
+Environment=GUNICORN_THREADS=4
 EnvironmentFile=-/etc/mcprack/env
 User=mcprack
 Group=mcprack
 WorkingDirectory=/usr/lib/mcprack
 StateDirectory=mcprack
+# tmpfs, private to the service, removed when it stops: the per-user MCP proxy
+# instances keep their resolved credentials and pid files here, so neither
+# survives a restart (docs/AUDIT-2026-11.md B-02, B-12).
+RuntimeDirectory=mcprack
+RuntimeDirectoryMode=0700
+# Credentials of the previous release lived in a persistent directory.
+ExecStartPre=-/bin/rm -rf /var/lib/mcprack/user-proxies
+# gthread instead of sync: one slow MCP server (a cold start holds a request
+# for up to ~15 s) must not occupy a whole worker - four concurrent cold
+# starts used to take the entire application, login included, offline.
 ExecStart=/usr/bin/gunicorn \
     --bind ${GUNICORN_BIND} \
     --workers 4 \
-    --worker-class sync \
+    --worker-class gthread \
+    --threads ${GUNICORN_THREADS} \
     --worker-tmp-dir /dev/shm \
     --timeout 30 \
     --access-logfile /var/log/mcprack/access.log \

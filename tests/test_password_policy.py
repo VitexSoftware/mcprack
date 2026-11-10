@@ -231,3 +231,27 @@ def test_create_admin_command_applies_the_policy(app):
         weak = runner.invoke(args=["create-admin", "--username", "root2", "--password", "1234", "--email", ""])
         assert weak.exit_code != 0
         assert User.query.filter_by(username="root2").first() is None
+
+
+def test_create_admin_reads_the_password_from_a_file(app, tmp_path):
+    """postinst hands the generated password over in a 0600 file instead of on
+    the command line, where `ps` would show it."""
+    secret = tmp_path / "pw"
+    secret.write_text("a-generated-long-password-1\n")
+    with app.app_context():
+        runner = app.test_cli_runner()
+
+        result = runner.invoke(args=["create-admin", "--username", "root3", "--password-file", str(secret), "--email", ""])
+
+        assert result.exit_code == 0, result.output
+        assert User.query.filter_by(username="root3").first().check_password("a-generated-long-password-1")
+
+
+def test_create_admin_applies_the_policy_to_a_password_file_too(app, tmp_path):
+    secret = tmp_path / "pw"
+    secret.write_text("short\n")
+    with app.app_context():
+        result = app.test_cli_runner().invoke(args=["create-admin", "--username", "root4", "--password-file", str(secret)])
+
+        assert result.exit_code != 0
+        assert User.query.filter_by(username="root4").first() is None

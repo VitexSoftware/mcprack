@@ -17,6 +17,11 @@ RUN apt-get update \
 
 EXPOSE 8913
 
+# Do not run the application - and every MCP server it spawns - as root. The
+# mcprack package creates this user and owns /var/lib/mcprack
+# (docs/AUDIT-2026-11.md C-03).
+USER mcprack
+
 ENTRYPOINT ["gunicorn", \
     "--bind", "127.0.0.1:8913", \
     "--workers", "4", \

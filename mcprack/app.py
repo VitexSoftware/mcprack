@@ -431,12 +431,24 @@ def register_cli(app):
 
     @app.cli.command("create-admin")
     @click.option("--username", prompt=True)
-    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    @click.option("--password", default=None, help="Password (visible in the process list - prefer --password-file).")
+    @click.option(
+        "--password-file",
+        type=click.Path(exists=True, dir_okay=False, readable=True),
+        default=None,
+        help="Read the password from this file (first line). Without either option you are prompted.",
+    )
     @click.option("--email", default="")
-    def create_admin(username, password, email):
+    def create_admin(username, password, password_file, email):
         """Create the first local admin account."""
         from . import passwords
         from .models import User
+
+        if password_file:
+            with open(password_file, encoding="utf-8") as handle:
+                password = handle.readline().rstrip("\r\n")
+        elif password is None:
+            password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
 
         if User.query.filter_by(username=username).first():
             click.echo(f"User '{username}' already exists.")
