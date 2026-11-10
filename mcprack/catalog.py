@@ -120,6 +120,23 @@ def _is_empty_tools_list(request_body, payload):
     return isinstance(result, dict) and result.get("tools") == []
 
 
+# Only protocol headers cross the relay (docs/AUDIT-2026-11.md A-08). The
+# caller's own Authorization/Cookie/X-Forwarded-* must never reach a backend -
+# the MCP spec forbids a server to "accept or transit" tokens that were not
+# issued for it, and a backend operator would otherwise collect valid mcprack
+# tokens. The backend's own credential is injected from the server's
+# configuration instead (extra_headers).
+_FORWARDED_REQUEST_HEADERS = frozenset(
+    {"accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"}
+)
+# Same on the way back: no Set-Cookie, WWW-Authenticate (it would start an
+# OAuth dance against the backend's authorization server), CORS, CSP, HSTS or
+# redirects from a backend into mcprack's own origin.
+_FORWARDED_RESPONSE_HEADERS = frozenset(
+    {"content-type", "mcp-session-id", "mcp-protocol-version", "cache-control", "retry-after", "content-encoding"}
+)
+
+
 def _relay_request(conn, path, extra_headers=None, server_name=None, transport="http"):
     """Forward the current Flask request onto an already-open http.client
     connection at `path`, and translate the upstream response (or a
@@ -131,19 +148,15 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
     server) - so both get the same timeout, header-stripping, and telemetry
     handling."""
     body = request.get_data()
-    headers = {}
-    for key, value in request.headers.items():
-        key_lower = key.lower()
-        if key_lower in {
-            "host",
-            "content-length",
-            "connection",
-            "transfer-encoding",
-            "cookie",
-        }:
-            continue
-        headers[key] = value
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() in _FORWARDED_REQUEST_HEADERS
+    }
     if extra_headers:
+        # replace, case-insensitively, anything the caller sent under that name
+        injected = {name.lower() for name in extra_headers}
+        headers = {k: v for k, v in headers.items() if k.lower() not in injected}
         headers.update(extra_headers)
 
     start_time = time.monotonic()
@@ -157,10 +170,8 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
             response = Response(payload, status=upstream.status)
 
             for key, value in upstream.getheaders():
-                key_lower = key.lower()
-                if key_lower in {"transfer-encoding", "connection", "keep-alive"}:
-                    continue
-                response.headers[key] = value
+                if key.lower() in _FORWARDED_RESPONSE_HEADERS:
+                    response.headers[key] = value
 
             result = "success" if upstream.status < 400 else "error"
             if result == "success" and _is_empty_tools_list(body, payload):
