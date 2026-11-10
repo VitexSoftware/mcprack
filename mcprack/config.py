@@ -67,6 +67,13 @@ class Config:
     # page - without this the rendered page would carry no backoff hint.
     RATELIMIT_HEADERS_ENABLED = True
 
+    # Extra environment variable NAMES a spawned MCP server process may inherit
+    # from mcprack's own environment (comma separated), on top of PATH, LANG,
+    # LC_*, HOME, proxy and CA-bundle settings. mcprack's secrets (SECRET_KEY,
+    # BW_*, LDAP_*, ...) can never be added here. Prefer the server's own
+    # configuration (Admin -> Servers) over this.
+    MCP_CHILD_ENV_ALLOW = os.environ.get("MCP_CHILD_ENV_ALLOW", "")
+
     # --- Package installer (docs/AUDIT-2026-11.md B-07) ---
     # Require an exact version / tag / digest for pip, npm and Docker installs.
     INSTALL_REQUIRE_PINNED = os.environ.get("INSTALL_REQUIRE_PINNED", "true").lower() in ("true", "1", "yes")
@@ -258,7 +265,7 @@ class Config:
     # Registrations are open to anyone who can reach the server, so they are
     # capped; clients that never received a token are dropped after this long.
     OAUTH_MAX_CLIENTS = int(os.environ.get("OAUTH_MAX_CLIENTS", "500"))
-    OAUTH_CLIENT_TTL_DAYS = int(os.environ.get("OAUTH_CLIENT_TTL_DAYS", "30"))
+    OAUTH_UNUSED_CLIENT_TTL_HOURS = int(os.environ.get("OAUTH_UNUSED_CLIENT_TTL_HOURS", "24"))
     OAUTH_ALLOW_INSECURE_TRANSPORT = os.environ.get(
         "OAUTH_ALLOW_INSECURE_TRANSPORT", "false"
     ).lower() in ("true", "1", "yes")

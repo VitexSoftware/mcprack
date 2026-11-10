@@ -103,6 +103,17 @@ def test_acceptable_redirect_uris(oauth_client, uri):
         "https://claude.ai/cb#frag",
         "http://localhost.attacker.invalid/cb",
         "http://127.0.0.1.attacker.invalid/cb",
+        "https://claude.ai\\@attacker.invalid/cb",  # backslash: parsers disagree about the host
+        "https://attacker.invalid\\.claude.ai/cb",
+        "https://claude.ai\\.attacker.invalid/cb",
+        "https://claude.ai:443@attacker.invalid/cb",
+        "https://cl\u0430ude.ai/cb",  # Cyrillic a
+        "https://claude.ai\u2024evil.invalid/cb",  # one-dot leader
+        "https://claude.ai:99999/cb",
+        "https://claude.ai:notaport/cb",
+        "https://claude.ai%2eevil.invalid/cb",
+        "https://-claude.ai/cb",
+        "http://localhost@attacker.invalid/cb",
     ],
 )
 def test_other_redirect_uris_are_refused(oauth_client, uri):
@@ -131,36 +142,50 @@ def test_too_many_redirect_uris_are_refused(oauth_client):
 # --- registration cap and pruning --------------------------------------------------
 
 
-def test_the_number_of_registered_clients_is_capped(oauth_app, oauth_client):
+def _age(client_id, seconds):
+    OAuthClient.query.filter_by(client_id=client_id).update({"client_id_issued_at": int(time.time()) - seconds})
+    db.session.commit()
+
+
+def test_a_full_table_evicts_the_oldest_unused_clients_instead_of_refusing(oauth_app, oauth_client):
+    """A cap that refused would let anybody fill it and lock every real
+    client out."""
+    oauth_app.config["OAUTH_MAX_CLIENTS"] = 3
+    ids = [_register(oauth_client, [f"http://localhost:{i + 1}/cb"]).get_json()["client_id"] for i in range(3)]
+    for position, client_id in enumerate(ids):
+        _age(client_id, 100 - position)  # ids[0] is the oldest
+
+    resp = _register(oauth_client, ["http://localhost:99/cb"])
+
+    assert resp.status_code in (200, 201)
+    assert OAuthClient.query.count() == 3
+    assert OAuthClient.query.filter_by(client_id=ids[0]).count() == 0  # the oldest went
+    assert OAuthClient.query.filter_by(client_id=ids[2]).count() == 1
+
+
+def test_unused_clients_expire_after_the_unused_ttl(oauth_app, oauth_client):
+    oauth_app.config["OAUTH_UNUSED_CLIENT_TTL_HOURS"] = 24
+    stale = _register(oauth_client, ["http://localhost:1/cb"]).get_json()["client_id"]
+    fresh = _register(oauth_client, ["http://localhost:2/cb"]).get_json()["client_id"]
+    _age(stale, 2 * 86400)
+
+    _register(oauth_client, ["http://localhost:3/cb"])
+
+    assert OAuthClient.query.filter_by(client_id=stale).count() == 0
+    assert OAuthClient.query.filter_by(client_id=fresh).count() == 1
+
+
+def test_clients_that_hold_tokens_are_never_evicted_and_a_table_of_them_refuses(oauth_app, oauth_client):
     oauth_app.config["OAUTH_MAX_CLIENTS"] = 2
-    for i in range(2):
-        assert _register(oauth_client, [f"http://localhost:{i + 1}/cb"]).status_code in (200, 201)
+    ids = [_register(oauth_client, [f"http://localhost:{i + 1}/cb"]).get_json()["client_id"] for i in range(2)]
+    for client_id in ids:
+        _age(client_id, 30 * 86400)
+        db.session.add(OAuthToken(client_id=client_id, token_type="Bearer", access_token=f"a{client_id}",
+                                  scope="mcp", issued_at=int(time.time()), expires_in=3600))
+    db.session.commit()
 
     assert _register(oauth_client, ["http://localhost:99/cb"]).status_code == 503
-
-
-def test_stale_unused_clients_are_pruned_to_make_room(oauth_app, oauth_client):
-    oauth_app.config["OAUTH_MAX_CLIENTS"] = 1
-    oauth_app.config["OAUTH_CLIENT_TTL_DAYS"] = 7
-    stale = _register(oauth_client, ["http://localhost:1/cb"]).get_json()["client_id"]
-    OAuthClient.query.filter_by(client_id=stale).update({"client_id_issued_at": int(time.time()) - 30 * 86400})
-    db.session.commit()
-
-    assert _register(oauth_client, ["http://localhost:2/cb"]).status_code in (200, 201)
-    assert OAuthClient.query.filter_by(client_id=stale).count() == 0
-
-
-def test_clients_with_tokens_are_never_pruned(oauth_app, oauth_client):
-    oauth_app.config["OAUTH_MAX_CLIENTS"] = 1
-    oauth_app.config["OAUTH_CLIENT_TTL_DAYS"] = 7
-    old = _register(oauth_client, ["http://localhost:1/cb"]).get_json()["client_id"]
-    OAuthClient.query.filter_by(client_id=old).update({"client_id_issued_at": int(time.time()) - 30 * 86400})
-    db.session.add(OAuthToken(client_id=old, token_type="Bearer", access_token="a", scope="mcp",
-                              issued_at=int(time.time()), expires_in=3600))
-    db.session.commit()
-
-    assert _register(oauth_client, ["http://localhost:2/cb"]).status_code == 503
-    assert OAuthClient.query.filter_by(client_id=old).count() == 1
+    assert OAuthClient.query.count() == 2
 
 
 # --- consent page ---------------------------------------------------------------------
@@ -331,3 +356,27 @@ def test_a_refresh_token_is_actually_issued(oauth_app, oauth_client):
 
     assert tokens.get("refresh_token")
     assert tokens["expires_in"] == oauth_app.config["OAUTH_ACCESS_TOKEN_EXPIRES"]
+
+
+# --- the token lookup is double-checked in Python ------------------------------------------
+
+
+def test_a_looser_database_match_is_not_trusted(oauth_app):
+    """MySQL collations ignore case and trailing blanks, so the SQL lookup can
+    return a row whose stored value is not exactly the hash of the presented
+    token. The exact comparison afterwards decides."""
+    from mcprack import oauth
+
+    raw = "a-token-value"
+    digest = oauth.hash_token(raw)
+
+    assert oauth._stored_value_matches(digest, raw)
+    assert not oauth._stored_value_matches(digest.upper(), raw)
+    assert not oauth._stored_value_matches(digest + " ", raw)
+    assert not oauth._stored_value_matches(None, raw)
+    assert oauth._stored_value_matches("legacy-clear-text", "legacy-clear-text")
+    assert not oauth._stored_value_matches("Legacy-Clear-Text", "legacy-clear-text")
+    # a presented value shaped like a hash (in any case, padded) is never matched as itself
+    assert not oauth._stored_value_matches(digest, digest)
+    assert not oauth._stored_value_matches(digest, digest.upper())
+    assert not oauth._stored_value_matches(digest, " " + digest)

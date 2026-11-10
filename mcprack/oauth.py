@@ -12,6 +12,7 @@ Path-token URLs keep working either way; this only adds the Bearer path.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import re
 import time
 from urllib.parse import urlsplit
@@ -59,7 +60,7 @@ def hash_token(raw):
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-_HASH_SHAPE = re.compile(r"^[0-9a-f]{64}$")
+_HASH_SHAPE = re.compile(r"^\s*[0-9a-fA-F]{64}\s*$")
 
 
 def _token_candidates(raw):
@@ -73,14 +74,28 @@ def _token_candidates(raw):
     return [hash_token(raw), raw]
 
 
+def _stored_value_matches(stored, raw):
+    """Whether the column value `stored` is the hash of `raw` - or, for a
+    legacy row, `raw` itself - compared EXACTLY. The database lookup may be
+    looser than that (MySQL collations ignore case and trailing blanks), so
+    its answer is double-checked here."""
+    if not stored:
+        return False
+    if hmac.compare_digest(stored.encode(), hash_token(raw).encode()):
+        return True
+    return not _HASH_SHAPE.match(raw) and hmac.compare_digest(stored.encode(), raw.encode())
+
+
 def _find_token(raw, hint=None):
     candidates = _token_candidates(raw)
     if hint != "refresh_token":
-        found = OAuthToken.query.filter(OAuthToken.access_token.in_(candidates)).first()
-        if found:
-            return found
+        for row in OAuthToken.query.filter(OAuthToken.access_token.in_(candidates)).all():
+            if _stored_value_matches(row.access_token, raw):
+                return row
     if hint != "access_token":
-        return OAuthToken.query.filter(OAuthToken.refresh_token.in_(candidates)).first()
+        for row in OAuthToken.query.filter(OAuthToken.refresh_token.in_(candidates)).all():
+            if _stored_value_matches(row.refresh_token, raw):
+                return row
     return None
 
 
@@ -305,17 +320,28 @@ def init_oauth(app):
 
 
 def _make_room_for_a_client(cfg):
-    """Registration is open, so it is capped. Clients that never obtained a
-    token and are older than OAUTH_CLIENT_TTL_DAYS are dropped first; if the
-    table is still full the registration is refused."""
-    ttl = int(cfg.get("OAUTH_CLIENT_TTL_DAYS", 30)) * 86400
-    used = db.session.query(OAuthToken.client_id).distinct()
-    OAuthClient.query.filter(
-        OAuthClient.client_id_issued_at < int(time.time()) - ttl,
-        ~OAuthClient.client_id.in_(used),
-    ).delete(synchronize_session=False)
+    """Registration is open, so it is capped - but a cap that REFUSES would let
+    anybody fill the table and lock every real client out. So: clients that
+    never obtained a token are dropped once they are older than
+    OAUTH_UNUSED_CLIENT_TTL_HOURS (a real client authorizes within minutes),
+    and when the table is still full the OLDEST unused ones are evicted to make
+    room. Only when every slot belongs to a client that holds a token is the
+    registration refused."""
+    ttl = int(cfg.get("OAUTH_UNUSED_CLIENT_TTL_HOURS", 24)) * 3600
+    unused = ~OAuthClient.client_id.in_(db.session.query(OAuthToken.client_id).distinct())
+    OAuthClient.query.filter(OAuthClient.client_id_issued_at < int(time.time()) - ttl, unused).delete(
+        synchronize_session=False
+    )
+    limit = int(cfg.get("OAUTH_MAX_CLIENTS", 500))
+    overflow = OAuthClient.query.count() - limit + 1
+    if overflow > 0:
+        victims = (
+            OAuthClient.query.filter(unused).order_by(OAuthClient.client_id_issued_at.asc()).limit(overflow).all()
+        )
+        for client in victims:
+            db.session.delete(client)
     db.session.commit()
-    if OAuthClient.query.count() >= int(cfg.get("OAUTH_MAX_CLIENTS", 500)):
+    if OAuthClient.query.count() >= limit:
         raise TemporarilyUnavailableError(description="too many registered clients; try again later")
 
 

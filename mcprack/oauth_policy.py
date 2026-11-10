@@ -19,9 +19,15 @@ Never: fragments, embedded credentials, plain http to a non-loopback host,
 javascript:/data:/file: and other schemes.
 """
 
+import re
 from urllib.parse import urlsplit
 
 LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+# A strict DNS name (or IPv4 literal), checked BEFORE any allowlist comparison:
+# URL parsers disagree about backslashes, non-ASCII look-alikes, userinfo and
+# odd authorities, and an allowlist test is only as good as the parser that
+# feeds it.
+_HOSTNAME = re.compile(r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$")
 MAX_URIS_PER_CLIENT = 10
 MAX_URI_LENGTH = 512
 
@@ -50,8 +56,10 @@ def check_redirect_uri(uri, config):
     """None when `uri` is acceptable, else a message."""
     if not isinstance(uri, str) or not uri or len(uri) > MAX_URI_LENGTH:
         return "redirect_uri must be a non-empty string of reasonable length"
-    if any(ord(ch) < 0x21 for ch in uri):
-        return "redirect_uri must not contain whitespace or control characters"
+    if any(ord(ch) < 0x21 or ord(ch) > 0x7E for ch in uri):
+        return "redirect_uri must be plain ASCII without whitespace or control characters"
+    if "\\" in uri:
+        return "redirect_uri must not contain a backslash"
     parts = urlsplit(uri)
     if parts.fragment or "#" in uri:
         return "redirect_uri must not contain a fragment"
@@ -64,9 +72,25 @@ def check_redirect_uri(uri, config):
             return None
 
     host = (parts.hostname or "")
+    try:
+        port = parts.port
+    except ValueError:
+        return "redirect_uri has an invalid port"
+    # the authority must be exactly host[:port] - nothing the parser might have
+    # skipped over
+    expected = f"[{host}]" if ":" in host else host
+    if port is not None:
+        expected += f":{port}"
+    if parts.netloc.lower() != expected.lower():
+        return "redirect_uri has an unusual authority"
     if parts.scheme == "http" and host.lower() in LOOPBACK_HOSTS:
         return None
-    if parts.scheme == "https" and host and _host_allowed(host, _csv(config.get("OAUTH_ALLOWED_REDIRECT_HOSTS"))):
+    if (
+        parts.scheme == "https"
+        and host
+        and _HOSTNAME.match(host.lower())
+        and _host_allowed(host, _csv(config.get("OAUTH_ALLOWED_REDIRECT_HOSTS")))
+    ):
         return None
     return (
         "redirect_uri is not allowed: use a loopback address (http://localhost:<port>/...) or an https URL on a "
