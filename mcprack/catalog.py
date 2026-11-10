@@ -65,8 +65,13 @@ def _proxy_serializer():
     return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=PROXY_TOKEN_SALT)
 
 
-def _make_proxy_token(user_id, server_id):
-    return _proxy_serializer().dumps({"u": user_id, "s": server_id})
+def _make_proxy_token(user, server_id):
+    """Signed relay token for (user, server). `user` is a User or a user id;
+    the token carries the user's current token_version so that
+    accounts.revoke_tokens() invalidates it."""
+    if not hasattr(user, "id"):
+        user = db.session.get(User, user)
+    return _proxy_serializer().dumps({"u": user.id, "s": server_id, "v": user.token_version or 0})
 
 
 def _parse_proxy_token(token):
@@ -318,7 +323,7 @@ def _proxy_relay_url(user, server):
             "catalog.user_proxy_mcp_oauth",
             server_id=server.id,
         )
-    token = _make_proxy_token(user.id, server.id)
+    token = _make_proxy_token(user, server.id)
     return _external_proxy_url(
         "catalog.user_proxy_mcp",
         token=token,
@@ -486,6 +491,11 @@ def user_proxy_mcp(token, server_id):
         abort(403)
 
     user = db.get_or_404(User, data.get("u"))
+    # A disabled account, or a token minted before the user's tokens were
+    # revoked, is refused (docs/AUDIT-2026-11.md A-03). Tokens from before
+    # versions existed carry no "v" and count as 0.
+    if not user.is_active or data.get("v", 0) != (user.token_version or 0):
+        abort(403)
     return _serve_user_proxy_mcp(user, server_id)
 
 

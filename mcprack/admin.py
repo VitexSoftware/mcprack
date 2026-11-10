@@ -5,6 +5,7 @@ import time
 
 from sqlalchemy import func
 
+from . import accounts
 from . import audit
 from . import catalog
 from . import demo
@@ -1291,6 +1292,9 @@ def user_edit(user_id):
     if request.method == "POST":
         user.is_admin = request.form.get("is_admin") == "on"
         user.is_active_flag = request.form.get("is_active") == "on"
+        if not user.is_active_flag:
+            # a disabled account must not keep running MCP servers
+            accounts.stop_processes(user)
         new_password = request.form.get("password", "")
         if user.auth_type == "local" and new_password:
             user.set_password(new_password)
@@ -1340,6 +1344,26 @@ def user_edit(user_id):
         templates=templates,
         clients=list(catalog.RENDERERS.keys()),
     )
+
+
+@bp.route("/users/<int:user_id>/revoke-tokens", methods=["POST"])
+@admin_required
+def user_revoke_tokens(user_id):
+    """Revoke everything the user holds for programmatic access (MCP proxy
+    URLs, API tokens, OAuth tokens) and stop their running MCP servers. The
+    user keeps their account and can download a fresh configuration."""
+    user = db.get_or_404(User, user_id)
+    accounts.revoke_tokens(user)
+    db.session.commit()
+    accounts.stop_processes(user)
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"tokens of '{user.username}' revoked"
+    )
+    flash(
+        f"All tokens of '{user.username}' were revoked. They must download a new configuration.",
+        "success",
+    )
+    return redirect(url_for("admin.user_edit", user_id=user_id))
 
 
 @bp.route("/users/<int:user_id>/apply-template", methods=["POST"])

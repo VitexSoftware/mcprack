@@ -23,6 +23,7 @@ import yaml
 from flask import Blueprint, abort, g, jsonify, request
 from flask_login import current_user
 
+from . import accounts
 from . import admin
 from . import audit
 from . import catalog
@@ -908,6 +909,8 @@ def admin_user_update(user_id):
         user.is_admin = bool(data["is_admin"])
     if "is_active" in data:
         user.is_active_flag = bool(data["is_active"])
+        if not user.is_active_flag:
+            accounts.stop_processes(user)
     if data.get("password") and user.auth_type == "local":
         user.set_password(data["password"])
     if "permissions" in data:
@@ -925,6 +928,21 @@ def admin_user_update(user_id):
     return api_ok(_user_detail(user))
 
 
+@bp.route("/admin/users/<int:user_id>/revoke-tokens", methods=["POST"])
+@api_admin_required
+def admin_user_revoke_tokens(user_id):
+    """Revoke the user's MCP proxy URLs, API tokens and OAuth tokens and stop
+    their running MCP servers."""
+    user = db.get_or_404(User, user_id)
+    accounts.revoke_tokens(user)
+    db.session.commit()
+    accounts.stop_processes(user)
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"tokens of '{user.username}' revoked via API"
+    )
+    return api_ok(_user_detail(user))
+
+
 @bp.route("/admin/users/<int:user_id>", methods=["DELETE"])
 @api_admin_required
 def admin_user_delete(user_id):
@@ -933,6 +951,7 @@ def admin_user_delete(user_id):
 
     user = db.get_or_404(User, user_id)
     username = user.username
+    accounts.stop_processes(user)  # before the row goes, so audit entries keep a valid user_id
     db.session.delete(user)
     db.session.commit()
     audit.log_audit_event(

@@ -40,6 +40,10 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     is_active_flag = db.Column("is_active", db.Boolean, nullable=False, default=True)
+    # Embedded in every MCP proxy path token; bumping it revokes them all
+    # (accounts.revoke_tokens). Tokens minted before this column existed carry
+    # no version and count as version 0.
+    token_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
     # Which ConfigTemplate (if any) was last applied to this user — purely

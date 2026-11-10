@@ -17,6 +17,7 @@ from dotenv import dotenv_values
 from flask import current_app
 from flask.cli import AppGroup
 
+from . import accounts
 from . import admin
 from . import catalog
 from . import env_policy
@@ -138,6 +139,7 @@ def user_create(username, password, email, admin):
 def user_delete(username):
     """Delete a user account."""
     user = _get_user_or_fail(username)
+    accounts.stop_processes(user)
     db.session.delete(user)
     db.session.commit()
     click.echo(f"User '{username}' deleted.")
@@ -175,7 +177,20 @@ def user_disable(username):
     user = _get_user_or_fail(username)
     user.is_active_flag = False
     db.session.commit()
+    accounts.stop_processes(user)
     click.echo(f"User '{username}' disabled.")
+
+
+@user_cli.command("revoke-tokens")
+@click.argument("username")
+def user_revoke_tokens(username):
+    """Revoke a user's MCP proxy URLs, API tokens and OAuth tokens and stop
+    their running MCP servers (the account itself stays usable)."""
+    user = _get_user_or_fail(username)
+    accounts.revoke_tokens(user)
+    db.session.commit()
+    accounts.stop_processes(user)
+    click.echo(f"All tokens of '{username}' revoked; they must download a new configuration.")
 
 
 @user_cli.command("promote")

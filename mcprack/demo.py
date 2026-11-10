@@ -41,9 +41,11 @@ BLOCKED_ENDPOINTS = frozenset(
         "admin.user_edit",
         "admin.vaultwarden_migrate_to_vaultwarden",
         "admin.vaultwarden_snapshot_to_local",
+        "admin.user_revoke_tokens",
         "api.admin_users",
         "api.admin_user_update",
         "api.admin_user_delete",
+        "api.admin_user_revoke_tokens",
     }
 )
 

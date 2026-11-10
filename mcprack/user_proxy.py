@@ -807,6 +807,43 @@ def stop_server_proxies(server_id):
         )
 
 
+def stop_user_proxies(user_id):
+    """Stop every running proxy instance of one user and forget its state
+    (credentials included). Called when an account is disabled or deleted:
+    their processes must not outlive their access.
+
+    Unlike the idle reaper this waits briefly for a pair's lock instead of
+    skipping a busy one - an instance mid-request is exactly the one that
+    still serves a user who has just lost access."""
+    if not STATE_DIR.exists():
+        return
+    for pid_path in STATE_DIR.glob(f"u{user_id}-s*.pid"):
+        pid_user_id, server_id = _parse_key(pid_path.stem)
+        if pid_user_id != user_id:
+            continue
+        try:
+            with _serialized(user_id, server_id, wait_seconds=5):
+                pid = _read_pid(pid_path)
+                if pid:
+                    _stop_pid(pid)
+                paths = _paths(user_id, server_id)
+                for key in ("pid", "port", "last_used", "meta", "config", "healthy_at"):
+                    try:
+                        paths[key].unlink()
+                    except OSError:
+                        pass
+        except UserProxyError:
+            logger.warning("proxy u%s-s%s is busy; it will be reaped when idle", user_id, server_id)
+            continue
+        audit.log_audit_event(
+            "proxy_stop",
+            "success",
+            user_id=user_id,
+            server_id=server_id,
+            error_message="account disabled or deleted",
+        )
+
+
 def stop_user_server_proxy(user_id, server_id):
     """Terminate this pair's proxy and forget it. Takes the same exclusive
     lock as a spawn, so it cannot cut in on a relay mid-request."""
