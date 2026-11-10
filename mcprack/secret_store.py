@@ -47,6 +47,16 @@ class SecretStoreError(RuntimeError):
     pass
 
 
+def public_error(exc):
+    """The text of `exc` that may be shown to an end user. A Vaultwarden
+    failure carries commands, item names and host details that belong in the
+    log, so users get a generic sentence; other messages (e.g. the override
+    policy's "pick another name") are written for the user."""
+    if isinstance(exc, vaultwarden.VaultwardenError):
+        return vaultwarden.PUBLIC_MESSAGE
+    return str(exc)
+
+
 def is_vaultwarden_configured():
     return bool(current_app.config.get("BW_SERVER"))
 

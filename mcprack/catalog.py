@@ -405,7 +405,8 @@ def _serve_user_proxy_mcp(user, server_id):
     try:
         env = secret_store.resolve_server_env(server, user=user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return _jsonrpc_error_response(request_id, f"Could not resolve credentials: {exc}")
+        logger.error("Could not resolve credentials for server %s (user %s): %s", server.name, user.id, exc)
+        return _jsonrpc_error_response(request_id, f"Could not resolve credentials: {secret_store.public_error(exc)}")
 
     missing_required = [key for key in server.required_env_keys if not env.get(key)]
     if missing_required:
@@ -636,7 +637,7 @@ def get_user_override_context(server, user):
     try:
         user_non_secret, user_secret = secret_store.load_user_override(server, user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        flash(f"Could not reach Vaultwarden to load your credentials: {exc}", "error")
+        flash(f"Could not load your credentials: {secret_store.public_error(exc)}", "error")
         user_non_secret, user_secret = {}, {}
 
     admin_non_secret = dict(server.env_config or {})
@@ -842,7 +843,7 @@ def override(server_id):
             try:
                 secret_store.delete_user_override(server, current_user)
             except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-                flash(f"Could not reach Vaultwarden: {exc} (ask an admin to check the diagnostics wizard).", "error")
+                flash(f"Could not reset your credentials: {secret_store.public_error(exc)}", "error")
                 return redirect(url_for("catalog.index"))
             db.session.commit()
             flash(f"Reverted '{server.label}' to the default credentials.", "success")
@@ -863,7 +864,7 @@ def override(server_id):
         try:
             secret_store.save_user_override(server, current_user, user_non_secret, user_secret)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            flash(f"Could not save your credentials: {exc} (ask an admin to check the diagnostics wizard).", "error")
+            flash(f"Could not save your credentials: {secret_store.public_error(exc)}", "error")
             return redirect(url_for("catalog.index"))
 
         db.session.commit()

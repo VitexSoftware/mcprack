@@ -300,7 +300,7 @@ def _override_response(server, target_user, reveal):
         try:
             non_secret, secret = secret_store.load_user_override(server, target_user)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            return None, api_error(502, "vaultwarden_unreachable", str(exc))
+            return None, api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
         values = {**non_secret, **secret}
         # Which half a key lives in is sticky on a PUT, so a client that
         # cannot see the classification cannot reason about what it is
@@ -723,7 +723,7 @@ def me_override_set(server_id):
         non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
         secret_store.save_user_override(server, current_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     return api_ok({"server_id": server.id, "env_keys": list(values.keys())})
@@ -739,7 +739,7 @@ def me_override_delete(server_id):
     try:
         secret_store.delete_user_override(server, current_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     return "", 204
@@ -776,7 +776,7 @@ def admin_user_override_set(user_id, server_id):
         non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
         secret_store.save_user_override(server, target_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     audit.log_audit_event(
@@ -799,7 +799,7 @@ def admin_user_override_delete(user_id, server_id):
     try:
         secret_store.delete_user_override(server, target_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     audit.log_audit_event(

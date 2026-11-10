@@ -28,6 +28,15 @@ from . import telemetry
 logger = logging.getLogger(__name__)
 
 
+# What an end user is told when the credential store misbehaves. The detail
+# (command, stderr, host names) goes to the log and, redacted, to admins; it
+# must not reach somebody who merely clicked "save".
+PUBLIC_MESSAGE = (
+    "The credential store (Vaultwarden) is not responding properly right now. "
+    "Try again in a moment; if it keeps failing, contact an administrator."
+)
+
+
 class VaultwardenError(RuntimeError):
     pass
 
@@ -109,32 +118,55 @@ def _item_name(item_name):
     return item_name
 
 
-def _run(args, input_text=None, check=True):
+def _redactor(session):
+    """A function that masks everything secret in a piece of text: the
+    session key, the master password and the API client secret."""
+    cfg = current_app.config
+    secrets_ = [s for s in (session, cfg.get("BW_PASSWORD"), cfg.get("BW_CLIENTSECRET")) if s and len(s) > 3]
+
+    def redact(text):
+        for secret in secrets_:
+            text = text.replace(secret, "***")
+        return text
+
+    return redact
+
+
+def _run(args, input_text=None, check=True, session=None):
+    """Run `bw`. The session key (if any) is handed over in BW_SESSION, never
+    on the command line - argv is visible to every local user through ps and
+    /proc, and used to end up in exception messages (docs/AUDIT-2026-11.md
+    B-01). Everything that is logged or raised is redacted."""
     timeout = _bw_timeout_seconds()
+    redact = _redactor(session)
     cmd_str = " ".join(args)
     logger.debug(f"Running: bw {cmd_str} (timeout={timeout}s)")
-    
+
+    env = _env()
+    if session:
+        env["BW_SESSION"] = session
+
     try:
         result = subprocess.run(
             [_bw_bin(), *args],
             input=input_text,
             capture_output=True,
             text=True,
-            env=_env(),
+            env=env,
             timeout=timeout,
         )
         logger.debug(f"bw {cmd_str}: returncode={result.returncode}")
     except subprocess.TimeoutExpired as exc:
         logger.error(f"bw {cmd_str} timed out after {timeout:.1f}s")
         raise VaultwardenError(
-            f"bw {' '.join(args)} timed out after {timeout:.1f}s"
+            f"bw {cmd_str} timed out after {timeout:.1f}s"
         ) from exc
 
     if check and result.returncode != 0:
-        error_msg = result.stderr.strip() or result.stdout.strip()
+        error_msg = redact(result.stderr.strip() or result.stdout.strip())
         logger.error(f"bw {cmd_str} failed: {error_msg}")
         raise VaultwardenError(
-            f"bw {' '.join(args)} failed: {error_msg}"
+            f"bw {cmd_str} failed: {error_msg}"
         )
     return result
 
@@ -225,9 +257,9 @@ def session():
 
 def _find_item_id(session, item_name):
     # `--search` avoids scanning and parsing the whole vault for each save.
-    result = _run(["list", "items", "--search", item_name, "--session", session], check=False)
+    result = _run(["list", "items", "--search", item_name], check=False, session=session)
     if result.returncode != 0:
-        result = _run(["list", "items", "--session", session])
+        result = _run(["list", "items"], session=session)
 
     items = json.loads(result.stdout or "[]")
     for item in items:
@@ -267,11 +299,11 @@ def get_notes(session, item_name, item_id=None):
     ):
         result = None
         if item_id:
-            result = _run(["get", "notes", item_id, "--session", session], check=False)
+            result = _run(["get", "notes", item_id], check=False, session=session)
             if result.returncode != 0:
                 result = None
         if result is None:
-            result = _run(["get", "notes", item_name, "--session", session], check=False)
+            result = _run(["get", "notes", item_name], check=False, session=session)
         return parse_notes(result.stdout)
 
 
@@ -280,7 +312,7 @@ def list_notes(session):
     for every Secure Note in the vault. Lets a caller resolve many servers
     from a single vault decrypt instead of one per server. Entries that
     aren't well-formed notes are skipped."""
-    result = _run(["list", "items", "--session", session])
+    result = _run(["list", "items"], session=session)
     try:
         items = json.loads(result.stdout or "[]")
     except ValueError as exc:
@@ -306,11 +338,11 @@ def set_notes(session, item_name, values):
     existing_id = _find_item_id(session, item_name)
 
     if existing_id:
-        item_json = _run(["get", "item", existing_id, "--session", session]).stdout
+        item_json = _run(["get", "item", existing_id], session=session).stdout
         item = json.loads(item_json)
         item["notes"] = notes_text
         encoded = base64.b64encode(json.dumps(item).encode()).decode()
-        _run(["edit", "item", existing_id, "--session", session, "--quiet"], input_text=encoded)
+        _run(["edit", "item", existing_id, "--quiet"], input_text=encoded, session=session)
     else:
         item = {
             "type": 2,
@@ -319,13 +351,13 @@ def set_notes(session, item_name, values):
             "secureNote": {"type": 0},
         }
         encoded = base64.b64encode(json.dumps(item).encode()).decode()
-        _run(["create", "item", "--session", session, "--quiet"], input_text=encoded)
+        _run(["create", "item", "--quiet"], input_text=encoded, session=session)
 
 
 def delete_item(session, item_name):
     existing_id = _find_item_id(session, item_name)
     if existing_id:
-        _run(["delete", "item", existing_id, "--session", session, "--quiet"], check=False)
+        _run(["delete", "item", existing_id, "--quiet"], check=False, session=session)
 
 
 def missing_credential_keys(server, values):
