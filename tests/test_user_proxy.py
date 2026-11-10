@@ -266,7 +266,8 @@ def test_cleanup_stops_idle_proxy(state_dir):
         user_proxy.cleanup_idle_proxies()
 
     stop_pid.assert_called_once_with(99999)
-    assert paths["pid"].exists()
+    # once the process is gone so are the files that held its credentials
+    assert not paths["pid"].exists()
 
 
 def test_cleanup_audit_entry_carries_server_name(state_dir):

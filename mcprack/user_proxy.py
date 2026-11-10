@@ -19,7 +19,26 @@ from . import telemetry
 
 logger = logging.getLogger(__name__)
 
-STATE_DIR = Path("/var/lib/mcprack/user-proxies")
+# Where the per-(user, server) instances keep their files - including the
+# RESOLVED credentials of the pair (the fastmcp config carries them in its
+# `env`). systemd's RuntimeDirectory=mcprack gives a tmpfs directory that is
+# private to the service and disappears when it stops, so neither credentials
+# nor stale pid files survive a restart (docs/AUDIT-2026-11.md B-02, B-12).
+# Without it (development, containers) the old persistent location is used.
+RUNTIME_DIR = Path("/run/mcprack")
+LEGACY_STATE_DIR = Path("/var/lib/mcprack/user-proxies")
+
+
+def default_state_dir():
+    explicit = os.environ.get("MCPRACK_STATE_DIR")
+    if explicit:
+        return Path(explicit)
+    if RUNTIME_DIR.is_dir() and os.access(RUNTIME_DIR, os.W_OK):
+        return RUNTIME_DIR / "user-proxies"
+    return LEGACY_STATE_DIR
+
+
+STATE_DIR = default_state_dir()
 _KEY_RE = re.compile(r"^u(?P<user_id>\d+)-s(?P<server_id>\d+)$")
 
 # How long a spawn-time handshake probe result stays trusted before an
@@ -64,6 +83,84 @@ RELAY_GUARD_WAIT = int(os.environ.get("MCP_PROXY_RELAY_GUARD_WAIT", "5"))  # sec
 
 class UserProxyError(RuntimeError):
     pass
+
+
+# What a spawned fastmcp process (and, through it, the MCP server) may inherit
+# from mcprack's own environment. It used to be a copy of ALL of it:
+# SECRET_KEY, BW_PASSWORD (the Vaultwarden master password), LDAP_BIND_PASSWORD,
+# the database URL ... readable from /proc/<pid>/environ by every MCP server
+# (docs/AUDIT-2026-11.md A-04). Everything a server needs comes from its own
+# configuration (the `env` of the config file); only the plumbing below is
+# passed on, plus whatever the operator lists in MCP_CHILD_ENV_ALLOW.
+_CHILD_ENV_ALLOW = frozenset(
+    {
+        "PATH", "LANG", "LANGUAGE", "TZ", "HOME", "USER", "LOGNAME", "TMPDIR",
+        "PYTHONIOENCODING",
+        "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "NODE_EXTRA_CA_CERTS",
+        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+    }
+)
+_CHILD_ENV_PREFIXES = ("LC_",)
+# Names that must never reach a child, even if an operator lists them.
+_CHILD_ENV_NEVER_PREFIXES = (
+    "SECRET_KEY", "BW_", "BITWARDEN", "LDAP_", "SMTP_", "MONITORING_", "SQLALCHEMY_", "OAUTH_", "OTEL_",
+    "GUNICORN", "MCPRACK_", "PASSWORD_", "LOGIN_",
+)
+
+
+def _extra_child_env_names():
+    raw = os.environ.get("MCP_CHILD_ENV_ALLOW", "")
+    try:
+        from flask import current_app, has_app_context
+
+        if has_app_context():
+            raw = current_app.config.get("MCP_CHILD_ENV_ALLOW", raw) or raw
+    except Exception:  # pragma: no cover
+        pass
+    names = {name.strip() for name in raw.split(",") if name.strip()}
+    return {n for n in names if not n.upper().startswith(_CHILD_ENV_NEVER_PREFIXES)}
+
+
+def _child_environment():
+    allowed = _CHILD_ENV_ALLOW | _extra_child_env_names()
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name in allowed or name.startswith(_CHILD_ENV_PREFIXES)
+    }
+    env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    # systemd does not set LANG, so without these a Python-based MCP server
+    # inherits an ASCII locale and dies on the first non-ASCII byte it tries
+    # to write.
+    env.setdefault("LANG", "C.UTF-8")
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
+def _ensure_state_dir():
+    """The state directory, private to the service user (it holds credentials)."""
+    STATE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        os.chmod(STATE_DIR, 0o700)
+    except OSError:
+        pass
+
+
+def _write_private(path, text):
+    """Write `text` to `path` readable by the service user only, whatever the
+    process umask is, replacing any older (possibly more open) file."""
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(path, flags, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as handle:
+            handle.write(text)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
 
 
 def _server_key(user_id, server_id):
@@ -122,7 +219,7 @@ def _serialized(user_id, server_id, wait_seconds=None):
     handshake.
     """
     wait = LOCK_WAIT_TIMEOUT if wait_seconds is None else wait_seconds
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_state_dir()
     deadline = time.monotonic() + wait
     with open(_lock_path(user_id, server_id), "w") as lock_file:
         while True:
@@ -166,7 +263,7 @@ def relay_guard(user_id, server_id):
     """
     guard_file = None
     try:
-        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_state_dir()
         guard_file = open(_lock_path(user_id, server_id), "a")
     except OSError:
         guard_file = None
@@ -498,18 +595,12 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
     """Write the instance's config and start fastmcp on `port`. The config
     and meta files are written first so a worker that finds the pid can
     tell whether the running instance matches the config it wants."""
-    paths["config"].write_text(json.dumps(desired_config, indent=2))
-    paths["meta"].write_text(desired_json)
-    paths["port"].write_text(str(port))
+    _write_private(paths["config"], json.dumps(desired_config, indent=2))
+    _write_private(paths["meta"], desired_json)
+    _write_private(paths["port"], str(port))
 
     fastmcp_bin = _resolve_fastmcp_bin()
-    spawn_env = os.environ.copy()
-    spawn_env.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
-    # systemd does not set LANG, so without these a Python-based MCP server
-    # inherits an ASCII locale and dies on the first non-ASCII byte it tries
-    # to write.
-    spawn_env.setdefault("LANG", "C.UTF-8")
-    spawn_env.setdefault("PYTHONIOENCODING", "utf-8")
+    spawn_env = _child_environment()
 
     with paths["log"].open("a") as log_file:
         proc = subprocess.Popen(
@@ -532,8 +623,8 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
             start_new_session=True,
         )
 
-    paths["pid"].write_text(str(proc.pid))
-    paths["last_used"].write_text(str(int(time.time())))
+    _write_private(paths["pid"], str(proc.pid))
+    _write_private(paths["last_used"], str(int(time.time())))
     time.sleep(0.2)
     if proc.poll() is not None:
         recent_log = _read_recent_log(paths["log"])
@@ -557,7 +648,7 @@ def _spawn(paths, port, server_name, desired_config, desired_json):
             err += f" (check its log at {paths['log']}, or its registration in Admin → Servers)."
         raise UserProxyError(err)
 
-    paths["healthy_at"].write_text(str(time.time()))
+    _write_private(paths["healthy_at"], str(time.time()))
 
 
 def _effective_args(server, args, env_keys=()):
@@ -619,7 +710,7 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
         if not needs_restart:
             healthy_at = _read_float(paths["healthy_at"])
             if healthy_at is not None and (time.time() - healthy_at) < HEALTH_RECHECK_INTERVAL:
-                paths["last_used"].write_text(str(int(time.time())))
+                _write_private(paths["last_used"], str(int(time.time())))
                 return port
 
             # Health verification is stale (or this instance predates the
@@ -628,8 +719,8 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
             # sometime after it was last proven to work gets caught and
             # restarted here instead of failing unpredictably per-request.
             if _probe_upstream_health(port):
-                paths["healthy_at"].write_text(str(time.time()))
-                paths["last_used"].write_text(str(int(time.time())))
+                _write_private(paths["healthy_at"], str(time.time()))
+                _write_private(paths["last_used"], str(int(time.time())))
                 return port
 
             _stop_pid(pid)
@@ -691,7 +782,7 @@ def mark_proxy_used(user_id, server_id):
     instance directly and must keep it alive exactly like a real request
     would, without becoming a periodic credential client."""
     try:
-        _paths(user_id, server_id)["last_used"].write_text(str(int(time.time())))
+        _write_private(_paths(user_id, server_id)["last_used"], str(int(time.time())))
     except OSError:
         pass
 
@@ -734,7 +825,15 @@ def cleanup_idle_proxies(max_idle_seconds=900):
                         last_used = 0.0
                     if (now - last_used) <= max_idle_seconds:
                         continue
+                    stopped_name = _server_name_from_meta(user_id, server_id)  # read before the file goes
                     _stop_pid(pid)
+                    # the process is gone: so must the credentials it was started with
+                    paths = _paths(user_id, server_id)
+                    for key in ("pid", "port", "meta", "config", "healthy_at"):
+                        try:
+                            paths[key].unlink()
+                        except OSError:
+                            pass
             except UserProxyError:
                 # Another worker holds this pair's lock — it is starting
                 # (or stopping) the instance right now. Never queue a user
@@ -751,7 +850,7 @@ def cleanup_idle_proxies(max_idle_seconds=900):
                 "success",
                 user_id=user_id,
                 server_id=server_id,
-                server_name=_server_name_from_meta(user_id, server_id),
+                server_name=stopped_name,
                 error_message="idle timeout",
             )
 
