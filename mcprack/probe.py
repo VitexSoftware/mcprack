@@ -6,9 +6,11 @@ relay, to the MCP server behind it - so a green result means the whole chain a
 client depends on works, not just that the application is up. (The stand-alone
 `bin/mcprack-mcp-probe` does the same for an operator who has only a URL.)
 
-The credential, when there is one, is sent only over https or to loopback,
-and redirects are never followed with it - a redirect would carry the token to
-whatever host the answer names.
+Whatever carries the credential - the Authorization header, or the signed path
+token inside the URL of the older client formats - is sent only over https or to
+loopback, and redirects are never followed: a redirect would carry it to whatever
+host the answer names. The check applies to EVERY probe, not only to ones with a
+bearer token, because a URL may be the credential.
 """
 
 from __future__ import annotations
@@ -88,10 +90,11 @@ def probe(url, *, bearer=None, timeout=60.0, allow_insecure=False, transport=_po
     def failed(step, detail):
         return ProbeResult(False, step, _short(detail), seconds=time.monotonic() - started)
 
-    if bearer and not _transport_ok(url, allow_insecure=allow_insecure):
+    if not _transport_ok(url, allow_insecure=allow_insecure):
         return failed(
             "initialize",
-            "refusing to send the token over plain http to a non-loopback host (use https, or --insecure on a trusted network)",
+            "refusing to send the credential over plain http to a non-loopback host - the token is in the "
+            "Authorization header or in the URL itself (use https, or --insecure on a trusted network)",
         )
 
     headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}

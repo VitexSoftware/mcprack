@@ -124,6 +124,21 @@ def test_the_token_never_crosses_plain_http_to_a_remote_host():
     assert probe.probe("http://mcprack.lan:8912/x", bearer=TOKEN, allow_insecure=True, transport=_transport([INIT_OK, INITIALIZED, TOOLS_OK])).ok
 
 
+def test_a_credential_in_the_url_is_protected_the_same_way():
+    """The older client formats carry the signed token in the path
+    (/proxy/mcp/<token>/<id>). With no Authorization header at all, that URL is
+    still the credential and must not cross plain http either."""
+    transport = _transport([INIT_OK])
+    url = "http://mcprack.lan:8912/proxy/mcp/PATH-TOKEN-VALUE/3"
+
+    result = probe.probe(url, transport=transport)  # no bearer
+
+    assert not result.ok and "plain http" in result.detail and "URL itself" in result.detail
+    assert transport.calls == [] and "PATH-TOKEN-VALUE" not in result.detail
+    assert probe.probe(url, allow_insecure=True, transport=_transport([INIT_OK, INITIALIZED, TOOLS_OK])).ok
+    assert probe.probe("https://mcprack.lan/proxy/mcp/PATH-TOKEN-VALUE/3", transport=_transport([INIT_OK, INITIALIZED, TOOLS_OK])).ok
+
+
 def test_loopback_http_is_fine():
     assert probe.probe("http://127.0.0.1:8912/x", bearer=TOKEN, transport=_transport([INIT_OK, INITIALIZED, TOOLS_OK])).ok
 
@@ -310,3 +325,12 @@ def test_nothing_is_sent_over_plain_http_to_a_remote_origin(app, carol):
 
     assert result.exit_code == 1 and "plain http" in result.output
     assert _live_tokens(app) == 0
+
+
+def test_the_path_token_formats_are_protected_too(app, carol):
+    """`claude` puts the credential in the URL: no header, no minted token - and
+    still nothing may cross plain http to a remote host."""
+    result = _verify(app, "claude", "--base-url", "http://mcprack.lan:8912")
+
+    assert result.exit_code == 1 and "plain http" in result.output
+    assert "/proxy/mcp/" not in result.output  # the URL, i.e. the credential, is not echoed

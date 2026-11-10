@@ -409,7 +409,12 @@ def user_config_show(username, client):
 )
 @click.option("--server", "only", multiple=True, metavar="NAME", help="Verify only this server (repeatable).")
 @click.option("--timeout", type=float, default=60.0, show_default=True, help="Seconds allowed per server (a cold start takes a while).")
-@click.option("--insecure", is_flag=True, help="Allow sending the token over plain http to a non-loopback host.")
+@click.option(
+    "--insecure",
+    is_flag=True,
+    help="Allow sending the credential - the token header, or the token inside the URL of the older formats - "
+    "over plain http to a non-loopback host (trusted private network only).",
+)
 def user_config_verify(username, client, base_url, only, timeout, insecure):
     """Check that a user's generated client config actually works.
 
