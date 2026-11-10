@@ -14,6 +14,7 @@ from conftest import TestConfig
 HARDENING_MIGRATIONS = [
     ("add_user_token_version", "add_user_override_env_config", "users", "token_version"),
     ("add_user_session_version", "materialize_server_permissions", "users", "session_version"),
+    ("add_login_throttle", "add_user_session_version", "login_throttle", "locked_until"),
 ]
 
 
@@ -29,7 +30,10 @@ def file_app(tmp_path):
 
 
 def _columns(table):
-    return {col["name"] for col in inspect(db.engine).get_columns(table)}
+    inspector = inspect(db.engine)
+    if not inspector.has_table(table):
+        return set()
+    return {col["name"] for col in inspector.get_columns(table)}
 
 
 @pytest.mark.parametrize("revision,parent,table,column", HARDENING_MIGRATIONS)

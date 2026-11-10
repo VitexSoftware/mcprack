@@ -50,7 +50,7 @@ def test_a_live_session_works(app, erin):
 def test_cookie_captured_before_logout_is_dead_after_it(app, erin):
     client, cookie = _login(app)
 
-    client.get("/logout")
+    client.post("/logout")
 
     assert _replay(app, cookie) == 302
 
@@ -136,3 +136,31 @@ def test_login_starts_from_a_clean_session(app, erin):
 
     with client.session_transaction() as sess:
         assert "planted" not in sess
+
+
+def test_a_plain_get_logout_only_ends_this_browsers_session(app, erin):
+    """A link on a third-party page must not be able to log a user out of all
+    their devices: only the CSRF-protected POST does that."""
+    first, _ = _login(app)
+    _, other_cookie = _login(app)
+
+    first.get("/logout")
+
+    assert first.get("/").status_code == 302
+    assert _replay(app, other_cookie) == 200
+
+
+def test_post_logout_is_csrf_protected(app, erin):
+    app.config["WTF_CSRF_ENABLED"] = True
+    client = app.test_client()
+    with client.session_transaction() as sess:
+        sess["_user_id"] = str(erin)
+        sess["_fresh"] = True
+        sess["sv"] = 0
+    with app.app_context():
+        db.session.get(User, erin).session_version = 0
+        db.session.commit()
+
+    resp = client.post("/logout")  # no token
+
+    assert resp.status_code == 400

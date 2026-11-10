@@ -11,7 +11,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import accounts, audit, mailer, passwords
+from . import accounts, audit, mailer, passwords, throttle
 from .urls import external_url
 from .extensions import db, limiter, login_manager
 from .models import User
@@ -195,18 +195,32 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
+        # Locked accounts / addresses are refused BEFORE any password is
+        # checked, with the same answer for names that do not exist.
+        wait = throttle.seconds_locked(username, request.remote_addr)
+        if wait:
+            audit.log_audit_event("login_failed", "error", error_message="login refused: too many failures")
+            flash(_("Too many failed attempts. Try again in a few minutes."), "error")
+            response = current_app.make_response((render_template("login.html", next=next_url), 429))
+            response.headers["Retry-After"] = str(wait)
+            return response
+
         user = User.query.filter_by(username=username).first()
 
         if user is not None and user.auth_type == "local" and user.password_hash:
             if user.check_password(password) and user.is_active:
+                throttle.record_success(username)
                 _start_session(user)
                 audit.log_audit_event("login", "success", user=user)
                 return redirect(next_url)
+            throttle.record_failure(username, request.remote_addr)
+            # Never write what was typed into the audit trail: the username
+            # field often holds a password pasted into the wrong box.
             audit.log_audit_event(
                 "login_failed",
                 "error",
                 user_id=user.id,
-                error_message=f"local auth failed for '{username}'",
+                error_message="local authentication failed",
             )
             flash(_("Invalid username or password."), "error")
             return render_template("login.html", next=next_url)
@@ -230,15 +244,17 @@ def login():
                 )
                 flash(_("This account has been deactivated."), "error")
                 return render_template("login.html", next=next_url)
+            throttle.record_success(username)
             _start_session(user)
             audit.log_audit_event("login", "success", user=user)
             return redirect(next_url)
 
+        throttle.record_failure(username, request.remote_addr)
         audit.log_audit_event(
             "login_failed",
             "error",
             user_id=user.id if user else None,
-            error_message=f"invalid credentials for '{username}'",
+            error_message="invalid credentials",
         )
         flash(_("Invalid username or password."), "error")
         return render_template("login.html", next=next_url)
@@ -265,14 +281,17 @@ def login():
     )
 
 
-@bp.route("/logout")
+@bp.route("/logout", methods=["GET", "POST"])
 @login_required
 def logout():
-    # Logging out ends the account's sessions everywhere: a copy of the cookie
-    # cannot be recalled any other way (see load_user). Cookie value copies
-    # captured earlier stop working.
-    accounts.invalidate_sessions(current_user)
-    db.session.commit()
+    # POST (the menu button, CSRF-protected) ends the account's sessions
+    # everywhere: a copy of the cookie cannot be recalled any other way (see
+    # load_user). A plain GET - an old bookmark, or a link on somebody else's
+    # page - only logs out this browser, so it cannot be used to throw a user
+    # out of all their devices.
+    if request.method == "POST":
+        accounts.invalidate_sessions(current_user)
+        db.session.commit()
     logout_user()
     return redirect(url_for("auth.login"))
 

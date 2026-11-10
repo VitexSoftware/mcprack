@@ -482,6 +482,20 @@ class UserServerOverride(db.Model):
         self.env_config_json = json.dumps(dict(value or {}))
 
 
+class LoginThrottle(db.Model):
+    """Failed-login counter shared by all workers (see throttle.py). `key` is
+    a keyed hash of the lower-cased username (scope "user") or of the client
+    address (scope "ip"); neither is stored in clear."""
+
+    __tablename__ = "login_throttle"
+
+    scope = db.Column(db.String(8), primary_key=True)
+    key = db.Column(db.String(64), primary_key=True)
+    failures = db.Column(db.Integer, nullable=False, default=0)
+    first_failure_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+
+
 class AuditLogEntry(db.Model):
     """Append-only security audit trail. Rows are written once by
     audit.log_audit_event() and never modified — this model deliberately

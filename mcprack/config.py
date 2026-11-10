@@ -34,6 +34,14 @@ class Config:
     # --- CSRF (Flask-WTF) ---
     WTF_CSRF_TIME_LIMIT = None
 
+    # --- Login brute-force protection (database backed, see throttle.py) ---
+    LOGIN_THROTTLE_ENABLED = os.environ.get("LOGIN_THROTTLE_ENABLED", "true").lower() in ("true", "1", "yes")
+    LOGIN_MAX_FAILURES = int(os.environ.get("LOGIN_MAX_FAILURES", "5"))
+    LOGIN_IP_MAX_FAILURES = int(os.environ.get("LOGIN_IP_MAX_FAILURES", "30"))
+    LOGIN_FAILURE_WINDOW = int(os.environ.get("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
+    LOGIN_LOCK_BASE = int(os.environ.get("LOGIN_LOCK_BASE_SECONDS", "30"))
+    LOGIN_LOCK_MAX = int(os.environ.get("LOGIN_LOCK_MAX_SECONDS", "3600"))
+
     # --- Rate limiting (Flask-Limiter) ---
     # memory:// is per gunicorn worker, so the effective ceiling across the
     # 4 workers configured in debian/mcprack.service is LOGIN_RATE_LIMIT x 4.
