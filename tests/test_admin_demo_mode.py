@@ -255,3 +255,54 @@ def test_demo_guard_classifies_every_mutating_route(app):
         e for e in (BLOCKED_ENDPOINTS | set(REVIEWED_SAFE)) - mutating if not e.startswith("oauth.")
     )
     assert not stale, f"demo.py lists routes that no longer exist: {stale}"
+
+
+# --- the shared demo login must not be takeover-able ----------------------
+
+
+def test_demo_mode_blocks_changing_the_shared_account_password(app, client):
+    app.config["DEMO_MODE"] = True
+    _login_admin(client)
+
+    client.post(
+        "/account/password",
+        data={"current_password": "adminpass", "new_password": "attacker-chosen", "confirm_password": "attacker-chosen"},
+    )
+
+    with app.app_context():
+        assert User.query.filter_by(username="admin").first().check_password("adminpass")
+
+
+def test_demo_mode_blocks_creating_and_editing_accounts(app, client):
+    app.config["DEMO_MODE"] = True
+    _login_admin(client)
+
+    client.post("/admin/users/new", data={"username": "rogue", "password": "whatever-123", "is_admin": "on"})
+    api = client.post("/api/v1/admin/users", json={"username": "rogue2", "password": "whatever-123", "is_admin": True})
+
+    assert api.status_code == 403
+    with app.app_context():
+        assert User.query.filter(User.username.in_(["rogue", "rogue2"])).count() == 0
+        admin_id = User.query.filter_by(username="admin").first().id
+
+    # demoting / deactivating the demo admin is refused as well
+    client.post(f"/admin/users/{admin_id}/edit", data={"password": "taken-over-1"})
+    put = client.put(f"/api/v1/admin/users/{admin_id}", json={"password": "taken-over-2", "is_admin": False})
+    delete = client.delete(f"/api/v1/admin/users/{admin_id + 1}")
+
+    assert put.status_code == 403
+    assert delete.status_code == 403
+    with app.app_context():
+        admin = User.query.filter_by(username="admin").first()
+        assert admin.check_password("adminpass")
+        assert admin.is_admin
+
+
+def test_demo_mode_blocks_secret_store_migration(app, client):
+    app.config["DEMO_MODE"] = True
+    _login_admin(client)
+
+    resp = client.post("/admin/vaultwarden/migrate-to-vaultwarden", follow_redirects=True)
+
+    assert resp.status_code == 200
+    assert b"disabled" in resp.data.lower()

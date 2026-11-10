@@ -4,7 +4,8 @@ A public demo instance lets anyone log in (the credentials are even
 prefilled on the login page), possibly as an admin. Registering or editing an
 MCP server there would let that visitor run an arbitrary `command` as the
 service user, so server registration/editing/deletion and package
-installation are refused.
+installation are refused - and so are account and password changes, which
+would let one visitor take the shared demo login over from everybody else.
 
 The guard lives in ONE place - a `before_request` hook keyed on endpoint
 names - instead of being sprinkled over individual routes. It used to be
@@ -32,6 +33,17 @@ BLOCKED_ENDPOINTS = frozenset(
         "api.admin_servers",
         "api.admin_server_update",
         "api.admin_server_delete",
+        # The demo login is shared and public. Whoever changes its password,
+        # creates or demotes accounts, or moves the secret store around would
+        # take the demo over for everybody else.
+        "auth.account_password",
+        "admin.user_new",
+        "admin.user_edit",
+        "admin.vaultwarden_migrate_to_vaultwarden",
+        "admin.vaultwarden_snapshot_to_local",
+        "api.admin_users",
+        "api.admin_user_update",
+        "api.admin_user_delete",
     }
 )
 
@@ -42,7 +54,6 @@ BLOCKED_ENDPOINTS = frozenset(
 REVIEWED_SAFE = {
     # authentication / own account
     "auth.login": "authentication",
-    "auth.account_password": "changes the caller's own password",
     "auth.forgot_password": "reset request, rate limited",
     "auth.reset_password": "reset completion with a signed token",
     # per-user catalog state - overrides are constrained by env_policy
@@ -68,19 +79,12 @@ REVIEWED_SAFE = {
     "admin.template_new": "ACL/selection preset",
     "admin.template_edit": "ACL/selection preset",
     "admin.template_delete": "ACL/selection preset",
-    "admin.user_new": "account management",
-    "admin.user_edit": "account management",
     "admin.user_apply_template": "ACL/selection preset",
     "admin.user_override": "per-user env values, validated by env_policy",
-    "admin.vaultwarden_migrate_to_vaultwarden": "moves secrets between stores",
-    "admin.vaultwarden_snapshot_to_local": "copies secrets between stores",
     "api.admin_templates": "ACL/selection preset",
     "api.admin_template_update": "ACL/selection preset",
     "api.admin_template_delete": "ACL/selection preset",
     "api.admin_user_apply_template": "ACL/selection preset",
-    "api.admin_users": "account management",
-    "api.admin_user_update": "account management",
-    "api.admin_user_delete": "account management",
     "api.admin_user_selections_set": "chooses among already registered servers",
     "api.admin_user_override_set": "per-user env values, validated by env_policy",
     "api.admin_user_override_delete": "removes a user's override",
@@ -88,7 +92,7 @@ REVIEWED_SAFE = {
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
-MESSAGE = "This is a public demo instance — registering, editing, and deleting MCP servers is disabled."
+MESSAGE = "This is a public demo instance — registering MCP servers, changing accounts and passwords, and similar actions are disabled."
 
 
 def guard():
@@ -102,4 +106,6 @@ def guard():
     if endpoint.startswith("api."):
         return jsonify(error={"code": "demo_mode", "message": MESSAGE}), 403
     flash(MESSAGE, "error")
-    return redirect(url_for("admin.servers_list"))
+    if endpoint.startswith("admin."):
+        return redirect(url_for("admin.servers_list"))
+    return redirect(url_for("catalog.index"))
