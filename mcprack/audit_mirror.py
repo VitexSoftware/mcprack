@@ -25,10 +25,12 @@ Emitting a line never raises and never blocks the request that is being audited.
 from __future__ import annotations
 
 import hashlib
+import errno
 import hmac
 import json
 import logging
 import os
+import stat
 import sys
 from logging.handlers import WatchedFileHandler
 
@@ -107,23 +109,53 @@ def emit(record):
 
 
 class _MirrorFileHandler(WatchedFileHandler):
-    """Append-only file sink that follows logrotate and keeps its owner.
+    """Append-only file sink that follows logrotate and cannot be turned against
+    the host.
 
-    The management CLI may run as root while the service runs as `mcprack`: a
-    file root creates here would otherwise be unwritable for the service, and its
-    events would silently stop. So a file created as root is handed to whoever
-    owns the directory."""
+    The log directory belongs to the service user, and the management CLI may run
+    as root. Everything here is therefore done on the OPEN FILE, never by path:
+    the file is opened with O_NOFOLLOW (a symlink planted at the path is refused,
+    not followed), must be a plain file with a single link (so a hard link to
+    something else is refused too), and ownership/mode are set with fchown/fchmod
+    on the descriptor - and only for a file this call has just created. A file
+    created by root is handed to the owner of the directory, so the service can
+    keep appending to it. An existing file is never chown'ed or chmod'ed."""
+
+    _warned = False
 
     def _open(self):
-        stream = super()._open()
+        path = self.baseFilename
+        # O_NONBLOCK: opening a FIFO for writing blocks until somebody reads it, so a
+        # FIFO planted at the path would hang the service (or the CLI) for ever.
+        # With it the open fails at once (ENXIO), or yields a descriptor that the
+        # S_ISREG check below refuses. For a regular file it changes nothing.
+        flags = os.O_WRONLY | os.O_APPEND | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0)
+        created = False
         try:
-            if os.geteuid() == 0:
-                parent = os.stat(os.path.dirname(os.path.abspath(self.baseFilename)))
-                os.chown(self.baseFilename, parent.st_uid, parent.st_gid)
-            os.chmod(self.baseFilename, 0o640)
-        except OSError:
-            pass
-        return stream
+            fd = os.open(path, flags | os.O_CREAT | os.O_EXCL, 0o640)
+            created = True
+        except FileExistsError:
+            fd = os.open(path, flags)  # ELOOP if it is a symlink
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise OSError(errno.EPERM, "refusing to write the audit mirror to something that is not a plain, singly-linked file")
+            if created:
+                if os.geteuid() == 0:
+                    parent = os.stat(os.path.dirname(os.path.abspath(path)))
+                    os.fchown(fd, parent.st_uid, parent.st_gid)
+                os.fchmod(fd, 0o640)
+        except BaseException:
+            os.close(fd)
+            raise
+        return os.fdopen(fd, "a", encoding=self.encoding)
+
+    def handleError(self, record):
+        # logging would print a traceback to stderr for every single event
+        if not self._warned:
+            self._warned = True
+            logger.error("Audit mirror file %s cannot be written (%s) - events still go to the other sinks",
+                         self.baseFilename, sys.exc_info()[1])
 
 
 def resolve_file(setting, testing=False):

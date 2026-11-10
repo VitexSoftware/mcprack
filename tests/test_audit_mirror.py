@@ -467,3 +467,130 @@ def test_a_log_with_nothing_authentic_is_not_reported_as_clean(app, mirror, user
     result = _verify(app, mirror)
 
     assert result.exit_code == 1 and "invalid MAC" in result.output
+
+
+# --- the file sink cannot be turned against the host --------------------------------------------
+#
+# The log directory belongs to the service user, and the CLI may run as root: a
+# path the service user can swap must never lead root to write to - or chown -
+# something else.
+
+
+def _try_open(app, path):
+    app.config["AUDIT_LOG_FILE"] = str(path)
+    audit_mirror.init_app(app)
+
+
+def test_a_symlink_at_the_path_is_refused_and_its_target_is_not_touched(app, tmp_path, caplog):
+    victim = tmp_path / "victim"
+    victim.write_text("precious\n")
+    victim.chmod(0o600)
+    link = tmp_path / "audit.log"
+    link.symlink_to(victim)
+
+    try:
+        with caplog.at_level(logging.ERROR, logger="mcprack.audit_mirror"):
+            _try_open(app, link)
+        _event("login")
+    finally:
+        audit_mirror.shutdown()
+
+    assert victim.read_text() == "precious\n"  # nothing was appended through the link
+    assert stat.S_IMODE(victim.stat().st_mode) == 0o600  # and its mode was not changed
+    assert "cannot be opened" in caplog.text
+    assert AuditLogEntry.query.count() == 1  # the table is unaffected
+
+
+def test_a_symlink_swapped_in_after_the_file_was_opened_is_not_followed(app, mirror, tmp_path):
+    """logrotate-style reopening goes through the same safe open."""
+    _event("login")
+    victim = tmp_path / "victim"
+    victim.write_text("precious\n")
+    mirror.unlink()
+    mirror.symlink_to(victim)  # swapped in while the service is running
+
+    _event("login")  # the handler notices the change and tries to reopen
+
+    assert victim.read_text() == "precious\n"
+    assert AuditLogEntry.query.count() == 2  # auditing carried on
+
+
+def test_a_hard_link_to_another_file_is_refused(app, tmp_path):
+    victim = tmp_path / "victim"
+    victim.write_text("precious\n")
+    linked = tmp_path / "audit.log"
+    os.link(victim, linked)
+
+    try:
+        _try_open(app, linked)
+        _event("login")
+    finally:
+        audit_mirror.shutdown()
+
+    assert victim.read_text() == "precious\n"
+
+
+@pytest.mark.parametrize("kind", ["directory", "fifo"])
+def test_something_that_is_not_a_plain_file_is_refused(app, tmp_path, kind):
+    path = tmp_path / "audit.log"
+    if kind == "directory":
+        path.mkdir()
+    else:
+        os.mkfifo(path)
+
+    try:
+        _try_open(app, path)
+        entry = _event("login")
+    finally:
+        audit_mirror.shutdown()
+
+    assert entry is not None  # and nothing hung waiting for a FIFO reader
+
+
+def test_ownership_is_set_on_the_descriptor_of_a_file_root_just_created(app, tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "fchown", lambda fd, uid, gid: calls.append(("fchown", uid, gid)))
+    # nothing may be done by PATH: that is what a swapped symlink would exploit
+    monkeypatch.setattr(os, "chown", lambda *a, **k: pytest.fail("chown by path"))
+    monkeypatch.setattr(os, "chmod", lambda *a, **k: pytest.fail("chmod by path"))
+    path = tmp_path / "audit.log"
+
+    try:
+        _try_open(app, path)
+        _event("login")
+    finally:
+        audit_mirror.shutdown()
+
+    owner = tmp_path.stat()
+    assert calls == [("fchown", owner.st_uid, owner.st_gid)]  # to the owner of the directory
+    assert stat.S_IMODE(path.stat().st_mode) == 0o640
+
+
+def test_an_existing_file_is_appended_to_but_never_chowned_or_chmodded(app, tmp_path, monkeypatch):
+    path = tmp_path / "audit.log"
+    path.write_text("")
+    path.chmod(0o600)
+    monkeypatch.setattr(os, "geteuid", lambda: 0)
+    monkeypatch.setattr(os, "fchown", lambda *a: pytest.fail("fchown on an existing file"))
+    monkeypatch.setattr(os, "fchmod", lambda *a: pytest.fail("fchmod on an existing file"))
+
+    try:
+        _try_open(app, path)
+        _event("login")
+    finally:
+        audit_mirror.shutdown()
+
+    assert len(_lines(path)) == 1 and stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
+def test_a_write_error_is_reported_once_not_for_every_event(app, mirror, caplog):
+    handler = next(h for h in logging.getLogger(audit_mirror.MIRROR_LOGGER).handlers if isinstance(h, audit_mirror._MirrorFileHandler))
+    handler.stream.close()  # the next write fails
+
+    with caplog.at_level(logging.ERROR, logger="mcprack.audit_mirror"):
+        for _ in range(3):
+            _event("login")
+
+    assert caplog.text.count("cannot be written") == 1
+    assert AuditLogEntry.query.count() == 3
