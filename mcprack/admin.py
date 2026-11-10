@@ -7,6 +7,7 @@ from sqlalchemy import func
 
 from . import audit
 from . import catalog
+from . import demo
 from . import detection
 from . import env_detection
 from . import health
@@ -53,9 +54,11 @@ def _demo_mode_blocked():
     """Call at the top of any route that adds/edits/deletes an MCP server
     registration. Returns a redirect response if DEMO_MODE is on (nothing
     else is restricted), or None to let the route proceed."""
+    # The central guard (demo.guard, a before_request hook) already refuses
+    # these requests; the explicit calls in the routes stay as a second line.
     if not current_app.config.get("DEMO_MODE"):
         return None
-    flash("This is a public demo instance — registering, editing, and deleting MCP servers is disabled.", "error")
+    flash(demo.MESSAGE, "error")
     return redirect(url_for("admin.servers_list"))
 
 

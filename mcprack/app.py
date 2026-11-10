@@ -301,6 +301,11 @@ def create_app(config_object=Config):
     # - see api.py's module docstring for the full rationale.
     csrf.exempt(api_bp)
 
+    # One central DEMO_MODE write guard for HTML *and* API routes.
+    from . import demo
+
+    app.before_request(demo.guard)
+
     from . import oauth
 
     oauth.init_oauth(app)
