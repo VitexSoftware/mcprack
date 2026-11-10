@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Environment=GUNICORN_BIND=127.0.0.1:8912
-Environment=GUNICORN_THREADS=4
+Environment=GUNICORN_THREADS=8
 EnvironmentFile=-/etc/mcprack/env
 User=mcprack
 Group=mcprack
@@ -26,7 +26,7 @@ ExecStart=/usr/bin/gunicorn \
     --worker-class gthread \
     --threads ${GUNICORN_THREADS} \
     --worker-tmp-dir /dev/shm \
-    --timeout 30 \
+    --timeout 120 \
     --access-logfile /var/log/mcprack/access.log \
     --error-logfile /var/log/mcprack/error.log \
     --log-level info \
