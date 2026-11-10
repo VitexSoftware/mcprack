@@ -505,6 +505,10 @@ def _register_limit_key():
     except ValueError:
         return address
     if ip.version == 6:
+        # An IPv4 client reported as ::ffff:a.b.c.d is an IPv4 client: folding
+        # every mapped address into one /64 would put them all in one bucket.
+        if ip.ipv4_mapped is not None:
+            return str(ip.ipv4_mapped)
         return str(ipaddress.ip_network(f"{ip}/64", strict=False))
     return address
 

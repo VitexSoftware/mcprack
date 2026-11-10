@@ -199,6 +199,8 @@ def test_registration_has_its_own_tighter_rate_limit(oauth_app):
         ("2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64"),
         ("2001:db8:1:2:1111:2222:3333:4444", "2001:db8:1:2::/64"),  # same /64, same key
         ("::1", "::/64"),
+        ("::ffff:203.0.113.9", "203.0.113.9"),  # IPv4-mapped: the IPv4 client, not one shared /64
+        ("::ffff:198.51.100.4", "198.51.100.4"),
     ],
 )
 def test_registration_is_rate_limited_per_ipv6_64(oauth_app, address, key):
