@@ -150,6 +150,11 @@ New behaviour you should know about (details: `docs/AUDIT-2026-11.md`):
   `MCP_CHILD_ENV_ALLOW=NAME1,NAME2` (secrets can never be added). Their
   resolved credentials now live in `/run/mcprack` (tmpfs, 0600, removed when the
   process is reaped or the service stops), not in `/var/lib/mcprack`.
+* **Backend URLs**: a server's URL must be http(s) without credentials in it, and
+  link-local destinations (169.254.0.0/16, fe80::/10 — cloud metadata services),
+  `0.0.0.0` and multicast are refused when a server is registered
+  (`BACKEND_ALLOW_LINK_LOCAL=true` if a real backend lives there). Host names are
+  not resolved at that point, so also restrict the `mcprack` user's egress (below).
 * **Package installer**: registry packages only (no URLs/paths/VCS), pinned to an
   exact version by default (`INSTALL_REQUIRE_PINNED=false` to allow ranges); pip
   installs wheels only (`INSTALL_ALLOW_SOURCE_BUILDS=true` to allow sdists); npm

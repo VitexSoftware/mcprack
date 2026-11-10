@@ -10,6 +10,7 @@ from . import audit
 from . import catalog
 from . import demo
 from . import detection
+from . import endpoint_policy
 from . import env_detection
 from . import health
 from . import installer
@@ -465,6 +466,8 @@ def validate_server_endpoint(transport, command, url):
 
     if not command and not url:
         errors.append("Provide either a local command or a network URL.")
+
+    errors.extend(endpoint_policy.url_errors(url))
 
     if transport == "stdio" and not command and url:
         warnings.append(

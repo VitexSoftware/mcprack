@@ -49,6 +49,11 @@ class Config:
     # (0 = never). A token is as good as a password.
     API_TOKEN_DEFAULT_EXPIRY_DAYS = int(os.environ.get("API_TOKEN_DEFAULT_EXPIRY_DAYS", "90"))
 
+    # Backend URLs in the link-local range (169.254.0.0/16, fe80::/10: cloud
+    # metadata services) are refused when a server is registered; set true only
+    # when a real MCP backend lives there. (mcprack/endpoint_policy.py)
+    BACKEND_ALLOW_LINK_LOCAL = os.environ.get("BACKEND_ALLOW_LINK_LOCAL", "false").lower() in ("true", "1", "yes")
+
     # --- Login brute-force protection (database backed, see throttle.py) ---
     LOGIN_THROTTLE_ENABLED = os.environ.get("LOGIN_THROTTLE_ENABLED", "true").lower() in ("true", "1", "yes")
     # per account AND client address: stops guessing from one place without

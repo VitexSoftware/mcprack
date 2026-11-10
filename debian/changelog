@@ -12,6 +12,17 @@ mcprack (1.7.0-1) UNRELEASED; urgency=medium
     API, `mcprack user revoke-tokens`), disabling/deleting a user stops their
     MCP servers; MCP servers no longer inherit mcprack's secrets and keep their
     credentials in /run/mcprack (RuntimeDirectory), removed when reaped.
+  * Backend URLs: only http(s), no credentials, no link-local/metadata/unspecified
+    destinations (BACKEND_ALLOW_LINK_LOCAL to allow).
+  * MCP server start-up: failures are classified (spawn_failed, exited_early,
+    startup_timeout, handshake_error, no_tools, ...), a dead process is reported
+    at once, administrators get the log tail and end users only the class of
+    failure; a recycled pid is never signalled, children are reaped.
+  * Claude Code: `claude-code` client format (secret-free .mcp.json with
+    Authorization: Bearer ${MCPRACK_TOKEN}), Bearer relay route usable without
+    OAuth, API tokens expire after 90 days by default, mcprack-mcp-probe
+    --bearer; Cache-Control: no-store on per-user responses; a client-supplied
+    X-Forwarded-Prefix that is not a plain path is dropped.
   * Relay forwards only protocol headers (no Authorization/Cookie to backends).
   * Login: database-backed throttling, server-side session revocation (logout,
     password change), clean session at login, CSRF token for cookie-authenticated
