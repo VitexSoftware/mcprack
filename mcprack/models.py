@@ -18,6 +18,17 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
+def new_token_version(previous=None):
+    """A random, non-zero token version. Zero is reserved for accounts that
+    existed before versions did (their old tokens carry no version). Random
+    rather than a counter so a token of a deleted user can never match a new
+    account that happens to be given the same id."""
+    while True:
+        version = secrets.randbelow(2**31 - 2) + 1
+        if version != previous:
+            return version
+
+
 def _safe_json_loads(raw, default):
     if not raw:
         return default
@@ -40,10 +51,11 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     is_active_flag = db.Column("is_active", db.Boolean, nullable=False, default=True)
-    # Embedded in every MCP proxy path token; bumping it revokes them all
-    # (accounts.revoke_tokens). Tokens minted before this column existed carry
-    # no version and count as version 0.
-    token_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Embedded in every MCP proxy path token; changing it revokes them all
+    # (accounts.revoke_tokens). New accounts start at a random value (see
+    # new_token_version); accounts and tokens from before this column existed
+    # are version 0.
+    token_version = db.Column(db.Integer, nullable=False, default=new_token_version, server_default="0")
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
     # Which ConfigTemplate (if any) was last applied to this user — purely

@@ -9,7 +9,7 @@ import logging
 import time
 
 from . import user_proxy
-from .extensions import db
+from .models import new_token_version
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,7 @@ def revoke_tokens(user):
     from .models import ApiToken, OAuthToken
     from datetime import datetime, timezone
 
-    user.token_version = (user.token_version or 0) + 1
+    user.token_version = new_token_version(user.token_version)
 
     now = datetime.now(timezone.utc)
     for token in ApiToken.query.filter_by(user_id=user.id, revoked_at=None).all():

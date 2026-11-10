@@ -31,6 +31,11 @@ def _relay_target(app):
         return user.id, server.id
 
 
+def _version(app, user_id):
+    with app.app_context():
+        return db.session.get(User, user_id).token_version
+
+
 def _call(client, token, server_id):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "ping"})
     return client.post(f"/proxy/mcp/{token}/{server_id}", data=body, content_type="application/json")
@@ -76,20 +81,63 @@ def test_revoking_a_users_tokens_invalidates_the_old_ones_only(app, client):
 
 
 def test_tokens_issued_before_versions_existed_work_until_revoked(app, client):
-    """Upgrade safety: a token minted by the previous release carries no
-    version. It keeps working (the user's version is still 0) and dies on the
-    first revocation."""
+    """Upgrade safety: an account that existed before versions did is at
+    version 0, and the tokens the previous release minted for it carry no
+    version. They keep working and die on the first revocation."""
     user_id, server_id = _relay_target(app)
     with app.app_context():
+        db.session.get(User, user_id).token_version = 0  # a pre-existing account
+        db.session.commit()
         legacy = catalog._proxy_serializer().dumps({"u": user_id, "s": server_id})
 
     assert _call(client, legacy, server_id).status_code == 502
 
     with app.app_context():
-        db.session.get(User, user_id).token_version += 1
+        from mcprack import accounts
+
+        accounts.revoke_tokens(db.session.get(User, user_id))
         db.session.commit()
 
     assert _call(client, legacy, server_id).status_code == 403
+
+
+def test_a_deleted_users_token_does_not_authenticate_a_new_account_with_the_same_id(app, client):
+    """SQLite reuses the id of a deleted last row. The new account starts at a
+    random token version, so neither a versioned token nor a legacy one of the
+    former owner matches it."""
+    user_id, server_id = _relay_target(app)
+    with app.app_context():
+        versioned = catalog._make_proxy_token(user_id, server_id)
+        legacy = catalog._proxy_serializer().dumps({"u": user_id, "s": server_id})
+        db.session.delete(db.session.get(User, user_id))
+        db.session.commit()
+
+        newcomer = User(username="newcomer", auth_type="local")
+        newcomer.set_password("pw")
+        db.session.add(newcomer)
+        db.session.commit()
+        assert newcomer.id == user_id  # the id really was reused
+        assert newcomer.token_version != 0
+        db.session.add(UserServerSelection(user_id=newcomer.id, server_id=server_id))
+        db.session.commit()
+
+    assert _call(client, versioned, server_id).status_code == 403
+    assert _call(client, legacy, server_id).status_code == 403
+
+
+def test_new_accounts_get_distinct_random_non_zero_versions(app):
+    with app.app_context():
+        users = []
+        for i in range(5):
+            u = User(username=f"u{i}", auth_type="local")
+            u.set_password("pw")
+            users.append(u)
+        db.session.add_all(users)
+        db.session.commit()
+
+        versions = {u.token_version for u in users}
+        assert 0 not in versions
+        assert len(versions) == 5
 
 
 def test_token_for_another_user_or_server_is_still_refused(app, client):
@@ -140,17 +188,18 @@ def _login_boss(client):
 
 def test_admin_can_revoke_a_users_tokens(app, client):
     victim_id = _admin_and_victim(app)
+    before = _version(app, victim_id)
     _login_boss(client)
 
     resp = client.post(f"/admin/users/{victim_id}/revoke-tokens", follow_redirects=True)
 
     assert resp.status_code == 200
-    with app.app_context():
-        assert db.session.get(User, victim_id).token_version == 1
+    assert _version(app, victim_id) not in (0, before)
 
 
 def test_non_admin_cannot_revoke_tokens(app, client):
     victim_id = _admin_and_victim(app)
+    before = _version(app, victim_id)
     with app.app_context():
         other = User(username="other", auth_type="local")
         other.set_password("pw")
@@ -161,28 +210,28 @@ def test_non_admin_cannot_revoke_tokens(app, client):
     resp = client.post(f"/admin/users/{victim_id}/revoke-tokens")
 
     assert resp.status_code == 403
-    with app.app_context():
-        assert db.session.get(User, victim_id).token_version == 0
+    assert _version(app, victim_id) == before
 
 
 def test_api_can_revoke_a_users_tokens(app, client):
     victim_id = _admin_and_victim(app)
+    before = _version(app, victim_id)
     _login_boss(client)
 
     resp = client.post(f"/api/v1/admin/users/{victim_id}/revoke-tokens")
 
     assert resp.status_code == 200
-    with app.app_context():
-        assert db.session.get(User, victim_id).token_version == 1
+    assert _version(app, victim_id) not in (0, before)
 
 
 def test_cli_revoke_tokens(app):
     victim_id = _admin_and_victim(app)
+    before = _version(app, victim_id)
 
     with app.app_context():
         result = app.test_cli_runner().invoke(args=["user", "revoke-tokens", "victim"])
         assert result.exit_code == 0, result.output
-        assert db.session.get(User, victim_id).token_version == 1
+    assert _version(app, victim_id) not in (0, before)
 
 
 @pytest.fixture
