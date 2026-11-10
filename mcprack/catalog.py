@@ -60,10 +60,17 @@ RENDERERS = {
 PROXY_TOKEN_SALT = "mcprack-user-proxy"
 
 
+def _signing_keys():
+    """SECRET_KEY plus its fallbacks, in the order itsdangerous wants them:
+    every key verifies, the LAST one signs."""
+    cfg = current_app.config
+    return [*reversed(cfg.get("SECRET_KEY_FALLBACKS") or []), cfg["SECRET_KEY"]]
+
+
 def _proxy_serializer():
     from flask import current_app
 
-    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=PROXY_TOKEN_SALT)
+    return URLSafeTimedSerializer(_signing_keys(), salt=PROXY_TOKEN_SALT)
 
 
 def _make_proxy_token(user, server_id):

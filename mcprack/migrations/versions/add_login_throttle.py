@@ -29,6 +29,7 @@ def upgrade():
         sa.Column("failures", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("first_failure_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("locked_until", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("lock_level", sa.Integer(), nullable=False, server_default="0"),
         sa.PrimaryKeyConstraint("scope", "key"),
     )
 

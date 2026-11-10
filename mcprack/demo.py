@@ -56,6 +56,7 @@ BLOCKED_ENDPOINTS = frozenset(
 REVIEWED_SAFE = {
     # authentication / own account
     "auth.login": "authentication",
+    "auth.logout": "ends the caller's own sessions",
     "auth.forgot_password": "reset request, rate limited",
     "auth.reset_password": "reset completion with a signed token",
     # per-user catalog state - overrides are constrained by env_policy

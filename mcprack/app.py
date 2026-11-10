@@ -20,53 +20,49 @@ from .secret_store import INSECURE_DEFAULT_SECRET_KEY
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "migrations")
 
 
+_PLACEHOLDER_PREFIXES = ("change", "dev-", "dev_", "example", "test", "secret", "password", "default", "insecure")
+MIN_SECRET_KEY_LENGTH = 32
+
+
+def _weak_secret_key(key):
+    """Why `key` is not acceptable as a production SECRET_KEY, or None."""
+    if not key or key == INSECURE_DEFAULT_SECRET_KEY:
+        return "it is missing or still the well-known default"
+    if key.lower().startswith(_PLACEHOLDER_PREFIXES):
+        return "it looks like a placeholder"
+    if len(key) < MIN_SECRET_KEY_LENGTH:
+        return f"it is shorter than {MIN_SECRET_KEY_LENGTH} characters"
+    if len(set(key)) < 8:
+        return "it has too little variety"
+    return None
+
+
 def _enforce_secret_key(app):
-    """Refuse to boot in production with the well-known insecure default
-    SECRET_KEY - it signs Flask sessions and per-user proxy tokens
-    (catalog.py's _proxy_serializer), so running with it is equivalent to
-    having no session/token security at all. Mirrors secret_store.py's own
-    guard for the local encrypted-secrets Fernet key."""
+    """Refuse to boot in production with a weak SECRET_KEY - it signs Flask
+    sessions, per-user proxy tokens and reset links, and is the root of the
+    key that encrypts the local secret store (secret_store.py). The old guard
+    rejected only the literal default, so `change-me` from .env.example or
+    `change-me-<epoch>` slipped through (docs/AUDIT-2026-11.md B-16)."""
     if app.config.get("DEBUG") or app.config.get("TESTING"):
         return
     key = app.config.get("SECRET_KEY", "")
-    if not key or key == INSECURE_DEFAULT_SECRET_KEY:
+    problem = _weak_secret_key(key)
+    if problem:
         error_msg = (
             "\n"
-            "╔════════════════════════════════════════════════════════════════╗\n"
-            "║                     CONFIGURATION ERROR                        ║\n"
-            "╚════════════════════════════════════════════════════════════════╝\n"
+            "MCprack cannot start: SECRET_KEY is not acceptable - " + problem + ".\n"
             "\n"
-            "❌ MCprack cannot start: SECRET_KEY is not configured\n"
+            "SECRET_KEY signs Flask sessions and per-user proxy tokens and protects the\n"
+            "locally encrypted secrets, so it must be a strong random value.\n"
             "\n"
-            "REASON:\n"
-            "  SECRET_KEY is missing from /etc/mcprack/env. This key signs Flask sessions\n"
-            "  and per-user proxy tokens, so it must be a strong random value in production.\n"
+            "Fix (as root):\n"
+            "    sudo mcprack-init-config --force      # generates a new one and restarts\n"
+            "or generate one yourself:\n"
+            "    python3 -c \"import secrets; print('SECRET_KEY=' + secrets.token_hex(32))\"\n"
+            "and put it in /etc/mcprack/env, then: sudo systemctl restart mcprack\n"
             "\n"
-            "SOLUTION:\n"
-            "  Run the initialization script as root:\n"
-            "\n"
-            "    sudo mcprack-init-config\n"
-            "\n"
-            "  This will:\n"
-            "    • Generate a secure SECRET_KEY\n"
-            "    • Write it to /etc/mcprack/env\n"
-            "    • Fix file permissions\n"
-            "    • Restart the mcprack service\n"
-            "\n"
-            "MANUAL FIX (if script is not available):\n"
-            "  1. Generate a secret key:\n"
-            "       python3 -c \"import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))\"\n"
-            "\n"
-            "  2. Add it to /etc/mcprack/env:\n"
-            "       echo 'SECRET_KEY=<value-from-step-1>' | sudo tee -a /etc/mcprack/env\n"
-            "\n"
-            "  3. Restart the service:\n"
-            "       sudo systemctl restart mcprack\n"
-            "\n"
-            "  4. Check status:\n"
-            "       sudo systemctl status mcprack\n"
-            "\n"
-            "For more help: https://github.com/VitexSoftware/mcprack#configuration\n"
+            "Rotating an existing key? Keep the old one in SECRET_KEY_FALLBACKS so existing\n"
+            "sessions, client configurations and local secrets keep working.\n"
         )
         raise RuntimeError(error_msg)
 

@@ -7,6 +7,13 @@ class Config:
     TESTING = False
     
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-secret-change-me")
+    # Previous keys, comma separated, still accepted for VERIFYING / DECRYPTING
+    # (sessions, proxy URLs, reset links, locally encrypted secrets) while
+    # everything new is signed with SECRET_KEY. Lets the key be rotated without
+    # logging everybody out, breaking every client configuration and losing the
+    # local secret store (docs/AUDIT-2026-11.md B-16). Remove an entry once
+    # nothing signed with it is still in circulation.
+    SECRET_KEY_FALLBACKS = [k.strip() for k in os.environ.get("SECRET_KEY_FALLBACKS", "").split(",") if k.strip()]
 
     # --- Babel (I18n) ---
     BABEL_DEFAULT_LOCALE = "en"
@@ -36,7 +43,11 @@ class Config:
 
     # --- Login brute-force protection (database backed, see throttle.py) ---
     LOGIN_THROTTLE_ENABLED = os.environ.get("LOGIN_THROTTLE_ENABLED", "true").lower() in ("true", "1", "yes")
+    # per account AND client address: stops guessing from one place without
+    # letting a stranger lock the real owner out (who comes from elsewhere)
     LOGIN_MAX_FAILURES = int(os.environ.get("LOGIN_MAX_FAILURES", "5"))
+    # per account over ALL addresses: backstop against guessing spread over many
+    LOGIN_ACCOUNT_MAX_FAILURES = int(os.environ.get("LOGIN_ACCOUNT_MAX_FAILURES", "50"))
     LOGIN_IP_MAX_FAILURES = int(os.environ.get("LOGIN_IP_MAX_FAILURES", "30"))
     LOGIN_FAILURE_WINDOW = int(os.environ.get("LOGIN_FAILURE_WINDOW_SECONDS", "900"))
     LOGIN_LOCK_BASE = int(os.environ.get("LOGIN_LOCK_BASE_SECONDS", "30"))

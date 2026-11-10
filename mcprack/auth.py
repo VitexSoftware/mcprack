@@ -55,7 +55,9 @@ MIN_PASSWORD_LENGTH = 8
 
 
 def _reset_serializer():
-    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=_RESET_TOKEN_SALT)
+    cfg = current_app.config
+    keys = [*reversed(cfg.get("SECRET_KEY_FALLBACKS") or []), cfg["SECRET_KEY"]]
+    return URLSafeTimedSerializer(keys, salt=_RESET_TOKEN_SALT)
 
 
 def _password_fingerprint(user):
@@ -195,9 +197,12 @@ def login():
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
-        # Locked accounts / addresses are refused BEFORE any password is
-        # checked, with the same answer for names that do not exist.
-        wait = throttle.seconds_locked(username, request.remote_addr)
+        user = User.query.filter_by(username=username).first()
+
+        # The attempt is counted (atomically) and a locked account/address is
+        # refused BEFORE any password is checked, with the same answer for
+        # names that do not exist (docs/AUDIT-2026-11.md B-04).
+        wait = throttle.begin(username, user, request.remote_addr)
         if wait:
             audit.log_audit_event("login_failed", "error", error_message="login refused: too many failures")
             flash(_("Too many failed attempts. Try again in a few minutes."), "error")
@@ -205,15 +210,12 @@ def login():
             response.headers["Retry-After"] = str(wait)
             return response
 
-        user = User.query.filter_by(username=username).first()
-
         if user is not None and user.auth_type == "local" and user.password_hash:
             if user.check_password(password) and user.is_active:
-                throttle.record_success(username)
+                throttle.success(username, user, request.remote_addr)
                 _start_session(user)
                 audit.log_audit_event("login", "success", user=user)
                 return redirect(next_url)
-            throttle.record_failure(username, request.remote_addr)
             # Never write what was typed into the audit trail: the username
             # field often holds a password pasted into the wrong box.
             audit.log_audit_event(
@@ -244,12 +246,11 @@ def login():
                 )
                 flash(_("This account has been deactivated."), "error")
                 return render_template("login.html", next=next_url)
-            throttle.record_success(username)
+            throttle.success(username, user, request.remote_addr)
             _start_session(user)
             audit.log_audit_event("login", "success", user=user)
             return redirect(next_url)
 
-        throttle.record_failure(username, request.remote_addr)
         audit.log_audit_event(
             "login_failed",
             "error",

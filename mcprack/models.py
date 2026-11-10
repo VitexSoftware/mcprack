@@ -494,6 +494,9 @@ class LoginThrottle(db.Model):
     failures = db.Column(db.Integer, nullable=False, default=0)
     first_failure_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
     locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    # how many times this key has been locked in the current window; drives the
+    # growth of the lock (base * 2**(level-1))
+    lock_level = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
 
 class AuditLogEntry(db.Model):

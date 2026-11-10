@@ -27,7 +27,7 @@ import os
 import tempfile
 import time
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from flask import current_app
 
 from . import audit
@@ -160,6 +160,8 @@ def _fernet_for_key(secret_key):
 
 
 def _fernet():
+    """Encrypts with SECRET_KEY, decrypts with it or any SECRET_KEY_FALLBACKS
+    entry (so a rotated key does not orphan the stored secrets)."""
     secret_key = current_app.config.get("SECRET_KEY", "")
     if not secret_key or secret_key == INSECURE_DEFAULT_SECRET_KEY:
         raise SecretStoreError(
@@ -167,7 +169,8 @@ def _fernet():
             "insecure default ('dev-insecure-secret-change-me'). Set a real SECRET_KEY in "
             "/etc/mcprack/env first."
         )
-    return _fernet_for_key(secret_key)
+    fallbacks = current_app.config.get("SECRET_KEY_FALLBACKS") or []
+    return MultiFernet([_fernet_for_key(secret_key), *[_fernet_for_key(old) for old in fallbacks]])
 
 
 def _encrypt(values):
