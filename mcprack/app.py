@@ -422,11 +422,15 @@ def register_cli(app):
     @click.option("--email", default="")
     def create_admin(username, password, email):
         """Create the first local admin account."""
+        from . import passwords
         from .models import User
 
         if User.query.filter_by(username=username).first():
             click.echo(f"User '{username}' already exists.")
             return
+        problem = passwords.check_strength(password, username)
+        if problem:
+            raise click.ClickException(problem)
 
         user = User(username=username, email=email, auth_type="local", is_admin=True)
         user.set_password(password)

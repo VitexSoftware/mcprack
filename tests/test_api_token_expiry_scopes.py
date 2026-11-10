@@ -205,7 +205,7 @@ def test_admin_read_scope_allows_gets_but_not_writes(app, client):
     assert _bearer_get(app, "/api/v1/admin/servers", raw).status_code == 200
 
     resp = _bearer_request(
-        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "pw"}
+        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "a-long-enough-pass-1"}
     )
     assert resp.status_code == 403
     assert resp.get_json()["error"]["code"] == "insufficient_scope"
@@ -218,7 +218,7 @@ def test_admin_write_scope_covers_reads_and_writes(app, client):
 
     assert _bearer_get(app, "/api/v1/admin/users", raw).status_code == 200
     resp = _bearer_request(
-        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "pw"}
+        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "a-long-enough-pass-1"}
     )
     assert resp.status_code == 201
 

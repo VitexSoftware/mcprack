@@ -84,12 +84,17 @@ class User(UserMixin, db.Model):
         return self.is_active_flag
 
     def set_password(self, raw_password):
+        # Never store a hash of "nothing": an account with a blank password
+        # can be logged into with a blank password (docs/AUDIT-2026-11.md B-03).
+        # Strength is judged by mcprack.passwords at the entry points.
+        if not isinstance(raw_password, str) or not raw_password:
+            raise ValueError("a password must not be empty")
         self.auth_type = "local"
         self.password_hash = generate_password_hash(raw_password)
 
     def check_password(self, raw_password):
-        if not self.password_hash:
-            return False
+        if not self.password_hash or not raw_password:
+            return False  # empty never verifies, even against a legacy blank-password hash
         return check_password_hash(self.password_hash, raw_password)
 
     @property

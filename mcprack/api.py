@@ -28,6 +28,7 @@ from . import admin
 from . import audit
 from . import catalog
 from . import env_policy
+from . import passwords
 from . import secret_store
 from . import vaultwarden
 from .extensions import db, limiter
@@ -873,6 +874,9 @@ def admin_users():
             return api_error(400, "invalid_request", "username and password are required")
         if User.query.filter_by(username=username).first():
             return api_error(409, "conflict", f"user '{username}' already exists")
+        problem = passwords.check_strength(password, username)
+        if problem:
+            return api_error(400, "invalid_password", problem)
 
         user = User(
             username=username,
@@ -905,6 +909,10 @@ def admin_user_update(user_id):
     user = db.get_or_404(User, user_id)
     data = request.get_json(silent=True) or {}
 
+    if data.get("password") and user.auth_type == "local":
+        problem = passwords.check_strength(data["password"], user.username)
+        if problem:
+            return api_error(400, "invalid_password", problem)
     if "is_admin" in data:
         user.is_admin = bool(data["is_admin"])
     if "is_active" in data:

@@ -28,6 +28,9 @@ class Config:
     REMEMBER_COOKIE_SAMESITE = "Lax"
     PERMANENT_SESSION_LIFETIME = int(os.environ.get("SESSION_LIFETIME_SECONDS", str(8 * 3600)))
 
+    # Minimum length of any newly set password (ASVS V2.1.1: 12).
+    PASSWORD_MIN_LENGTH = int(os.environ.get("PASSWORD_MIN_LENGTH", "12"))
+
     # --- CSRF (Flask-WTF) ---
     WTF_CSRF_TIME_LIMIT = None
 

@@ -26,13 +26,13 @@ def test_user_create_and_list(app):
     with app.app_context():
         runner = app.test_cli_runner()
 
-        result = runner.invoke(args=["user", "create", "--username", "bob", "--password", "hunter2", "--admin"])
+        result = runner.invoke(args=["user", "create", "--username", "bob", "--password", "a-long-enough-pass-1", "--admin"])
         assert result.exit_code == 0, result.output
 
         user = User.query.filter_by(username="bob").first()
         assert user is not None
         assert user.is_admin is True
-        assert user.check_password("hunter2")
+        assert user.check_password("a-long-enough-pass-1")
 
         result = runner.invoke(args=["user", "list"])
         assert "bob" in result.output
@@ -43,7 +43,7 @@ def test_user_create_duplicate_fails(app):
     with app.app_context():
         _make_user("bob")
         runner = app.test_cli_runner()
-        result = runner.invoke(args=["user", "create", "--username", "bob", "--password", "hunter2"])
+        result = runner.invoke(args=["user", "create", "--username", "bob", "--password", "a-long-enough-pass-1"])
         assert result.exit_code != 0
         assert "already exists" in result.output
 
@@ -53,9 +53,9 @@ def test_user_passwd_promote_demote_enable_disable(app):
         _make_user("carol")
         runner = app.test_cli_runner()
 
-        result = runner.invoke(args=["user", "passwd", "carol", "--password", "newpass123"])
+        result = runner.invoke(args=["user", "passwd", "carol", "--password", "another-long-pass-2"])
         assert result.exit_code == 0, result.output
-        assert User.query.filter_by(username="carol").first().check_password("newpass123")
+        assert User.query.filter_by(username="carol").first().check_password("another-long-pass-2")
 
         runner.invoke(args=["user", "promote", "carol"])
         assert User.query.filter_by(username="carol").first().is_admin is True

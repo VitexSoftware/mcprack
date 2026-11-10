@@ -11,7 +11,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import audit, mailer
+from . import audit, mailer, passwords
 from .urls import external_url
 from .extensions import db, limiter, login_manager
 from .models import User
@@ -261,10 +261,10 @@ def account_password():
 
         if not current_user.check_password(current_password):
             flash(_("Current password is incorrect."), "error")
-        elif len(new_password) < MIN_PASSWORD_LENGTH:
-            flash(_("New password must be at least %(n)d characters.", n=MIN_PASSWORD_LENGTH), "error")
         elif new_password != confirm_password:
             flash(_("New password and confirmation don't match."), "error")
+        elif problem := passwords.check_strength(new_password, current_user.username):
+            flash(problem, "error")
         else:
             current_user.set_password(new_password)
             db.session.commit()
@@ -331,10 +331,10 @@ def reset_password(token):
         new_password = request.form.get("new_password", "")
         confirm_password = request.form.get("confirm_password", "")
 
-        if len(new_password) < MIN_PASSWORD_LENGTH:
-            flash(_("New password must be at least %(n)d characters.", n=MIN_PASSWORD_LENGTH), "error")
-        elif new_password != confirm_password:
+        if new_password != confirm_password:
             flash(_("New password and confirmation don't match."), "error")
+        elif problem := passwords.check_strength(new_password, user.username):
+            flash(problem, "error")
         else:
             user.set_password(new_password)
             db.session.commit()

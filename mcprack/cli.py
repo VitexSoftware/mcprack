@@ -22,6 +22,7 @@ from . import admin
 from . import catalog
 from . import env_policy
 from . import health
+from . import passwords
 from . import secret_store
 from . import vaultwarden
 from .env_detection import looks_sensitive_name
@@ -126,6 +127,9 @@ def user_create(username, password, email, admin):
     """Create a local user account."""
     if User.query.filter_by(username=username).first():
         raise click.ClickException(f"User '{username}' already exists.")
+    problem = passwords.check_strength(password, username)
+    if problem:
+        raise click.ClickException(problem)
     user = User(username=username, email=email, auth_type="local", is_admin=admin)
     user.set_password(password)
     db.session.add(user)
@@ -155,6 +159,9 @@ def user_passwd(username, password):
         raise click.ClickException(
             f"User '{username}' authenticates via {user.auth_type}, not a local password."
         )
+    problem = passwords.check_strength(password, username)
+    if problem:
+        raise click.ClickException(problem)
     user.set_password(password)
     db.session.commit()
     click.echo(f"Password updated for '{username}'.")

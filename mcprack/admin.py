@@ -13,6 +13,7 @@ from . import detection
 from . import env_detection
 from . import health
 from . import installer
+from . import passwords
 from . import appstream_icons
 from . import secret_store
 from . import user_proxy
@@ -1217,13 +1218,25 @@ def users_list():
 @admin_required
 def user_new():
     if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password", "")
+        problem = None
+        if not username:
+            problem = "A username is required."
+        elif User.query.filter_by(username=username).first() is not None:
+            problem = f"A user named '{username}' already exists."
+        else:
+            problem = passwords.check_strength(password, username)
+        if problem:
+            flash(problem, "error")
+            return render_template("admin/user_form.html", user=None), 400
         user = User(
-            username=request.form["username"],
+            username=username,
             email=request.form.get("email", ""),
             auth_type="local",
             is_admin=request.form.get("is_admin") == "on",
         )
-        user.set_password(request.form["password"])
+        user.set_password(password)
         db.session.add(user)
         db.session.commit()
         audit.log_audit_event(
@@ -1290,12 +1303,17 @@ def user_edit(user_id):
     permission_map = get_permission_map(user)
 
     if request.method == "POST":
+        new_password = request.form.get("password", "")
+        if user.auth_type == "local" and new_password:
+            problem = passwords.check_strength(new_password, user.username)
+            if problem:
+                flash(problem, "error")
+                return redirect(url_for("admin.user_edit", user_id=user_id))
         user.is_admin = request.form.get("is_admin") == "on"
         user.is_active_flag = request.form.get("is_active") == "on"
         if not user.is_active_flag:
             # a disabled account must not keep running MCP servers
             accounts.stop_processes(user)
-        new_password = request.form.get("password", "")
         if user.auth_type == "local" and new_password:
             user.set_password(new_password)
 
