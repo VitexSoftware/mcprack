@@ -98,6 +98,16 @@ def test_malformed_names_are_rejected(name):
         "XDG_CONFIG_HOME",
         "FASTMCP_SERVER_AUTH",
         "TMPDIR",
+        "SSH_ASKPASS",
+        "SSH_ASKPASS_REQUIRE",
+        "SSH_AUTH_SOCK",
+        "DISPLAY",
+        "LOCALDOMAIN",
+        "GNUPGHOME",
+        "OPENSSL_CONF",
+        "GLIBC_TUNABLES",
+        "SOCKS_PROXY",
+        "EDITOR",
     ],
 )
 def test_process_altering_names_are_rejected(name):
