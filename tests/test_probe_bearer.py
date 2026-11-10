@@ -85,3 +85,71 @@ def test_bearer_without_the_environment_variable_is_a_usage_error(backend):
 
     assert result.returncode == 2
     assert "MCPRACK_TOKEN" in result.stdout
+
+
+# --- the token only goes where it was pointed -------------------------------------------------
+
+
+class _Recorder(BaseHTTPRequestHandler):
+    seen = []
+
+    def log_message(self, *args):
+        pass
+
+    def do_POST(self):
+        type(self).seen.append(self.headers.get("Authorization"))
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"jsonrpc": "2.0", "id": 1, "result": {}}')
+
+
+def _server(handler):
+    server = HTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
+
+
+def test_a_redirect_is_not_followed_with_a_token():
+    _Recorder.seen = []
+    elsewhere = _server(_Recorder)
+
+    class Redirector(BaseHTTPRequestHandler):
+        def log_message(self, *args):
+            pass
+
+        def do_POST(self):
+            self.rfile.read(int(self.headers.get("Content-Length", 0)))
+            self.send_response(307)
+            self.send_header("Location", f"http://127.0.0.1:{elsewhere.server_port}/x")
+            self.end_headers()
+
+    front = _server(Redirector)
+    try:
+        result = _probe(f"http://127.0.0.1:{front.server_port}/proxy/mcp/3", "--bearer", token=TOKEN)
+    finally:
+        front.shutdown()
+        elsewhere.shutdown()
+
+    assert result.returncode == 1
+    assert "redirect" in result.stdout
+    assert _Recorder.seen == []  # the other host never saw a request, let alone the token
+    assert TOKEN not in result.stdout + result.stderr
+
+
+def test_plain_http_to_a_remote_host_is_refused_before_anything_is_sent():
+    result = _probe("http://192.0.2.10:8912/proxy/mcp/3", "--bearer", token=TOKEN)  # TEST-NET-1: never reachable
+
+    assert result.returncode == 2
+    assert "plain http" in result.stdout and "--insecure" in result.stdout
+    assert TOKEN not in result.stdout + result.stderr
+
+
+def test_https_to_a_remote_host_passes_the_scheme_check():
+    """The refusal is about plain http only: an https URL goes on to try to
+    connect (and fails here - nothing listens - instead of being refused)."""
+    result = _probe("https://127.0.0.1:9/proxy/mcp/3", "--bearer", "--timeout", "2", token=TOKEN)
+
+    assert result.returncode == 1
+    assert "refusing" not in result.stdout

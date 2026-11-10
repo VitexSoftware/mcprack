@@ -32,6 +32,7 @@ import os
 import re
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 # Matches the token segment of /proxy/mcp/<token>/<server_id> so it can be
@@ -40,6 +41,15 @@ _TOKEN_RE = re.compile(r"(/proxy/mcp/)[^/]+(/\d+)")
 
 PROTOCOL_VERSION = "2024-11-05"
 CLIENT_NAME = "mcprack-mcp-probe"
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """urllib keeps the Authorization header when it follows a redirect - to
+    another host as well. A token must go only where the user pointed us, so
+    with --bearer a redirect is reported, never followed."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 
 def redact(url):
@@ -63,8 +73,9 @@ def post(url, payload, timeout, session=None, bearer=None):
     if bearer:
         request.add_header("Authorization", f"Bearer {bearer}")
 
+    opener = urllib.request.build_opener(_NoRedirect) if bearer else urllib.request.build_opener()
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with opener.open(request, timeout=timeout) as response:
             status = response.status
             raw = response.read().decode("utf-8", "replace")
             session_id = response.headers.get("mcp-session-id")
@@ -149,6 +160,11 @@ line, where `ps` would show it. Exit status is 0 only if every step succeeded.
     )
     parser.add_argument("--raw", action="store_true", help="print the raw response body")
     parser.add_argument(
+        "--insecure",
+        action="store_true",
+        help="with --bearer: allow sending the token over plain http to a host that is not loopback (private intranet only)",
+    )
+    parser.add_argument(
         "--bearer",
         action="store_true",
         help="send Authorization: Bearer $MCPRACK_TOKEN (the credential of a tokenless /proxy/mcp/<id> URL)",
@@ -160,6 +176,13 @@ line, where `ps` would show it. Exit status is 0 only if every step succeeded.
         bearer = os.environ.get("MCPRACK_TOKEN", "").strip()
         if not bearer:
             print("FAIL --bearer needs the token in the MCPRACK_TOKEN environment variable")
+            return 2
+        target = urllib.parse.urlsplit(args.url)
+        if target.scheme != "https" and target.hostname not in ("localhost", "127.0.0.1", "::1") and not args.insecure:
+            print(
+                "FAIL refusing to send the token over plain http to a non-loopback host "
+                "(it would cross the network in clear text); use https, or --insecure on a trusted private network"
+            )
             return 2
 
     url = args.url
@@ -182,6 +205,12 @@ line, where `ps` would show it. Exit status is 0 only if every step succeeded.
     )
     if status is None:
         return fail("initialize: could not connect", raw)
+    if bearer and status is not None and 300 <= status < 400:
+        return fail(
+            f"initialize: HTTP {status} redirect - not followed while a token is being sent (it must not leave "
+            "the host you named); probe the final URL directly",
+            raw,
+        )
     if status == 401:
         hint = (
             "the token was not accepted - it must be an API token with the proxy:access scope, not expired or revoked"
