@@ -4,6 +4,8 @@ import os
 import re
 from unittest.mock import patch
 
+import pytest
+
 from mcprack.extensions import db
 from mcprack.models import McpServer, User, UserServerPermission, UserServerSelection
 
@@ -491,6 +493,31 @@ def test_user_proxy_route_returns_clean_jsonrpc_error_on_broken_upstream(app, cl
     assert "failed its startup handshake" in payload["error"]["message"]
 
 
+@pytest.mark.parametrize("network_backend", [False, True])
+def test_streamable_http_get_does_not_start_or_contact_backend(app, client, network_backend):
+    user_id = _login(client)
+    server_id = _add_selected_stdio_server(app, user_id)
+    with app.app_context():
+        from mcprack.catalog import _make_proxy_token
+
+        if network_backend:
+            server = db.session.get(McpServer, server_id)
+            server.transport = "http"
+            server.command = None
+            server.url = "http://streamable.example.test/mcp"
+            db.session.commit()
+        token = _make_proxy_token(user_id, server_id)
+
+    with patch("mcprack.catalog.secret_store.resolve_server_env") as resolve_env, \
+         patch("mcprack.catalog.user_proxy.ensure_user_server_proxy") as ensure_proxy:
+        response = client.get(f"/proxy/mcp/{token}/{server_id}")
+
+    assert response.status_code == 405
+    assert set(response.headers["Allow"].split(", ")) == {"POST", "DELETE"}
+    resolve_env.assert_not_called()
+    ensure_proxy.assert_not_called()
+
+
 def test_relay_streams_sse_before_upstream_closes(app):
     from unittest.mock import MagicMock
 
@@ -720,8 +747,8 @@ def test_proxy_route_holds_relay_guard_during_post_relay(app, client, monkeypatc
     assert guard_state["held"] is True
 
 
-def test_proxy_route_get_relay_not_guarded(app, client, monkeypatch, tmp_path):
-    """GET relays carry a long-lived SSE stream; guarding them would hold
+def test_legacy_sse_get_relay_not_guarded(app, client, monkeypatch, tmp_path):
+    """Legacy SSE GET relays carry a long-lived stream; guarding them would hold
     the pair lock for minutes and block reaping, so they stay unguarded."""
     from mcprack import user_proxy
 
@@ -736,7 +763,14 @@ def test_proxy_route_get_relay_not_guarded(app, client, monkeypatch, tmp_path):
 
     guard_state = {}
 
-    def fake_forward(port, server_name=None):
+    with app.app_context():
+        server = db.session.get(McpServer, server_id)
+        server.transport = "sse"
+        server.command = None
+        server.url = "http://legacy-sse.example.test/sse"
+        db.session.commit()
+
+    def fake_forward(url, env, server):
         try:
             with user_proxy._serialized(user_id, server_id, wait_seconds=0):
                 guard_state["held"] = False
@@ -744,8 +778,7 @@ def test_proxy_route_get_relay_not_guarded(app, client, monkeypatch, tmp_path):
             guard_state["held"] = True
         return app.response_class("stream", status=200)
 
-    with patch("mcprack.catalog.user_proxy.ensure_user_server_proxy", return_value=35123), \
-         patch("mcprack.catalog._forward_to_user_proxy", side_effect=fake_forward):
+    with patch("mcprack.catalog._forward_to_backend_url", side_effect=fake_forward):
         resp = client.get(f"/proxy/mcp/{token}/{server_id}")
 
     assert resp.status_code == 200

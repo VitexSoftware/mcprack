@@ -416,6 +416,9 @@ def _serve_user_proxy_mcp(user, server_id):
     if not selected:
         abort(403)
 
+    if request.method == "GET" and (server.command or server.transport != "sse"):
+        return Response(status=405, headers={"Allow": "POST, DELETE", "Cache-Control": "no-store"})
+
     request_id = _jsonrpc_request_id(request.get_data())
 
     try:
