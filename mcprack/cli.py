@@ -398,6 +398,88 @@ def user_config_show(username, client):
     click.echo(config_json)
 
 
+@user_config_cli.command("verify")
+@click.argument("username")
+@click.argument("client", default="claude-code")
+@click.option(
+    "--base-url",
+    default=None,
+    help="Probe this origin instead of the one in the configuration - e.g. http://127.0.0.1:8912 to test "
+    "mcprack itself without the reverse proxy in front of it.",
+)
+@click.option("--server", "only", multiple=True, metavar="NAME", help="Verify only this server (repeatable).")
+@click.option("--timeout", type=float, default=60.0, show_default=True, help="Seconds allowed per server (a cold start takes a while).")
+@click.option("--insecure", is_flag=True, help="Allow sending the token over plain http to a non-loopback host.")
+def user_config_verify(username, client, base_url, only, timeout, insecure):
+    """Check that a user's generated client config actually works.
+
+    Does what the client will do - initialize, then tools/list - against every
+    URL in the configuration, through the reverse proxy and TLS, the relay and
+    the MCP server behind it. For the claude-code format a short-lived token
+    (15 minutes, scope proxy:access) is created for the check and removed again.
+    Exit status 0 only if every server answered with tools."""
+    from datetime import datetime, timedelta, timezone
+    from urllib.parse import urlsplit, urlunsplit
+
+    from . import audit, config_formats, probe
+    from .models import ApiToken
+
+    user = _get_user_or_fail(username)
+    config_json, _filename, error_message = _build_user_config_or_fail(user, client)
+    if config_json is None:
+        raise click.ClickException(error_message)
+    document = json.loads(config_json)
+    servers = next((document[key] for key in ("mcpServers", "servers") if isinstance(document.get(key), dict)), {})
+    if only:
+        servers = {name: entry for name, entry in servers.items() if name in only}
+    if not servers:
+        raise click.ClickException("Nothing to verify: no server in that configuration" + (" matches --server." if only else "."))
+
+    placeholder = "${" + config_formats.CLAUDE_CODE_TOKEN_VARIABLE + "}"
+    temporary = None
+    failures = 0
+    try:
+        for name, entry in sorted(servers.items()):
+            url = entry.get("url") if isinstance(entry, dict) else None
+            if not url:
+                click.echo(f"SKIP  {name}: no URL in the configuration (a local command - nothing to probe)")
+                continue
+            if base_url:
+                target = urlsplit(base_url)
+                parts = urlsplit(url)
+                url = urlunsplit((target.scheme, target.netloc, parts.path, parts.query, parts.fragment))
+            bearer = None
+            if placeholder in json.dumps(entry.get("headers") or {}):
+                if temporary is None:
+                    raw, temporary = ApiToken.generate(
+                        "cli-verify", user.id,
+                        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15), scopes=["proxy:access"],
+                    )
+                    db.session.add(temporary)
+                    db.session.commit()
+                    audit.log_audit_event(
+                        "credential_access", "success", user=user,
+                        error_message="temporary verification token created by `user config verify`",
+                    )
+                    bearer = raw
+                else:
+                    bearer = raw
+            result = probe.probe(url, bearer=bearer, timeout=timeout, allow_insecure=insecure)
+            if result.ok:
+                click.echo(f"OK    {name}: {result.tools} tool(s), protocol {result.protocol or '?'}, {result.seconds:.1f}s")
+            else:
+                failures += 1
+                click.echo(f"FAIL  {name}: {result.step}: {result.detail}")
+    finally:
+        if temporary is not None:
+            db.session.delete(temporary)
+            db.session.commit()
+    if failures:
+        click.echo(f"{failures} of {len(servers)} server(s) failed.")
+        raise SystemExit(1)
+    click.echo(f"All {len(servers)} server(s) verified.")
+
+
 @user_config_cli.command("download")
 @click.argument("username")
 @click.argument("client")

@@ -39,7 +39,7 @@ import urllib.request
 # masked before anything is printed.
 _TOKEN_RE = re.compile(r"(/proxy/mcp/)[^/]+(/\d+)")
 
-PROTOCOL_VERSION = "2024-11-05"
+PROTOCOL_VERSION = "2025-06-18"
 CLIENT_NAME = "mcprack-mcp-probe"
 
 

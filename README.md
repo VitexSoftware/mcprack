@@ -991,8 +991,19 @@ such as `ANTHROPIC_API_KEY`, `NPM_TOKEN` or `HTTPS_PROXY` as empty inside the
 
    (`--scope local` is the default of `claude mcp add` and keeps it to the
    current project in `~/.claude.json`; `--scope project` writes `.mcp.json`.)
-4. In Claude Code run `/mcp` to see the status. A server that is `failed`
-   can be diagnosed with `mcprack-mcp-probe` (below) using the same token.
+4. In Claude Code run `/mcp` to see the status. To check the setup *before* a
+   user tries it, run on the server
+
+       mcprack user config verify USERNAME claude-code
+
+   It does what the client will do — `initialize`, then `tools/list` — against
+   every URL in the generated configuration (through the reverse proxy and TLS,
+   the relay and the MCP server behind it), prints one line per server with the
+   number of tools and the negotiated protocol version, and exits non-zero if any
+   fails. For this format it creates a 15-minute token for the check and removes
+   it again. `--base-url http://127.0.0.1:8912` probes mcprack itself without the
+   reverse proxy in front (to tell which hop is broken). A server that is `failed`
+   in Claude Code can also be diagnosed with `mcprack-mcp-probe --bearer` (below).
 
 With [Optional MCP OAuth](#optional-mcp-oauth) enabled the generated file has
 **no `headers` at all**: Claude Code starts the OAuth login itself (`/mcp` →

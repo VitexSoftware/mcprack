@@ -18,6 +18,8 @@ mcprack (1.7.0-1) UNRELEASED; urgency=medium
     (MFA_REQUIRED_FOR_ADMINS) - they are sent to the setup page on first use of
     the admin area, in the browser and for the admin API. Reset by an
     administrator (UI, API) or `mcprack user mfa-reset`. New migration add_user_mfa.
+  * New `mcprack user config verify USERNAME [CLIENT]`: probes every URL of a
+    generated client configuration the way the client does (initialize, tools/list).
   * Relay limits: buffered answers capped (PROXY_MAX_RESPONSE_BYTES), concurrent
     cold starts per worker limited (MCP_COLD_START_CONCURRENCY/WAIT), dpkg-query
     for icons bounded and cached.
