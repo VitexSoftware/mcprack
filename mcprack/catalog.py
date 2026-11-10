@@ -26,6 +26,7 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from . import appstream_icons
 from . import audit
+from . import endpoint_policy
 from . import env_detection
 from . import env_policy
 from . import health
@@ -239,6 +240,16 @@ def _forward_to_backend_url(url, env, server):
     here, server-side, from `env` - never handed to the end user, same
     rationale as the per-user proxy path above (see
     _build_client_config_json's docstring)."""
+    # The registration form refuses link-local / metadata destinations, but a
+    # server saved before that check existed (or edited in the database) is
+    # still a stored URL. Check the destination again at the moment it is used.
+    refusals = endpoint_policy.destination_errors(url)
+    if refusals:
+        logger.error("Refusing to relay server %s: %s", server.name, "; ".join(refusals))
+        return _jsonrpc_error_response(
+            None, f"Server '{server.name}' points at a backend address that is not allowed. Ask an administrator."
+        )
+
     parts = urlsplit(url)
     scheme = parts.scheme or "http"
     host = parts.hostname
