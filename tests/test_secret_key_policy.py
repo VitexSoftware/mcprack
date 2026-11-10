@@ -125,3 +125,15 @@ def test_sessions_survive_a_key_rotation(monkeypatch):
     with new_app.test_request_context():
         serializer = SecureCookieSessionInterface().get_signing_serializer(new_app)
         assert serializer.loads(cookie) == {"hello": "world"}
+
+
+@pytest.mark.parametrize("weak", ["change-me", "", "dev-insecure-secret-change-me", "short-key-1a2b3c", "secret"])
+def test_a_weak_fallback_key_refuses_to_start(weak):
+    with pytest.raises(RuntimeError) as caught:
+        _app(NEW, SECRET_KEY_FALLBACKS=[OLD, weak])
+
+    assert "FALLBACKS" in str(caught.value)
+
+
+def test_strong_fallbacks_are_accepted():
+    assert _app(NEW, SECRET_KEY_FALLBACKS=[OLD, GOOD]) is not None

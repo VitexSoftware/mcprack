@@ -47,10 +47,17 @@ def _enforce_secret_key(app):
         return
     key = app.config.get("SECRET_KEY", "")
     problem = _weak_secret_key(key)
+    # A fallback key still VERIFIES signatures (sessions, proxy URLs, reset
+    # links) and decrypts the local secret store, so a weak one is as bad as a
+    # weak SECRET_KEY: anybody who guesses it can forge what it verifies.
+    for index, old_key in enumerate(app.config.get("SECRET_KEY_FALLBACKS") or [], start=1):
+        weak = _weak_secret_key(old_key)
+        if weak and not problem:
+            problem = f"SECRET_KEY_FALLBACKS entry #{index} is not acceptable: {weak}"
     if problem:
         error_msg = (
             "\n"
-            "MCprack cannot start: SECRET_KEY is not acceptable - " + problem + ".\n"
+            "MCprack cannot start: the secret key configuration is not acceptable - " + problem + ".\n"
             "\n"
             "SECRET_KEY signs Flask sessions and per-user proxy tokens and protects the\n"
             "locally encrypted secrets, so it must be a strong random value.\n"
@@ -62,7 +69,8 @@ def _enforce_secret_key(app):
             "and put it in /etc/mcprack/env, then: sudo systemctl restart mcprack\n"
             "\n"
             "Rotating an existing key? Keep the old one in SECRET_KEY_FALLBACKS so existing\n"
-            "sessions, client configurations and local secrets keep working.\n"
+            "sessions, client configurations and local secrets keep working - but only a\n"
+            "strong old key is accepted there, and a weak one must be re-created, not kept.\n"
         )
         raise RuntimeError(error_msg)
 

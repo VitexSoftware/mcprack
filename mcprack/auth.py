@@ -303,7 +303,9 @@ def logout():
     # load_user). A plain GET - an old bookmark, or a link on somebody else's
     # page - only logs out this browser, so it cannot be used to throw a user
     # out of all their devices.
-    if request.method == "POST":
+    # (not on the public demo: its login is shared, so ending "all sessions"
+    # would log every other visitor out)
+    if request.method == "POST" and not current_app.config.get("DEMO_MODE"):
         accounts.invalidate_sessions(current_user)
         db.session.commit()
     logout_user()

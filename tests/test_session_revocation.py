@@ -164,3 +164,15 @@ def test_post_logout_is_csrf_protected(app, erin):
     resp = client.post("/logout")  # no token
 
     assert resp.status_code == 400
+
+
+def test_demo_mode_logout_does_not_log_other_visitors_out(app, erin):
+    """The demo login is shared: a POST /logout must only end this browser's
+    session, not everybody's."""
+    app.config["DEMO_MODE"] = True
+    first, _ = _login(app)
+    _, other_cookie = _login(app)
+
+    first.post("/logout")
+
+    assert _replay(app, other_cookie) == 200
