@@ -352,8 +352,13 @@ def set_locale(locale):
     from flask import session
     if locale in ["cs", "sk", "en"]:
         session["locale"] = locale
-    # Redirect back to original page, or index as default
-    ref = request.referrer
-    if ref and request.host in ref:
-        return redirect(ref)
+    # Back to the page the user came from - but only to a path on THIS host.
+    # The old check (`request.host in referrer`) was a substring test, so
+    # https://mcprack.example.com.attacker.invalid/ passed it
+    # (docs/AUDIT-2026-11.md C-01). Redirect to the path only, never the
+    # attacker-influenced string.
+    parts = urlparse(request.referrer or "")
+    if parts.scheme in ("http", "https") and parts.netloc == request.host and parts.path.startswith("/") \
+            and not parts.path.startswith("//"):
+        return redirect(parts.path + (f"?{parts.query}" if parts.query else ""))
     return redirect(url_for("catalog.index"))
