@@ -1,6 +1,7 @@
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from mcprack.app import create_app
+from mcprack.urls import sanitize_script_name
 
 application = create_app()
 
@@ -19,7 +20,12 @@ application = create_app()
 # or route hardcodes an absolute "/..." path. Root-mount deployments (the
 # documented default in debian/apache-mcprack.conf) are unaffected because
 # they never send that header, so SCRIPT_NAME stays empty.
-application.wsgi_app = ProxyFix(application.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+application.wsgi_app = sanitize_script_name(
+    ProxyFix(application.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+)
+# ^ a prefix that is not a plain path ("//evil.example", "/../x") is dropped,
+#   so a proxy that forgot to strip a client-sent X-Forwarded-Prefix cannot be
+#   used to turn every generated link into a link to another site.
 
 # WSGI entry point for production servers (gunicorn, uWSGI, etc.)
 # Do not call application.run() here - it enables debug mode.

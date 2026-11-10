@@ -153,6 +153,11 @@ def create_app(config_object=Config):
         when mcprack is reached directly or the vhost is misconfigured;
         setdefault so a view that needs its own value still wins."""
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        # Pages and API answers are per-user and carry client configurations,
+        # tokens and secrets: a shared proxy or the browser's back/forward
+        # cache must not keep them. Only static assets may be cached.
+        if not request.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
         # No 'unsafe-inline' for styles: every style comes from style.css

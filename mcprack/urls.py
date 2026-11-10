@@ -7,7 +7,28 @@ system must be built from the configured PUBLIC_BASE_URL instead
 (docs/AUDIT-2026-11.md A-05).
 """
 
+import re
+
 from flask import current_app, url_for
+
+# What a legitimate mount point (X-Forwarded-Prefix -> SCRIPT_NAME) looks like:
+# "/mcprack", "/tools/mcprack". Anything else - "//evil.example", "/a/../b",
+# "javascript:", backslashes, control characters - is not a path prefix and
+# would turn every url_for() and redirect into a link to somewhere else.
+_SAFE_PREFIX = re.compile(r"^(?:/[A-Za-z0-9._~-]+)*$")
+
+
+def sanitize_script_name(wsgi_app):
+    """WSGI middleware, applied after ProxyFix: drop a SCRIPT_NAME that is not a
+    plain path prefix (docs/AUDIT-2026-11.md C-04)."""
+
+    def middleware(environ, start_response):
+        prefix = environ.get("SCRIPT_NAME", "")
+        if prefix and (not _SAFE_PREFIX.match(prefix) or ".." in prefix.split("/")):
+            environ["SCRIPT_NAME"] = ""
+        return wsgi_app(environ, start_response)
+
+    return middleware
 
 
 def external_url(endpoint, **values):

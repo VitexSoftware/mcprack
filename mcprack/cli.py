@@ -10,6 +10,7 @@ unchanged.
 """
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -387,7 +388,12 @@ def user_config_download(username, client, out_path):
     if config_json is None:
         raise click.ClickException(error_message)
     target = Path(out_path) if out_path else Path(filename)
-    target.write_text(config_json)
+    # The file holds the user's proxy URLs, i.e. their credentials: create it
+    # 0600 and tighten a pre-existing one, regardless of the umask.
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:  # closes fd, even if the next line fails
+        os.fchmod(handle.fileno(), 0o600)
+        handle.write(config_json)
     click.echo(f"Wrote {target}")
 
 
