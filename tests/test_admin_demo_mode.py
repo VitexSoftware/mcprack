@@ -234,27 +234,24 @@ def test_demo_mode_blocks_install_routes(app, client, kind):
         assert McpServer.query.filter_by(name="evil").first() is None
 
 
-# A route added later that registers/edits/deletes/installs servers must not
-# silently escape the demo guard: every mutating admin/API route whose name
-# mentions "server" or "install" has to be either blocked or consciously
-# reviewed as harmless.
-_REVIEWED_DEMO_SAFE = {
-    "admin.server_test_stdio",  # starts an *already registered* command, registers nothing
-}
+# Default-deny: every mutating route must be either blocked in demo mode or
+# explicitly reviewed (with a reason) in demo.REVIEWED_SAFE. A new route that
+# is in neither fails here, so it cannot skip the review - and the check is
+# not a name-substring match that a differently named route would dodge.
+def test_demo_guard_classifies_every_mutating_route(app):
+    from mcprack.demo import BLOCKED_ENDPOINTS, REVIEWED_SAFE
 
+    mutating = {
+        rule.endpoint
+        for rule in app.url_map.iter_rules()
+        if rule.endpoint != "static" and rule.methods & {"POST", "PUT", "PATCH", "DELETE"}
+    }
 
-def test_demo_guard_covers_every_server_mutating_route(app):
-    from mcprack.demo import BLOCKED_ENDPOINTS
-
-    uncovered = []
-    for rule in app.url_map.iter_rules():
-        endpoint = rule.endpoint
-        if not endpoint.startswith(("admin.", "api.")):
-            continue
-        if not (rule.methods & {"POST", "PUT", "PATCH", "DELETE"}):
-            continue
-        if "server" in endpoint or "install" in endpoint:
-            if endpoint not in BLOCKED_ENDPOINTS and endpoint not in _REVIEWED_DEMO_SAFE:
-                uncovered.append(endpoint)
-
-    assert not uncovered, f"demo guard does not cover: {uncovered}"
+    unclassified = sorted(mutating - BLOCKED_ENDPOINTS - set(REVIEWED_SAFE))
+    assert not unclassified, f"classify these routes in mcprack/demo.py: {unclassified}"
+    assert not (BLOCKED_ENDPOINTS & set(REVIEWED_SAFE)), "a route cannot be both blocked and reviewed-safe"
+    # OAuth routes only exist when OAUTH_ENABLED, so tolerate those being absent
+    stale = sorted(
+        e for e in (BLOCKED_ENDPOINTS | set(REVIEWED_SAFE)) - mutating if not e.startswith("oauth.")
+    )
+    assert not stale, f"demo.py lists routes that no longer exist: {stale}"

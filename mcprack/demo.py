@@ -35,6 +35,57 @@ BLOCKED_ENDPOINTS = frozenset(
     }
 )
 
+# Every OTHER mutating route has to be listed here, with the reason it is
+# harmless on a public demo. tests/test_admin_demo_mode.py walks the URL map
+# and fails for any mutating route that is in neither set, so a new route
+# cannot silently skip the review (default-deny, not a name-substring match).
+REVIEWED_SAFE = {
+    # authentication / own account
+    "auth.login": "authentication",
+    "auth.account_password": "changes the caller's own password",
+    "auth.forgot_password": "reset request, rate limited",
+    "auth.reset_password": "reset completion with a signed token",
+    # per-user catalog state - overrides are constrained by env_policy
+    # (DEMO_MODE additionally limits them to keys the server declares)
+    "catalog.selection": "chooses among already registered servers",
+    "catalog.override": "per-user env values, validated by env_policy",
+    "catalog.user_proxy_mcp": "MCP relay (path token)",
+    "catalog.user_proxy_mcp_oauth": "MCP relay (bearer)",
+    "api.me_selections_set": "chooses among already registered servers",
+    "api.me_override_set": "per-user env values, validated by env_policy",
+    "api.me_override_delete": "removes the caller's own override",
+    "api.tokens_create": "caller's own API token",
+    "api.tokens_delete": "caller's own API token",
+    # OAuth endpoints (only mounted with OAUTH_ENABLED)
+    "oauth.authorize": "consent for the logged-in user",
+    "oauth.issue_token": "token endpoint",
+    "oauth.register_client": "dynamic client registration",
+    "oauth.revoke_token": "token revocation",
+    # admin plane that does not define what gets executed
+    "admin.server_test_stdio": "starts an already registered command, registers nothing",
+    "admin.proxy_instance_stop": "stops a running proxy",
+    "admin.otel_wizard_test": "sends a test telemetry signal",
+    "admin.template_new": "ACL/selection preset",
+    "admin.template_edit": "ACL/selection preset",
+    "admin.template_delete": "ACL/selection preset",
+    "admin.user_new": "account management",
+    "admin.user_edit": "account management",
+    "admin.user_apply_template": "ACL/selection preset",
+    "admin.user_override": "per-user env values, validated by env_policy",
+    "admin.vaultwarden_migrate_to_vaultwarden": "moves secrets between stores",
+    "admin.vaultwarden_snapshot_to_local": "copies secrets between stores",
+    "api.admin_templates": "ACL/selection preset",
+    "api.admin_template_update": "ACL/selection preset",
+    "api.admin_template_delete": "ACL/selection preset",
+    "api.admin_user_apply_template": "ACL/selection preset",
+    "api.admin_users": "account management",
+    "api.admin_user_update": "account management",
+    "api.admin_user_delete": "account management",
+    "api.admin_user_selections_set": "chooses among already registered servers",
+    "api.admin_user_override_set": "per-user env values, validated by env_policy",
+    "api.admin_user_override_delete": "removes a user's override",
+}
+
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 MESSAGE = "This is a public demo instance — registering, editing, and deleting MCP servers is disabled."
