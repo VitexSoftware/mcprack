@@ -9,6 +9,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -67,6 +68,15 @@ HEALTH_RECHECK_INTERVAL = 30  # seconds
 # "how slow is cold start here" is a deployment- (and backend-) specific
 # fact, not a code constant.
 HANDSHAKE_TIMEOUT = int(os.environ.get("MCP_PROXY_HANDSHAKE_TIMEOUT", "15"))  # seconds
+# A cold start holds its request thread for up to HANDSHAKE_TIMEOUT. Without a
+# limit, a burst of them - after a restart every client reconnects at once -
+# takes every thread of the worker (and, since a worker is shared by all
+# traffic, the login page with them). At most this many may be starting in one
+# worker process; the others wait up to COLD_START_WAIT for a free slot and are
+# then told to retry (docs/AUDIT-2026-11.md B-14).
+COLD_START_CONCURRENCY = max(1, int(os.environ.get("MCP_COLD_START_CONCURRENCY", "3")))
+COLD_START_WAIT = int(os.environ.get("MCP_COLD_START_WAIT", "10"))  # seconds
+_COLD_START_SLOTS = threading.BoundedSemaphore(COLD_START_CONCURRENCY)
 # How long a caller waits for another worker's lock on the same (user,
 # server) pair before giving up — must comfortably exceed a full
 # spawn+handshake cycle (HANDSHAKE_TIMEOUT plus spawn overhead) while
@@ -98,6 +108,7 @@ class UserProxyError(RuntimeError):
         no_tools           initialize worked, tools/list is empty (crash on load)
         tools_list_failed  tools/list itself failed
         handshake_failed   generic (older code paths)
+        busy               too many instances are starting at once; retry shortly
         unknown            anything raised without a class
 
     `str(exc)` is the administrator's view and may end with the tail of the
@@ -894,7 +905,16 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
         start_time = time.monotonic()
         with telemetry.span("mcp.proxy.start", {"server_name": server_name}) as current_span:
             try:
-                _spawn(paths, port, server_name, desired_config, desired_json)
+                if not _COLD_START_SLOTS.acquire(timeout=COLD_START_WAIT):
+                    raise UserProxyError(
+                        f"Too many MCP servers are starting at once; '{server_name}' waited {COLD_START_WAIT}s for a slot",
+                        kind="busy",
+                        public="The server is busy starting other MCP servers - please try again in a moment.",
+                    )
+                try:
+                    _spawn(paths, port, server_name, desired_config, desired_json)
+                finally:
+                    _COLD_START_SLOTS.release()
             except UserProxyError as exc:
                 audit.log_audit_event(
                     "proxy_start",

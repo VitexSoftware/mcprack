@@ -109,6 +109,15 @@ def _parse_proxy_token(token):
 # queued behind it) until the worker gets killed.
 _PROXY_REQUEST_TIMEOUT = 10  # seconds
 _PROXY_STREAM_IDLE_TIMEOUT = 60
+# A buffered (non-SSE) answer is read into memory before it is passed on. The
+# timeout bounds how long a backend may take, not how much it may send: without
+# a cap one hostile or broken backend could make a worker hold gigabytes
+# (docs/AUDIT-2026-11.md B-14). PROXY_MAX_RESPONSE_BYTES overrides it.
+_PROXY_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+class _UpstreamTooLarge(Exception):
+    """The backend's answer is larger than the relay is willing to buffer."""
 
 
 def _jsonrpc_request_id(body):
@@ -212,7 +221,13 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
                 response.call_on_close(conn.close)
                 streaming = True
             else:
-                payload = upstream.read()
+                limit = int(current_app.config.get("PROXY_MAX_RESPONSE_BYTES", _PROXY_MAX_RESPONSE_BYTES))
+                declared = upstream.getheader("Content-Length")
+                if isinstance(declared, str) and declared.isdigit() and int(declared) > limit:
+                    raise _UpstreamTooLarge  # refused before a byte of it is read
+                payload = upstream.read(limit + 1)
+                if len(payload) > limit:
+                    raise _UpstreamTooLarge
                 response = Response(payload, status=upstream.status)
 
             for key, value in upstream.getheaders():
@@ -239,6 +254,17 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
             if current_span is not None:
                 current_span.set_attribute("mcp.result", result)
             return response
+        except _UpstreamTooLarge:
+            telemetry.record_mcp_server_call(
+                server_name, transport, "error", time.monotonic() - start_time
+            )
+            if current_span is not None:
+                current_span.set_attribute("mcp.result", "error")
+            logger.warning("MCP server '%s' answered with more than the relay's size limit", server_name)
+            return _jsonrpc_error_response(
+                _jsonrpc_request_id(body),
+                "Upstream MCP server's answer is larger than this relay will pass on.",
+            )
         except (socket.timeout, OSError, http.client.HTTPException) as exc:
             telemetry.record_mcp_server_call(
                 server_name, transport, "error", time.monotonic() - start_time
