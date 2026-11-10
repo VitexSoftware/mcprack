@@ -218,6 +218,15 @@ class Config:
     # controls the retention window, not whether logging happens.
     AUDIT_RETENTION_DAYS = int(os.environ.get("AUDIT_RETENTION_DAYS", "90"))
 
+    # Every audit event is also written, authenticated with a MAC, outside the
+    # database - so changes to the table can be detected (`flask audit-verify`,
+    # mcprack/audit_mirror.py). Sinks: standard error (the systemd journal) and a
+    # file. AUDIT_LOG_FILE unset = /var/log/mcprack/audit.log when that
+    # directory is writable; a path = that file; "off" = no file.
+    AUDIT_MIRROR_ENABLED = os.environ.get("AUDIT_MIRROR_ENABLED", "true").lower() in ("true", "1", "yes")
+    AUDIT_MIRROR_STDERR = os.environ.get("AUDIT_MIRROR_STDERR", "true").lower() in ("true", "1", "yes")
+    AUDIT_LOG_FILE = os.environ.get("AUDIT_LOG_FILE")
+
     # Monitoring (GET /health/servers, used by the Zabbix template). The
     # endpoint is disabled (404) unless MONITORING_TOKEN is set. Every
     # enabled server is probed as MONITORING_USER_ID (a normal mcprack user

@@ -104,6 +104,9 @@ def create_app(config_object=Config):
     app.config.from_object(config_object)
     _enforce_secret_key(app)
     _derive_trusted_hosts(app)
+    from . import audit_mirror
+
+    audit_mirror.init_app(app)
     if (
         app.config.get("LDAP_ENABLED")
         and not str(app.config.get("LDAP_SERVER", "")).lower().startswith("ldaps://")
@@ -467,6 +470,71 @@ def register_cli(app):
         db.session.add(user)
         db.session.commit()
         click.echo(f"Admin user '{username}' created.")
+
+    @app.cli.command("audit-verify")
+    @click.option(
+        "--log",
+        "logs",
+        multiple=True,
+        type=click.Path(),
+        help="Mirror log to check (repeatable; rotated copies audit.log.1, audit.log.2.gz ... are included). "
+        "Default: AUDIT_LOG_FILE.",
+    )
+    @click.option("--days", type=int, default=None, help="Only check the last N days (defaults to AUDIT_RETENTION_DAYS).")
+    @click.option("--strict", is_flag=True, help="Treat rows without a mirror line, and unreadable lines, as failures too.")
+    @click.option("--max-report", type=int, default=20, show_default=True, help="Most ids to list per category.")
+    def audit_verify_command(logs, days, strict, max_report):
+        """Compare the audit mirror with the audit table and report tampering.
+
+        Exit status 1 if a mirror line has a wrong MAC, a row is missing or was
+        changed; with --strict also if a row has no mirror line. 2 if there is no
+        log to check."""
+        from . import audit_mirror, audit_verify
+
+        configured = audit_mirror.resolve_file(current_app.config.get("AUDIT_LOG_FILE"))
+        paths = []
+        for requested in logs or ([configured] if configured else []):
+            paths.extend(audit_verify.log_files(requested))
+        if not paths:
+            click.echo(
+                "No mirror log found. Pass --log PATH, or set AUDIT_LOG_FILE (default /var/log/mcprack/audit.log) - "
+                "the journal copy (`journalctl -u mcprack | grep ^AUDIT`) can be saved to a file and checked too.",
+                err=True,
+            )
+            raise SystemExit(2)
+
+        retention = days if days is not None else current_app.config["AUDIT_RETENTION_DAYS"]
+        report = audit_verify.verify(paths, keys=audit_mirror._keys(), retention_days=retention)
+
+        def listing(items):
+            shown = ", ".join(str(item) for item in items[:max_report])
+            return shown + (f" ... (+{len(items) - max_report} more)" if len(items) > max_report else "")
+
+        click.echo(f"Read {report.lines} line(s) from {len(report.files)} file(s); {report.checked} event(s) checked"
+                   + (f" since {report.window_start.isoformat(timespec='seconds')}." if report.window_start else "."))
+        if report.unwritten:
+            click.echo(f"note: {report.unwritten} event(s) could not be written to the database at the time (logged with no id).")
+        if report.bad_mac:
+            click.echo(f"TAMPERED LOG: {len(report.bad_mac)} line(s) with an invalid MAC: "
+                       + listing([f"{name}:{number}" for name, number in report.bad_mac]))
+        if report.missing_in_db:
+            click.echo(f"DELETED: {len(report.missing_in_db)} event(s) are in the log but not in the database: "
+                       + listing(report.missing_in_db))
+        if report.altered:
+            click.echo(f"ALTERED: {len(report.altered)} row(s) differ from the log: "
+                       + listing([f"{rid} ({', '.join(fields)})" for rid, fields in report.altered]))
+        if report.unmirrored:
+            click.echo(f"{'UNMIRRORED' if strict else 'warning'}: {len(report.unmirrored)} row(s) have no line in the log "
+                       f"(inserted, or written while the mirror was off): " + listing(report.unmirrored))
+        if report.garbled:
+            click.echo(f"{'UNREADABLE' if strict else 'warning'}: {report.garbled} line(s) could not be read.")
+        failed = report.tampering or (strict and report.warnings)
+        if report.window_start is None and not report.bad_mac:
+            click.echo("Nothing to check: the log holds no authentic events.", err=True)
+            raise SystemExit(2)
+        click.echo("FAILED" if failed else "OK: the audit table agrees with the mirror.")
+        if failed:
+            raise SystemExit(1)
 
     @app.cli.command("audit-archive")
     @click.option(

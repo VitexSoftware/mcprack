@@ -535,7 +535,46 @@ Admins can browse the trail at **Admin → Audit Log**
 (`/admin/audit-log`), filterable by server, user, time window, and
 errors-only. Click the 🔗 on a row to see every event sharing its
 `request_id`. There is no way to edit or delete individual entries from the
-UI — the table is append-only by design.
+UI — the table is append-only by design (by convention: see the next section for
+what happens when somebody with database access ignores it).
+
+### Tamper evidence: the audit mirror
+
+Whoever can write to the database can edit or delete audit rows, and nothing in
+the table would show it. So every event is **also** written, as one line with an
+HMAC, somewhere the database does not control:
+
+- to standard error — the systemd journal of the service
+  (`journalctl -u mcprack | grep AUDIT`), which you can ship off the host; and
+- to a file, `/var/log/mcprack/audit.log` by default when that directory is
+  writable (`AUDIT_LOG_FILE=/other/path`, or `off`), rotated by logrotate.
+
+A line holds the row's id and the same fields as the row (never bodies or
+credentials) and a MAC keyed from `SECRET_KEY` (`SECRET_KEY_FALLBACKS` keeps old
+lines verifiable after a rotation). An event whose row could not be written —
+database down, or sabotaged — is still logged, with `"id": null`.
+
+```bash
+flask audit-verify                         # check the table against /var/log/mcprack/audit.log (+ rotated copies)
+flask audit-verify --log /srv/shipped/audit.log --days 30
+flask audit-verify --strict                # rows without a log line fail too
+```
+
+It reports **DELETED** (a line with no row), **ALTERED** (a row that differs from
+its line, with the fields), **TAMPERED LOG** (a line whose MAC is wrong) and rows
+**without any line** (inserted, or written while the mirror was off — a warning,
+a failure with `--strict`). Exit status 1 on the first three. Lines older than
+`AUDIT_RETENTION_DAYS` are not checked, because `audit-archive` legitimately
+removes those rows. A deleted *user* blanks the reference in old rows
+(`ON DELETE SET NULL`); that is not reported as tampering.
+
+This is tamper-**evidence**, not prevention, and it only means something if the
+attacker cannot also rewrite the log: ship the journal off the host
+(`systemd-journal-upload`, rsyslog `imjournal`) or make the file append-only
+(`chattr +a /var/log/mcprack/audit.log`; logrotate then needs `nocreate`-style
+handling or `chattr -a` in a prerotate step). Run `audit-verify` periodically
+(cron) and alert on a non-zero exit. `AUDIT_MIRROR_ENABLED=false` switches the
+mirror off; `AUDIT_MIRROR_STDERR=false` only the journal copy.
 
 ### Retention & archival
 

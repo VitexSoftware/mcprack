@@ -23,6 +23,9 @@ class TestConfig(Config):
     # The existing suite signs administrators in with a password only; the MFA
     # tests (tests/test_mfa.py) turn the production default back on.
     MFA_REQUIRED_FOR_ADMINS = False
+    # The audit mirror writes to stderr/a file; the suite switches it on where it tests it.
+    AUDIT_MIRROR_STDERR = False
+    AUDIT_LOG_FILE = "off"
     BW_SERVER = "https://vault.example.test"
     BW_CLIENTID = "test-client-id"
     BW_CLIENTSECRET = "test-client-secret"
