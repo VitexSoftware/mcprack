@@ -80,6 +80,8 @@ def test_change_password_blocked_for_ldap_user(app, client):
         user = User(username="dave", auth_type="ldap", email="dave@example.com")
         db.session.add(user)
         db.session.commit()
+        user.session_version = 0  # an account from before session versions: its cookie carries none
+        db.session.commit()
 
     with client.session_transaction() as sess:
         sess["_user_id"] = "1"

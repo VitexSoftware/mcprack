@@ -163,6 +163,7 @@ def user_passwd(username, password):
     if problem:
         raise click.ClickException(problem)
     user.set_password(password)
+    accounts.invalidate_sessions(user)
     db.session.commit()
     click.echo(f"Password updated for '{username}'.")
 

@@ -56,6 +56,10 @@ class User(UserMixin, db.Model):
     # new_token_version); accounts and tokens from before this column existed
     # are version 0.
     token_version = db.Column(db.Integer, nullable=False, default=new_token_version, server_default="0")
+    # Embedded in the session cookie at login and checked on every request
+    # (auth.load_user); changing it kills every session of the account.
+    # Accounts from before this column existed are 0, as are their cookies.
+    session_version = db.Column(db.Integer, nullable=False, default=new_token_version, server_default="0")
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
     # Which ConfigTemplate (if any) was last applied to this user — purely

@@ -4,14 +4,14 @@ from functools import wraps
 from urllib.parse import urlparse
 
 import ldap3
-from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from flask_babel import _
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import audit, mailer, passwords
+from . import accounts, audit, mailer, passwords
 from .urls import external_url
 from .extensions import db, limiter, login_manager
 from .models import User
@@ -94,7 +94,26 @@ def _verify_reset_token(token, max_age):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return db.session.get(User, int(user_id))
+    user = db.session.get(User, int(user_id))
+    # The cookie is signed, not stored, so it cannot be recalled - instead it
+    # carries the account's session_version from login, and a mismatch (logout,
+    # password change, account disabled/revoked) ends the session. Cookies
+    # from before versions existed carry none and count as 0.
+    if user is not None and session.get("sv", 0) != (user.session_version or 0):
+        return None
+    return user
+
+
+def _start_session(user):
+    """Log `user` in on a clean session: nothing a visitor (or somebody who
+    planted a cookie) put in the old one survives, apart from the language
+    choice."""
+    locale = session.get("locale")
+    session.clear()
+    if locale:
+        session["locale"] = locale
+    login_user(user)
+    session["sv"] = user.session_version or 0
 
 
 def admin_required(view):
@@ -180,7 +199,7 @@ def login():
 
         if user is not None and user.auth_type == "local" and user.password_hash:
             if user.check_password(password) and user.is_active:
-                login_user(user)
+                _start_session(user)
                 audit.log_audit_event("login", "success", user=user)
                 return redirect(next_url)
             audit.log_audit_event(
@@ -211,7 +230,7 @@ def login():
                 )
                 flash(_("This account has been deactivated."), "error")
                 return render_template("login.html", next=next_url)
-            login_user(user)
+            _start_session(user)
             audit.log_audit_event("login", "success", user=user)
             return redirect(next_url)
 
@@ -249,6 +268,11 @@ def login():
 @bp.route("/logout")
 @login_required
 def logout():
+    # Logging out ends the account's sessions everywhere: a copy of the cookie
+    # cannot be recalled any other way (see load_user). Cookie value copies
+    # captured earlier stop working.
+    accounts.invalidate_sessions(current_user)
+    db.session.commit()
     logout_user()
     return redirect(url_for("auth.login"))
 
@@ -276,6 +300,7 @@ def account_password():
             flash(problem, "error")
         else:
             current_user.set_password(new_password)
+            accounts.invalidate_sessions(current_user, keep_current=True)
             db.session.commit()
             audit.log_audit_event(
                 "password_change", "success", user=current_user, error_message="self-service change"
@@ -346,6 +371,7 @@ def reset_password(token):
             flash(problem, "error")
         else:
             user.set_password(new_password)
+            accounts.invalidate_sessions(user)
             db.session.commit()
             audit.log_audit_event(
                 "password_change", "success", user=user, error_message="reset via emailed link"

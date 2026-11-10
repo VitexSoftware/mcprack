@@ -13,6 +13,7 @@ from conftest import TestConfig
 # revision -> (parent revision, table, column added by the revision)
 HARDENING_MIGRATIONS = [
     ("add_user_token_version", "add_user_override_env_config", "users", "token_version"),
+    ("add_user_session_version", "materialize_server_permissions", "users", "session_version"),
 ]
 
 

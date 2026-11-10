@@ -22,6 +22,7 @@ def revoke_tokens(user):
     from datetime import datetime, timezone
 
     user.token_version = new_token_version(user.token_version)
+    user.session_version = new_token_version(user.session_version)
 
     now = datetime.now(timezone.utc)
     for token in ApiToken.query.filter_by(user_id=user.id, revoked_at=None).all():
@@ -33,6 +34,18 @@ def revoke_tokens(user):
             token.access_token_revoked_at = stamp
         if not token.refresh_token_revoked_at:
             token.refresh_token_revoked_at = stamp
+
+
+def invalidate_sessions(user, keep_current=False):
+    """Kill every browser session of `user` (their cookies stop working). With
+    keep_current the session making this request stays logged in, e.g. when
+    the user changes their own password. Does not commit."""
+    user.session_version = new_token_version(user.session_version)
+    if keep_current:
+        from flask import has_request_context, session
+
+        if has_request_context():
+            session["sv"] = user.session_version
 
 
 def stop_processes(user):

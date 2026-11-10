@@ -932,6 +932,7 @@ def admin_user_update(user_id):
         problem = passwords.check_strength(data["password"], user.username)
         if problem:
             return api_error(400, "invalid_password", problem)
+        accounts.invalidate_sessions(user)
     if "is_admin" in data:
         user.is_admin = bool(data["is_admin"])
     if "is_active" in data:

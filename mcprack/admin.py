@@ -1316,6 +1316,7 @@ def user_edit(user_id):
             accounts.stop_processes(user)
         if user.auth_type == "local" and new_password:
             user.set_password(new_password)
+            accounts.invalidate_sessions(user)
 
         # Persist explicit per-server ACL for currently available servers.
         permission_overrides = {

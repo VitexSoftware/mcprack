@@ -56,7 +56,7 @@ def app(tmp_path):
     def _isolate_request_globals():
         from flask import g
 
-        for attr in ("_login_user", "api_token"):
+        for attr in ("_login_user", "api_token", "csrf_token"):
             g.pop(attr, None)
 
     # Isolated per test - secret_store's shared env-cache file and
