@@ -291,6 +291,14 @@ def _parse_token_expiry(data):
     return None, None
 
 
+def _reaches_admin_api(scopes):
+    """Whether a token created with `scopes` could call the admin API. There are
+    two spellings of "unrestricted" - no scope list (None) and a list containing
+    "*" - and the model treats both alike, so both are named here, in one place;
+    otherwise any scope starting with "admin:"."""
+    return scopes is None or API_TOKEN_SCOPE_ALL in scopes or any(scope.startswith("admin:") for scope in scopes)
+
+
 def _parse_token_scopes(data):
     """Optional scope list from a create payload, validated against
     API_TOKEN_SCOPES. Returns (scopes, error_response); scopes is None for
@@ -483,7 +491,7 @@ def tokens_create():
     if getattr(g, "api_token", None) is None:
         from .auth import mfa_enrollment_required
 
-        if mfa_enrollment_required() and (scopes is None or any(scope.startswith("admin:") for scope in scopes)):
+        if mfa_enrollment_required() and _reaches_admin_api(scopes):
             return api_error(
                 403,
                 "mfa_required",

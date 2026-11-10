@@ -760,8 +760,12 @@ def test_an_administrator_still_to_enrol_cannot_mint_a_token_that_reaches_the_ad
     unrestricted = _mint(client)
     admin_scope = _mint(client, scopes=["admin:read"])
     admin_write = _mint(client, scopes=["config:read", "admin:write"])
+    # "*" is the second spelling of unrestricted - the model treats it as one
+    star = _mint(client, scopes=["*"])
+    star_among_others = _mint(client, scopes=["config:read", "*"])
+    empty = _mint(client, scopes=[])  # an empty list is unrestricted too
 
-    for response in (unrestricted, admin_scope, admin_write):
+    for response in (unrestricted, admin_scope, admin_write, star, star_among_others, empty):
         assert response.status_code == 403 and response.get_json()["error"]["code"] == "mfa_required"
     with app.app_context():
         assert ApiToken.query.count() == 0
