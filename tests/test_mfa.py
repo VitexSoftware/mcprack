@@ -325,7 +325,7 @@ def test_the_page_needs_a_login(app):
 def test_beginning_an_enrolment_shows_the_secret_but_does_not_switch_anything_on(app, clock):
     client, info = _logged_in(app)
 
-    response = client.post("/account/mfa", data={"action": "begin"})
+    response = client.post("/account/mfa", data={"action": "begin", "current_password": PW})
 
     body = response.get_data(as_text=True)
     assert response.status_code == 200 and "otpauth://totp/" in body
@@ -343,7 +343,7 @@ def test_beginning_an_enrolment_shows_the_secret_but_does_not_switch_anything_on
 
 def test_confirming_with_a_wrong_code_enables_nothing(app, clock):
     client, info = _logged_in(app)
-    client.post("/account/mfa", data={"action": "begin"})
+    client.post("/account/mfa", data={"action": "begin", "current_password": PW})
 
     response = client.post("/account/mfa", data={"action": "confirm", "code": "000000"})
 
@@ -354,7 +354,7 @@ def test_confirming_with_a_wrong_code_enables_nothing(app, clock):
 
 def test_confirming_with_the_right_code_enables_it_and_shows_recovery_codes_once(app, clock):
     client, info = _logged_in(app)
-    client.post("/account/mfa", data={"action": "begin"})
+    client.post("/account/mfa", data={"action": "begin", "current_password": PW})
     with app.app_context():
         secret = mfa.pending_secret(db.session.get(User, info["id"]))
 
@@ -379,7 +379,7 @@ def test_enabling_ends_the_other_sessions(app, clock):
     elsewhere = app.test_client()
     _password_step(elsewhere)
     assert _me_status(elsewhere) == 200
-    client.post("/account/mfa", data={"action": "begin"})
+    client.post("/account/mfa", data={"action": "begin", "current_password": PW})
     with app.app_context():
         secret = mfa.pending_secret(db.session.get(User, info["id"]))
 
@@ -393,7 +393,7 @@ def test_you_cannot_start_over_while_it_is_on(app, clock):
     with app.app_context():
         before = db.session.get(User, info["id"]).totp_secret
 
-    client.post("/account/mfa", data={"action": "begin"})
+    client.post("/account/mfa", data={"action": "begin", "current_password": PW})
 
     with app.app_context():
         user = db.session.get(User, info["id"])
@@ -684,7 +684,7 @@ def test_the_demo_cannot_change_a_factor(app, clock):
     client, _ = _logged_in(app, username="ann")
     app.config["DEMO_MODE"] = True
 
-    response = client.post("/account/mfa", data={"action": "begin"})
+    response = client.post("/account/mfa", data={"action": "begin", "current_password": PW})
 
     assert response.status_code == 302
     with app.app_context():
@@ -699,3 +699,95 @@ def test_the_openapi_user_schema_documents_the_flag():
 
     assert "mfa_enabled" in spec["components"]["schemas"]["User"]["properties"]
     assert "/admin/users/{userId}/mfa-reset" in spec["paths"]
+
+
+# --- review follow-ups --------------------------------------------------------------------------
+
+
+def test_setting_up_needs_the_password(app, clock):
+    """A hijacked session must not be able to enrol the attacker's authenticator
+    (which would lock the owner out)."""
+    client, info = _logged_in(app)
+
+    missing = client.post("/account/mfa", data={"action": "begin"})
+    wrong = client.post("/account/mfa", data={"action": "begin", "current_password": "nope"})
+
+    assert "password is not correct" in missing.get_data(as_text=True) + wrong.get_data(as_text=True)
+    with app.app_context():
+        user = db.session.get(User, info["id"])
+        assert user.totp_secret is None and user.totp_enabled is False
+    assert any("mfa setup refused" in note for _, note in _audit(app, "login_failed"))
+
+
+def test_setting_up_guesses_count_toward_the_lockout(app, clock):
+    client, info = _logged_in(app)
+    for _ in range(12):
+        response = client.post("/account/mfa", data={"action": "begin", "current_password": "nope"})
+    assert "Too many failed attempts" in response.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.get(User, info["id"]).totp_secret is None
+    # and even the right password is refused while the lock holds
+    assert "otpauth://" not in client.post("/account/mfa", data={"action": "begin", "current_password": PW}).get_data(as_text=True)
+
+
+def test_an_ldap_account_proves_itself_to_the_directory_to_set_up(app, clock):
+    app.config["LDAP_ENABLED"] = True
+    info = _make_user(app, username="carol", auth_type="ldap")
+    client = app.test_client()
+    attrs = {"first_name": "C", "last_name": "C", "email": "carol@example.com"}
+    with patch("mcprack.auth._ldap_authenticate", return_value=attrs):
+        client.post("/login", data={"username": "carol", "password": "directory-password"})
+        assert _me_status(client) == 200
+        with patch("mcprack.auth._ldap_authenticate", return_value=None):
+            refused = client.post("/account/mfa", data={"action": "begin", "current_password": "wrong"})
+        accepted = client.post("/account/mfa", data={"action": "begin", "current_password": "directory-password"})
+
+    assert "otpauth://" not in refused.get_data(as_text=True)
+    assert "otpauth://" in accepted.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.get(User, info["id"]).totp_secret
+
+
+def _mint(client, **payload):
+    return client.post("/api/v1/tokens", json={"name": "t", **payload})
+
+
+def test_an_administrator_still_to_enrol_cannot_mint_a_token_that_reaches_the_admin_api(app, clock, mfa_on):
+    """Otherwise the password alone would buy a bearer token for the admin API -
+    one that survives the enrolment which is meant to close that gap."""
+    client, _ = _admin_with(app, enrolled=False)
+
+    unrestricted = _mint(client)
+    admin_scope = _mint(client, scopes=["admin:read"])
+    admin_write = _mint(client, scopes=["config:read", "admin:write"])
+
+    for response in (unrestricted, admin_scope, admin_write):
+        assert response.status_code == 403 and response.get_json()["error"]["code"] == "mfa_required"
+    with app.app_context():
+        assert ApiToken.query.count() == 0
+
+
+def test_the_same_administrator_may_still_mint_tokens_that_cannot_reach_the_admin_api(app, clock, mfa_on):
+    client, _ = _admin_with(app, enrolled=False)
+
+    assert _mint(client, scopes=["proxy:access"]).status_code == 201
+    assert _mint(client, scopes=["config:read"]).status_code == 201
+
+
+def test_an_enrolled_administrator_may_mint_any_token(app, clock, mfa_on):
+    client, _ = _admin_with(app, enrolled=True)
+
+    assert _mint(client).status_code == 201
+    assert _mint(client, scopes=["admin:write"]).status_code == 201
+
+
+def test_token_creation_is_unrestricted_when_mfa_is_not_required(app, clock):
+    client, _ = _admin_with(app, enrolled=False)  # MFA_REQUIRED_FOR_ADMINS is off in the test config
+
+    assert _mint(client).status_code == 201
+
+
+def test_ordinary_users_may_mint_unrestricted_tokens_as_before(app, clock, mfa_on):
+    client, _ = _logged_in(app, username="ann")
+
+    assert _mint(client).status_code == 201

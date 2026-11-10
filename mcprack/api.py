@@ -475,6 +475,21 @@ def tokens_create():
     if error:
         return error
 
+    # An administrator who has still to enrol a second factor has proved the
+    # password and nothing else. A token minted in that state would reach the
+    # admin API without ever meeting MFA - and would outlive the enrolment that
+    # is supposed to close that gap. So such a session may mint only tokens that
+    # cannot reach the admin API (no unrestricted token, no admin:* scope).
+    if getattr(g, "api_token", None) is None:
+        from .auth import mfa_enrollment_required
+
+        if mfa_enrollment_required() and (scopes is None or any(scope.startswith("admin:") for scope in scopes)):
+            return api_error(
+                403,
+                "mfa_required",
+                "Set up two-factor authentication (/account/mfa) before creating a token that can use the admin API",
+            )
+
     # A scoped bearer token can only mint tokens no more powerful than
     # itself: no broader scopes, and no lifetime past its own expiry.
     # Without this, a config:read-only token could mint an unrestricted

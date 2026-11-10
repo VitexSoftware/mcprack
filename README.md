@@ -96,7 +96,13 @@ administrator without it is sent to the setup page instead of the admin area, in
 the browser and for the admin REST API alike, and cannot turn it off. API tokens
 are not asked for a code — they are created from an already signed-in session.
 Set `MFA_REQUIRED_FOR_ADMINS=false` only on a trusted private network. The public
-demo (`DEMO_MODE`) is exempt.
+demo (`DEMO_MODE`) is exempt. An administrator who has not yet set it up cannot
+create a token that reaches the admin API (an unrestricted one, or any `admin:*`
+scope) — the password alone must not buy a credential that outlives the setup.
+**Admin API tokens created before the upgrade keep working without a code; review
+and rotate them** (Account → API tokens, or `mcprack user revoke-tokens`).
+Turning it on, off, or regenerating the recovery codes asks for the current
+password again (and, for the last two, a code).
 
 A user who has lost both device and recovery codes: an administrator can reset
 the factor (Admin → Users → *Reset two-factor authentication*, or

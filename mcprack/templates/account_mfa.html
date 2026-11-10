@@ -86,6 +86,10 @@
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="begin">
+      <div class="form-group">
+        <label for="begin_password">{{ _('Current password') }}</label>
+        <input type="password" id="begin_password" name="current_password" required autocomplete="current-password">
+      </div>
       <button type="submit" class="btn btn-primary w-full mt-lg">{{ _('Set up') }}</button>
     </form>
   </div>

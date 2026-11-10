@@ -498,6 +498,20 @@ def account_mfa():
         if mfa.is_enabled(user):
             flash(_("Two-factor authentication is already on. Turn it off first to set it up again."), "error")
             return _mfa_page()
+        # The password again, like every other change to the factor. Without it a
+        # hijacked session could enrol the attacker's authenticator: the owner
+        # would then be locked out of their own account (and every other session
+        # of theirs ended by the enrolment).
+        wait = throttle.begin(user.username, user, request.remote_addr)
+        if wait:
+            audit.log_audit_event("login_failed", "error", user=user, error_message="mfa setup refused: too many failures")
+            flash(_("Too many failed attempts. Try again in a few minutes."), "error")
+            return _mfa_page()
+        if not _reauthenticate(user, request.form.get("current_password", "")):
+            audit.log_audit_event("login_failed", "error", user=user, error_message="mfa setup refused: re-authentication failed")
+            flash(_("Your password is not correct."), "error")
+            return _mfa_page()
+        throttle.success(user.username, user, request.remote_addr)
         secret, uri = mfa.begin_enrollment(user)
         return _mfa_page(secret=totp_group(secret), uri=uri)
 
