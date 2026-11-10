@@ -38,6 +38,20 @@ def _isolate_user_proxy_state(tmp_path, monkeypatch):
 @pytest.fixture
 def app(tmp_path):
     application = create_app(TestConfig)
+
+    # The fixture below keeps one outer app context open for the whole test,
+    # and Flask reuses an already-pushed app context for test-client
+    # requests - so flask.g, and with it Flask-Login's cached `_login_user`
+    # and the resolved API token, would leak from one request (or client) to
+    # the next and make a logged-out request look authenticated. Real
+    # requests each get their own g; reproduce that.
+    @application.before_request
+    def _isolate_request_globals():
+        from flask import g
+
+        for attr in ("_login_user", "api_token"):
+            g.pop(attr, None)
+
     # Isolated per test - secret_store's shared env-cache file and
     # vaultwarden's lock file both live here, and a fixed shared path would
     # leak cached secrets between otherwise-independent tests.
