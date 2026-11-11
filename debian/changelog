@@ -12,6 +12,9 @@ mcprack (1.7.0-1) UNRELEASED; urgency=medium
     API, `mcprack user revoke-tokens`), disabling/deleting a user stops their
     MCP servers; MCP servers no longer inherit mcprack's secrets and keep their
     credentials in /run/mcprack (RuntimeDirectory), removed when reaped.
+  * Audit entries for creating/editing a server name the old and new command and
+    URL, an argument fingerprint and changed environment key names - never
+    argument or environment values (B-08).
   * Audit mirror (B-10): every audit event is also written, with an HMAC, to the
     journal and to /var/log/mcprack/audit.log (AUDIT_LOG_FILE); `flask
     audit-verify` reports deleted, altered and unmirrored audit rows and edited

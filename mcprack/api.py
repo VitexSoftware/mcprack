@@ -29,6 +29,7 @@ from . import audit
 from . import catalog
 from . import env_policy
 from . import mfa
+from . import server_changes
 from . import passwords
 from . import secret_store
 from . import vaultwarden
@@ -604,7 +605,8 @@ def admin_servers():
         db.session.commit()
         admin._invalidate_health_cache()
         audit.log_audit_event(
-            "admin_change", "success", user=current_user, server=server, error_message="server created via API"
+            "admin_change", "success", user=current_user, server=server,
+            error_message=server_changes.describe(None, server_changes.snapshot(server)) + " (via API)",
         )
 
         response = _server_detail(server)
@@ -655,6 +657,7 @@ def admin_server_update(server_id):
     if errors:
         return api_error(400, "invalid_request", "; ".join(errors))
 
+    before = server_changes.snapshot(server)
     admin._apply_server_fields(server, update)
     secrets_error = None
     if "env" in data or "secrets" in data:
@@ -665,7 +668,8 @@ def admin_server_update(server_id):
     db.session.commit()
     admin._invalidate_health_cache()
     audit.log_audit_event(
-        "admin_change", "success", user=current_user, server=server, error_message="server updated via API"
+        "admin_change", "success", user=current_user, server=server,
+        error_message=server_changes.describe(before, server_changes.snapshot(server)) + " (via API)",
     )
 
     response = _server_detail(server)

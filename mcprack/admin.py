@@ -15,6 +15,7 @@ from . import env_detection
 from . import health
 from . import installer
 from . import mfa
+from . import server_changes
 from . import passwords
 from . import appstream_icons
 from . import secret_store
@@ -257,7 +258,8 @@ def server_new():
         db.session.commit()
         _invalidate_health_cache()
         audit.log_audit_event(
-            "admin_change", "success", user=current_user, server=server, error_message="server created"
+            "admin_change", "success", user=current_user, server=server,
+            error_message=server_changes.describe(None, server_changes.snapshot(server)),
         )
         flash(f"Server '{server.name}' created.", "success")
         return redirect(url_for("admin.servers_list"))
@@ -301,11 +303,13 @@ def server_edit(server_id):
                 active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
+        before = server_changes.snapshot(server)
         _apply_server_form(server, request.form)
         db.session.commit()
         _invalidate_health_cache()
         audit.log_audit_event(
-            "admin_change", "success", user=current_user, server=server, error_message="server updated"
+            "admin_change", "success", user=current_user, server=server,
+            error_message=server_changes.describe(before, server_changes.snapshot(server)),
         )
         flash(f"Server '{server.name}' updated.", "success")
         return redirect(url_for("admin.servers_list"))

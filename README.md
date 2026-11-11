@@ -526,8 +526,14 @@ Events currently logged:
 
 Request or response bodies, tool call arguments/results, and credential
 values are never written to the audit log — only the fact that an access or
-call happened. `error_message` is always a short, fixed string, never raw
-request content.
+call happened. `error_message` is a short description, never raw request
+content.
+
+Registering or editing an MCP server defines what the service user *executes*,
+so those entries say what changed: the old and new **command** and **URL**
+(without credentials or query string), the argument **count and a fingerprint**
+(`sha256:…`, never the arguments — they sometimes carry a `--token`), and the
+**names** — not values — of added or removed environment keys.
 
 ### Viewing it
 
