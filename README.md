@@ -1254,6 +1254,7 @@ the catalog on `apt install`.
 - [Email](https://github.com/Vitexus/mcp-server-email) (`mcp-server-email` + companion)
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) (+ companion)
 - [Graylog](https://github.com/VitexSoftware/mcp-server-graylog) (`mcp-server-graylog` + companion)
+- [LibreNMS](https://github.com/VitexSoftware/mcp-server-librenms) (`mcp-server-librenms` + companion; fork of mhajder/librenms-mcp)
 - [LinkedIn](https://github.com/Vitexus/mcp-server-linkedin) (`mcp-server-linkedin` + companion)
 - [Magento 2](https://github.com/Vitexus/mcp-server-magento) (`mcp-server-magento` + companion)
 - [Mastodon](https://github.com/VitexSoftware/mcp-server-mastodon) (+ companion)
