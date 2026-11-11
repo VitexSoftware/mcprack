@@ -88,8 +88,9 @@ app) from the user menu → *Two-factor authentication*. With it on, signing in 
 two steps: the password, then the 6-digit code (or one of ten single-use
 **recovery codes**, shown once when you turn it on). A code works once, wrong
 codes count toward the same lock-out as wrong passwords, and a password reset
-does not bypass the second factor. Setup is by typing the key into the app (or
-importing the displayed `otpauth://` address) — there is no QR code.
+does not bypass the second factor. Setup is by scanning the QR code on the setup page (rendered on the server as
+SVG, needs `python3-segno`; without it the page shows only the key) or by typing
+the key into the app, or importing the displayed `otpauth://` address.
 
 **Administrators must have it** (`MFA_REQUIRED_FOR_ADMINS`, default `true`): an
 administrator without it is sent to the setup page instead of the admin area, in

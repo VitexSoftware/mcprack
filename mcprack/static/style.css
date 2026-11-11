@@ -2217,3 +2217,17 @@ ol.wizard {
   font-size: 3rem;
   margin-bottom: var(--space-xs);
 }
+
+/* TOTP setup: the QR code (inline SVG from mcprack/qr.py) */
+.qr-code-wrap {
+  display: flex;
+  justify-content: center;
+  margin: var(--space-md, 1rem) 0;
+}
+.qr-code {
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  background: #fff; /* scanners need a light quiet zone, also in dark themes */
+  border-radius: 4px;
+}

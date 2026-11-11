@@ -10,3 +10,6 @@ fastmcp>=4.1.4
 flask-babel
 PyYAML
 Authlib>=1.3
+
+# QR code on the two-factor setup page (optional)
+segno

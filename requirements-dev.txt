@@ -1,4 +1,5 @@
 pytest
+segno
 pytest-flask
 pytest-cov
 openapi-spec-validator

@@ -20,12 +20,25 @@
   {% elif secret %}
   <div class="card">
     <h2>{{ _('Set up your authenticator app') }}</h2>
+    {% if qr_svg %}
+    <ol>
+      <li>{{ _('In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) choose to add an account and scan this QR code.') }}</li>
+      <li>{{ _('Enter the code the app shows to confirm.') }}</li>
+    </ol>
+    <div class="qr-code-wrap">{{ qr_svg }}</div>
+    <details class="mt-lg">
+      <summary>{{ _('Cannot scan it? Enter the key by hand') }}</summary>
+      <p>{{ _('Key:') }} <code>{{ secret }}</code> ({{ _('time-based, 6 digits') }})</p>
+      <p class="text-sm text-muted">{{ _('Or import this address into an app that accepts it:') }} <code>{{ uri }}</code></p>
+    </details>
+    {% else %}
     <ol>
       <li>{{ _('In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) add an account by entering a key manually.') }}</li>
       <li>{{ _('Key:') }} <code>{{ secret }}</code> ({{ _('time-based, 6 digits') }})</li>
       <li>{{ _('Enter the code the app shows to confirm.') }}</li>
     </ol>
     <p class="text-sm text-muted">{{ _('Or import this address into an app that accepts it:') }} <code>{{ uri }}</code></p>
+    {% endif %}
     <form method="post">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <input type="hidden" name="action" value="confirm">

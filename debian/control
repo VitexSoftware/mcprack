@@ -38,6 +38,8 @@ Depends:
  dbconfig-sqlite3 | dbconfig-pgsql | dbconfig-mysql,
 Recommends:
  python3-fastmcp (>= 4.1.4),
+# QR code on /account/mfa; without it the page shows only the key
+ python3-segno,
 # Vaultwarden backend for the secret store. Older Vaultwarden lacks the
 # user-key-id endpoint that bw-cli (>= 2026.9) posts during unlock, which
 # crashed every unlock (2026-10-16 incident); 1.37.3-1.5 is the first

@@ -13,7 +13,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import accounts, audit, mailer, mfa, passwords, reauth, throttle
+from . import accounts, audit, mailer, mfa, passwords, qr, reauth, throttle
 from .totp import group as totp_group
 from .urls import external_url
 from .extensions import db, limiter, login_manager
@@ -472,6 +472,12 @@ def _reauthenticate(user, password):
 
 
 def _mfa_page(**context):
+    if context.get("uri"):
+        context["qr_svg"] = qr.svg(
+            context["uri"],
+            title=_("QR code for your authenticator app"),
+            description=_("Scan it with an authenticator app to add this account."),
+        )
     return render_template(
         "account_mfa.html",
         enabled=mfa.is_enabled(current_user),

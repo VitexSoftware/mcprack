@@ -795,3 +795,64 @@ def test_ordinary_users_may_mint_unrestricted_tokens_as_before(app, clock, mfa_o
     client, _ = _logged_in(app, username="ann")
 
     assert _mint(client).status_code == 201
+
+
+# --- the QR code on the setup page ------------------------------------------------------------
+
+
+def _begin(client):
+    return client.post("/account/mfa", data={"action": "begin", "current_password": PW})
+
+
+def test_the_setup_page_shows_a_qr_code_of_the_provisioning_address(app, clock):
+    pytest.importorskip("segno")
+    from mcprack import qr
+
+    client, info = _logged_in(app)
+
+    body = _begin(client).get_data(as_text=True)
+
+    with app.app_context():
+        user = db.session.get(User, info["id"])
+        uri = mfa.provisioning_uri(user, mfa.pending_secret(user))
+        expected = str(qr.svg(uri, title="QR code for your authenticator app", description="Scan it with an authenticator app to add this account."))
+    assert 'class="qr-code"' in body
+    # the picture on the page is the code of the pending enrolment's address, nothing else
+    assert expected.split("<path", 1)[1].split("/>", 1)[0] in body
+    # and reloading the page (still pending) shows it again
+    assert 'class="qr-code"' in client.get("/account/mfa").get_data(as_text=True)
+
+
+def test_the_qr_code_leaks_nothing_beyond_the_page_and_needs_no_csp_exception(app, clock):
+    pytest.importorskip("segno")
+    client, info = _logged_in(app)
+
+    response = _begin(client)
+    body = response.get_data(as_text=True)
+
+    start = body.index('class="qr-code"')
+    svg = body[body.rindex("<svg", 0, start) : body.index("</svg>", start) + 6]
+    with app.app_context():
+        secret = mfa.pending_secret(db.session.get(User, info["id"]))
+    assert secret not in svg and "otpauth" not in svg  # texts for screen readers are fixed strings
+    assert "style=" not in svg and "<script" not in svg  # the page's CSP forbids inline style and script
+    assert "no-store" in response.headers["Cache-Control"]
+
+
+def test_without_segno_the_page_falls_back_to_the_key(app, clock, monkeypatch):
+    from mcprack import qr
+
+    monkeypatch.setattr(qr, "segno", None)
+    client, info = _logged_in(app)
+
+    body = _begin(client).get_data(as_text=True)
+
+    assert 'class="qr-code"' not in body and "otpauth://totp/" in body
+    with app.app_context():
+        assert totp.group(mfa.pending_secret(db.session.get(User, info["id"]))) in body
+
+
+def test_no_qr_code_once_two_factor_is_on_or_before_it_is_begun(app, clock):
+    pytest.importorskip("segno")
+    client, _ = _logged_in(app)
+    assert 'class="qr-code"' not in client.get("/account/mfa").get_data(as_text=True)
