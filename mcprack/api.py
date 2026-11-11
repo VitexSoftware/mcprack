@@ -489,6 +489,15 @@ def tokens_create():
     # admin API without ever meeting MFA - and would outlive the enrolment that
     # is supposed to close that gap. So such a session may mint only tokens that
     # cannot reach the admin API (no unrestricted token, no admin:* scope).
+    if getattr(g, "api_token", None) is None and _reaches_admin_api(scopes):
+        # ... and one that has not freshly authenticated may not either: a token is
+        # exempt from the fresh-login check, so minting one would be a way round it
+        # (mcprack/reauth.py, CHECKED_IN_THE_VIEW).
+        from . import reauth
+
+        if reauth.needed():
+            return reauth.api_refusal()
+
     if getattr(g, "api_token", None) is None:
         from .auth import mfa_enrollment_required
 

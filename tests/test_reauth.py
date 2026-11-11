@@ -448,3 +448,140 @@ def test_the_default_is_ten_minutes():
     )
 
     assert out.stdout.strip() == "600", out.stderr
+
+
+# --- every endpoint of the registry, through the real hook ---------------------------------------
+
+
+def _request_for(app, endpoint):
+    """(method, url) for a mutating rule of `endpoint`, with dummy ids: the guard
+    runs before the view, so what the ids point at does not matter."""
+    from flask import url_for
+
+    rule = next(r for r in app.url_map.iter_rules() if r.endpoint == endpoint)
+    method = sorted(rule.methods - {"GET", "HEAD", "OPTIONS"})[0]
+    with app.test_request_context():
+        return method, url_for(endpoint, **{argument: 1 for argument in rule.arguments})
+
+
+@pytest.mark.parametrize("endpoint", sorted(reauth.SENSITIVE_ENDPOINTS))
+def test_each_sensitive_endpoint_is_stopped_for_a_stale_session(fresh, endpoint):
+    _admin(fresh)
+    client = _login(fresh)
+    _stale(client)
+    method, url = _request_for(fresh, endpoint)
+
+    response = client.open(url, method=method, json={} if endpoint.startswith("api.") else None)
+
+    if endpoint.startswith("api."):
+        assert response.status_code == 403 and response.get_json()["error"]["code"] == "reauth_required", (endpoint, response.status_code)
+    else:
+        assert response.status_code == 302 and "/account/reauth" in response.headers["Location"], (endpoint, response.status_code)
+
+
+@pytest.mark.parametrize("endpoint", sorted(reauth.SENSITIVE_ENDPOINTS))
+def test_each_sensitive_endpoint_lets_a_fresh_session_through_to_the_view(fresh, endpoint):
+    """The guard must not be what blocks a fresh session (the view may still answer 400/404 for the dummy ids)."""
+    _admin(fresh)
+    client = _login(fresh)
+    method, url = _request_for(fresh, endpoint)
+
+    try:
+        response = client.open(url, method=method, json={} if endpoint.startswith("api.") else None)
+    except Exception:  # noqa: BLE001 - the view itself ran (e.g. tried to call `bw`) and failed on the dummy input:
+        return  # which is exactly "the guard let it through"
+
+    location = response.headers.get("Location", "")
+    assert "/account/reauth" not in location
+    if response.is_json:
+        assert (response.get_json() or {}).get("error", {}).get("code") != "reauth_required"
+
+
+@pytest.mark.parametrize("endpoint", sorted(reauth.REVIEWED_NOT_SENSITIVE))
+def test_each_reviewed_endpoint_is_not_stopped_for_a_stale_session(fresh, endpoint):
+    _admin(fresh)
+    client = _login(fresh)
+    _stale(client)
+    method, url = _request_for(fresh, endpoint)
+
+    response = client.open(url, method=method, json={} if endpoint.startswith("api.") else None)
+
+    assert "/account/reauth" not in response.headers.get("Location", ""), endpoint
+    if response.is_json:
+        assert (response.get_json() or {}).get("error", {}).get("code") != "reauth_required", endpoint
+
+
+# --- a token is a way round the check unless minting one is guarded too -----------------------------
+
+
+def _mint(client, **payload):
+    return client.post("/api/v1/tokens", json={"name": "t", **payload})
+
+
+def test_a_stale_session_cannot_mint_itself_a_token_that_reaches_the_admin_api(fresh):
+    """Tokens are exempt from the fresh-login check, so an admin API token minted
+    by a stolen session would give permanent admin access without the password."""
+    _admin(fresh)
+    client = _login(fresh)
+    _stale(client)
+
+    for payload in ({}, {"scopes": ["admin:read"]}, {"scopes": ["admin:write", "config:read"]}, {"scopes": ["*"]}, {"scopes": []}):
+        response = _mint(client, **payload)
+        assert response.status_code == 403 and response.get_json()["error"]["code"] == "reauth_required", payload
+    with fresh.app_context():
+        assert ApiToken.query.count() == 0
+
+
+def test_the_same_session_may_still_mint_tokens_that_cannot_reach_the_admin_api(fresh):
+    _admin(fresh)
+    client = _login(fresh)
+    _stale(client)
+
+    assert _mint(client, scopes=["proxy:access"]).status_code == 201
+    assert _mint(client, scopes=["config:read"]).status_code == 201
+
+
+def test_a_fresh_session_may_mint_any_token(fresh):
+    _admin(fresh)
+    client = _login(fresh)
+
+    assert _mint(client).status_code == 201 and _mint(client, scopes=["admin:write"]).status_code == 201
+
+
+def test_after_confirming_the_token_can_be_minted(fresh):
+    _admin(fresh)
+    client = _login(fresh)
+    _stale(client)
+    assert _mint(client).status_code == 403
+
+    client.post("/api/v1/auth/reauth", json={"password": PW})
+
+    assert _mint(client).status_code == 201
+
+
+def test_a_stale_ordinary_user_session_is_not_asked(fresh):
+    with fresh.app_context():
+        user = User(username="ann", auth_type="local")
+        user.set_password(PW)
+        db.session.add(user)
+        db.session.commit()
+    client = _login(fresh, "ann")
+    _stale(client)
+
+    assert _mint(client).status_code == 201  # the check is about administrators
+
+
+def test_every_credential_issuing_endpoint_is_accounted_for(fresh):
+    """Anything that mints a long-lived credential is either guarded by the
+    registry or decides in its view; this fails for a new one that does neither."""
+    import inspect
+
+    from mcprack import api
+
+    minting = {"api.tokens_create"}  # the endpoints that return a new secret to the caller
+    registered = {rule.endpoint for rule in fresh.url_map.iter_rules()}
+    assert minting <= registered
+    assert minting <= set(reauth.CHECKED_IN_THE_VIEW) | reauth.SENSITIVE_ENDPOINTS
+    for endpoint in reauth.CHECKED_IN_THE_VIEW:
+        view = getattr(api, endpoint.split(".", 1)[1])
+        assert "reauth.needed()" in inspect.getsource(view.__wrapped__ if hasattr(view, "__wrapped__") else view), endpoint

@@ -79,6 +79,15 @@ REVIEWED_NOT_SENSITIVE = {
     "api.admin_user_revoke_tokens": "a defensive action: takes access away",
 }
 
+# Endpoints that issue a CREDENTIAL which outlives the session and is exempt from
+# this check (a bearer token): they cannot be listed above, because whether they
+# are dangerous depends on the request - so they decide in the view, with needed().
+# Without this, a stolen session would simply mint itself an admin API token.
+# tests/test_reauth.py checks that every such endpoint calls it.
+CHECKED_IN_THE_VIEW = {
+    "api.tokens_create": "an unrestricted token or one with an admin:* scope reaches the admin API",
+}
+
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
@@ -110,33 +119,43 @@ def _return_target():
     return url_for("admin.servers_list")
 
 
+def needed():
+    """Does THIS request - from a browser session of an administrator - have to
+    re-authenticate before it may go on? False for tokens, non-admins, the demo, a
+    switched-off check and a fresh session."""
+    if window() <= 0 or current_app.config.get("DEMO_MODE"):
+        return False
+    # Resolving current_user loads the session user and then - only if there is
+    # none - the bearer token, which sets g.api_token. A token request is not ours
+    # to judge; a request with a session cookie is, whatever else it carries.
+    if not current_user.is_authenticated or getattr(g, "api_token", None) is not None:
+        return False
+    if not current_user.is_admin:
+        return False  # the route's own decorator answers 403
+    return not is_fresh()
+
+
+def api_refusal():
+    """The 403 answer of the REST API."""
+    from .api import api_error
+
+    return api_error(
+        403,
+        "reauth_required",
+        "Confirm your password (and code) first: POST /api/v1/auth/reauth. "
+        f"The confirmation is valid for {window()} seconds.",
+    )
+
+
 def guard():
     """`before_request` hook."""
     endpoint = request.endpoint
     if endpoint not in SENSITIVE_ENDPOINTS or request.method in _SAFE_METHODS:
         return None
-    cfg = current_app.config
-    if window() <= 0 or cfg.get("DEMO_MODE"):
+    if not needed():
         return None
-    # Resolving current_user loads the session user and then - only if there is
-    # none - the bearer token, which sets g.api_token. A token request is not ours
-    # to judge; a request with a session cookie is, whatever else it carries.
-    if not current_user.is_authenticated or getattr(g, "api_token", None) is not None:
-        return None
-    if not current_user.is_admin:
-        return None  # the route's own decorator answers 403
-    if is_fresh():
-        return None
-
     if request.blueprint == "api":
-        from .api import api_error
-
-        return api_error(
-            403,
-            "reauth_required",
-            "Confirm your password (and code) first: POST /api/v1/auth/reauth. "
-            f"The confirmation is valid for {window()} seconds.",
-        )
+        return api_refusal()
     flash(_("Please confirm your password to continue. Your changes were not saved - submit them again afterwards."), "error")
     return redirect(url_for("auth.reauth_view", next=_return_target()))
 
