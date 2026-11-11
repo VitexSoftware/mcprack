@@ -531,7 +531,7 @@ content.
 
 Registering or editing an MCP server defines what the service user *executes*,
 so those entries say what changed: the old and new **command** and **URL**
-(without credentials or query string), the argument **count and a fingerprint**
+(host and port only; the path appears as a fingerprint, since webhook-style URLs keep a secret in it), the argument **count and a fingerprint**
 (`sha256:…`, never the arguments — they sometimes carry a `--token`), and the
 **names** — not values — of added or removed environment keys.
 

@@ -28,15 +28,21 @@ def _quoted(value):
 
 
 def _safe_url(url):
-    """scheme://host:port/path - no credentials, no query string (either can hold a token)."""
+    """scheme://host:port and a FINGERPRINT of the path - no credentials, no query
+    string, and not the path itself: webhook-style endpoints keep their secret in
+    the path (/hook/<secret>, even mcprack's own /proxy/mcp/<token>/<id>). Where the
+    server points is the host; that the path changed is visible in the fingerprint."""
     if not url:
         return None
     try:
         parts = urlsplit(url)
         port = f":{parts.port}" if parts.port else ""
-        return f"{parts.scheme}://{parts.hostname or ''}{port}{parts.path}"
+        origin = f"{parts.scheme}://{parts.hostname or ''}{port}"
     except ValueError:
         return "(invalid URL)"
+    if parts.path in ("", "/"):
+        return origin
+    return f"{origin} (path sha256:{hashlib.sha256(parts.path.encode()).hexdigest()[:10]})"
 
 
 def _fingerprint(args):

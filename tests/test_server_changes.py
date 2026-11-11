@@ -50,12 +50,25 @@ def test_the_fingerprint_changes_when_one_argument_does():
     assert "sha256:" in server_changes.describe(a, b)
 
 
-def test_a_url_loses_its_credentials_and_query_string():
-    snap = server_changes.snapshot(_server(command=None, transport="http", url="https://user:pw@mcp.example.com:8443/api/mcp?key=abc123#frag"))
+def test_a_url_loses_its_credentials_query_string_and_path():
+    snap = server_changes.snapshot(_server(command=None, transport="http", url="https://user:pw@mcp.example.com:8443/hook/SECRET-PATH-TOKEN/mcp?key=abc123#frag"))
 
-    assert snap["url"] == "https://mcp.example.com:8443/api/mcp"
+    assert snap["url"].startswith("https://mcp.example.com:8443 (path sha256:")
     text = server_changes.describe(None, snap)
-    assert "pw" not in text.replace("mcp.example", "") and "abc123" not in text and "user" not in text
+    for leaked in ("SECRET-PATH-TOKEN", "abc123", "user:", "pw@", "/hook/", "frag"):
+        assert leaked not in text, leaked
+    assert "mcp.example.com:8443" in text  # where it points is the point
+
+
+def test_a_changed_path_is_visible_without_being_written():
+    a = server_changes.snapshot(_server(command=None, transport="http", url="https://h.example/hook/AAAA/mcp"))
+    b = server_changes.snapshot(_server(command=None, transport="http", url="https://h.example/hook/BBBB/mcp"))
+
+    text = server_changes.describe(a, b)
+
+    assert text.startswith("server updated: url ") and "AAAA" not in text and "BBBB" not in text
+    assert a["url"] != b["url"]  # the fingerprint differs
+    assert server_changes.snapshot(_server(command=None, transport="http", url="https://h.example/"))["url"] == "https://h.example"
 
 
 def test_an_unparseable_url_does_not_break_auditing():
