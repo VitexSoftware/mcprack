@@ -57,6 +57,67 @@ paths:
         "403":
           $ref: "#/components/responses/InsufficientScope"
 
+  /auth/reauth:
+    post:
+      operationId: reauthenticate
+      tags: [tokens]
+      summary: Confirm the password (and code) again for administrator actions
+      description: >
+        Dangerous administrator actions - registering or editing servers,
+        installing packages, creating or changing accounts, resetting a second
+        factor, moving the secret store - need a fresh authentication from a
+        browser session: sign-in counts, and so does this call, for
+        `ADMIN_REAUTH_SECONDS` (600 by default). Without one those endpoints
+        answer `403 reauth_required`. Cookie sessions only; a bearer token is not
+        asked to re-authenticate (400 `not_applicable`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                code:
+                  type: string
+                  description: Authenticator code or recovery code, for an account with two-factor authentication.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      fresh_for:
+                        type: integer
+                        description: Seconds the confirmation is valid.
+        "400":
+          description: The caller authenticated with a bearer token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Wrong password or code.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+        "429":
+          description: Too many failed attempts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
   /tokens:
     get:
       operationId: listTokens

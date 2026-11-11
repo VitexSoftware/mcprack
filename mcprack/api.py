@@ -1036,6 +1036,37 @@ def admin_user_revoke_tokens(user_id):
     return api_ok(_user_detail(user))
 
 
+@bp.route("/auth/reauth", methods=["POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+@api_login_required
+def auth_reauth():
+    """Confirm the caller's password (and code, for an account with MFA) again, so
+    a browser session may carry out the dangerous administrator actions for the
+    next ADMIN_REAUTH_SECONDS. Cookie sessions only - a bearer token is a
+    credential of its own."""
+    from . import reauth
+    from .auth import _confirm_identity
+    from . import throttle
+
+    if getattr(g, "api_token", None) is not None:
+        return api_error(400, "not_applicable", "Bearer tokens are not asked to re-authenticate")
+    data = request.get_json(silent=True) or {}
+    user = current_user
+    wait = throttle.begin(user.username, user, request.remote_addr)
+    if wait:
+        audit.log_audit_event("login_failed", "error", user=user, error_message="re-authentication refused: too many failures")
+        response, status = api_error(429, "too_many_attempts", "Too many failed attempts")
+        response.headers["Retry-After"] = str(wait)
+        return response, status
+    if not _confirm_identity(user, str(data.get("password") or ""), str(data.get("code") or "")):
+        audit.log_audit_event("login_failed", "error", user=user, error_message="re-authentication failed (API)")
+        return api_error(403, "invalid_credentials", "The password or the code is not correct")
+    throttle.success(user.username, user, request.remote_addr)
+    reauth.mark_fresh()
+    audit.log_audit_event("login", "success", user=user, error_message="re-authenticated for an administrator action (API)")
+    return api_ok({"fresh_for": reauth.window()})
+
+
 @bp.route("/admin/users/<int:user_id>/mfa-reset", methods=["POST"])
 @api_admin_required
 def admin_user_mfa_reset(user_id):

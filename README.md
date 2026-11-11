@@ -104,6 +104,18 @@ and rotate them** (Account → API tokens, or `mcprack user revoke-tokens`).
 Turning it on, off, or regenerating the recovery codes asks for the current
 password again (and, for the last two, a code).
 
+**Dangerous administrator actions ask again.** A stolen administrator session has
+already passed the password and the code, so registering or editing a server,
+installing a package, creating or changing an account, resetting a second factor
+and moving the secret store need a **fresh authentication**: the password (and the
+code, for an account with MFA) again, unless the session signed in or confirmed
+within the last `ADMIN_REAUTH_SECONDS` (default 600; `0` switches it off). The web
+UI sends you to *Confirm your identity* and back; the REST API answers
+`403 reauth_required` and takes `POST /api/v1/auth/reauth {"password": ..., "code": ...}`.
+Bearer tokens are not affected, and everything that only reads or takes access away
+stays one click. A new admin route must be classified in `mcprack/reauth.py`
+(a test fails until it is).
+
 A user who has lost both device and recovery codes: an administrator can reset
 the factor (Admin → Users → *Reset two-factor authentication*, or
 `POST /api/v1/admin/users/{id}/mfa-reset`); a locked-out administrator uses

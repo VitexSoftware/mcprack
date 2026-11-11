@@ -193,6 +193,13 @@ New behaviour you should know about (details: `docs/AUDIT-2026-11.md`):
   with it and reports deleted, altered and unmirrored rows. It only helps if the
   attacker cannot rewrite the log as well: ship the journal off the host or
   `chattr +a` the file. `AUDIT_LOG_FILE=off` disables the file.
+* **Fresh authentication for dangerous administrator actions** (`ADMIN_REAUTH_SECONDS`,
+  default 600; `0` = off): registering or editing a server, installing packages,
+  creating or changing accounts, resetting a second factor and moving the secret
+  store ask the administrator for the password (and the code) again unless the
+  session signed in or confirmed within the window. The REST API answers
+  `403 reauth_required`; scripts that use a session cookie must `POST
+  /api/v1/auth/reauth` first, scripts that use an API token are not affected.
 * **Where a server's command may live**: a command in `/tmp`, `/var/tmp`,
   `/dev/shm` ... or given as a relative path is always refused, when a server is saved
   and when its process starts (so a row written straight into the database does not get

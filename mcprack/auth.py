@@ -13,7 +13,7 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from ldap3.core.exceptions import LDAPBindError, LDAPException
 from ldap3.utils.conv import escape_filter_chars
 
-from . import accounts, audit, mailer, mfa, passwords, throttle
+from . import accounts, audit, mailer, mfa, passwords, reauth, throttle
 from .totp import group as totp_group
 from .urls import external_url
 from .extensions import db, limiter, login_manager
@@ -119,6 +119,7 @@ def _start_session(user):
         session["locale"] = locale
     login_user(user)
     session["sv"] = user.session_version or 0
+    reauth.mark_fresh()  # signing in is a fresh authentication (mcprack/reauth.py)
 
 
 def mfa_mandatory(user):
@@ -560,6 +561,40 @@ def account_mfa():
 
     flash(_("Unknown action."), "error")
     return _mfa_page()
+
+
+@bp.route("/account/reauth", methods=["GET", "POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+@login_required
+def reauth_view():
+    """Confirm the password (and the code of an account with MFA) again, to
+    continue with a dangerous administrator action (mcprack/reauth.py)."""
+    user = current_user
+    next_url = _safe_next_url()
+    if request.method == "POST":
+        wait = throttle.begin(user.username, user, request.remote_addr)
+        if wait:
+            audit.log_audit_event("login_failed", "error", user=user, error_message="re-authentication refused: too many failures")
+            flash(_("Too many failed attempts. Try again in a few minutes."), "error")
+            response = current_app.make_response((render_template("account_reauth.html", next=next_url, needs_code=mfa.is_enabled(user)), 429))
+            response.headers["Retry-After"] = str(wait)
+            return response
+        if _confirm_identity(user, request.form.get("current_password", ""), request.form.get("code", "")):
+            throttle.success(user.username, user, request.remote_addr)
+            reauth.mark_fresh()
+            audit.log_audit_event("login", "success", user=user, error_message="re-authenticated for an administrator action")
+            return redirect(next_url)
+        audit.log_audit_event("login_failed", "error", user=user, error_message="re-authentication failed")
+        flash(_("Your password or the code is not correct."), "error")
+    return render_template("account_reauth.html", next=next_url, needs_code=mfa.is_enabled(user))
+
+
+def _confirm_identity(user, password, code):
+    """Password, then - only if that was right, so a wrong password never spends a
+    code - the second factor of an account that has one."""
+    if not _reauthenticate(user, password):
+        return False
+    return not mfa.is_enabled(user) or bool(mfa.verify_login(user, code))
 
 
 @bp.route("/forgot-password", methods=["GET", "POST"])

@@ -61,6 +61,8 @@ REVIEWED_SAFE = {
     "auth.login": "authentication",
     "auth.logout": "ends the caller's own sessions",
     "auth.login_mfa": "second step of a login; nobody has a second factor on the demo",
+    "auth.reauth_view": "confirms the caller's own password",
+    "api.auth_reauth": "confirms the caller's own password",
     "auth.forgot_password": "reset request, rate limited",
     "auth.reset_password": "reset completion with a signed token",
     # per-user catalog state - overrides are constrained by env_policy

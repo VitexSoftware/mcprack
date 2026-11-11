@@ -54,6 +54,13 @@ class Config:
     # when a real MCP backend lives there. (mcprack/endpoint_policy.py)
     BACKEND_ALLOW_LINK_LOCAL = os.environ.get("BACKEND_ALLOW_LINK_LOCAL", "false").lower() in ("true", "1", "yes")
 
+    # Fresh authentication before the dangerous administrator actions
+    # (mcprack/reauth.py): registering servers, installing packages, creating or
+    # changing accounts, resetting a second factor, moving the secret store. A
+    # browser session older than this many seconds must confirm the password (and
+    # the code) again; signing in counts. 0 switches it off.
+    ADMIN_REAUTH_SECONDS = int(os.environ.get("ADMIN_REAUTH_SECONDS", "600"))
+
     # --- Second factor (TOTP) ------------------------------------------------
     # Administrators must have MFA enabled to use the admin pages and the admin
     # REST API in a browser session: an administrator without it is sent to the

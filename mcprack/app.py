@@ -344,9 +344,10 @@ def create_app(config_object=Config):
     csrf.exempt(api_bp)
 
     # One central DEMO_MODE write guard for HTML *and* API routes.
-    from . import demo
+    from . import demo, reauth
 
     app.before_request(demo.guard)
+    app.before_request(reauth.guard)
 
     from . import oauth
 
