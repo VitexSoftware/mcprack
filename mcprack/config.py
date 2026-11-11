@@ -67,6 +67,15 @@ class Config:
     MFA_PENDING_SECONDS = int(os.environ.get("MFA_PENDING_SECONDS", "300"))
     MFA_RECOVERY_CODE_COUNT = int(os.environ.get("MFA_RECOVERY_CODE_COUNT", "10"))
 
+    # Where a server's `command` may live (mcprack/command_policy.py). A command in
+    # /tmp, /var/tmp, /dev/shm ... or given as a relative path is always refused.
+    # ALLOWED_COMMAND_DIRS (comma or colon separated absolute directories) is the
+    # strict mode: the command must be inside one, checked when a server is saved
+    # AND when its process is started. Unset = off. A sensible production value:
+    # /usr/bin,/usr/local/bin,/var/lib/mcprack/installs
+    ALLOWED_COMMAND_DIRS = os.environ.get("ALLOWED_COMMAND_DIRS", "")
+    COMMAND_ALLOW_VOLATILE_DIRS = os.environ.get("COMMAND_ALLOW_VOLATILE_DIRS", "false").lower() in ("true", "1", "yes")
+
     # --- Login brute-force protection (database backed, see throttle.py) ---
     LOGIN_THROTTLE_ENABLED = os.environ.get("LOGIN_THROTTLE_ENABLED", "true").lower() in ("true", "1", "yes")
     # per account AND client address: stops guessing from one place without

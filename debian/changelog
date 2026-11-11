@@ -12,6 +12,9 @@ mcprack (1.7.0-1) UNRELEASED; urgency=medium
     API, `mcprack user revoke-tokens`), disabling/deleting a user stops their
     MCP servers; MCP servers no longer inherit mcprack's secrets and keep their
     credentials in /run/mcprack (RuntimeDirectory), removed when reaped.
+  * Commands in /tmp, /var/tmp, /dev/shm ... or given as a relative path are refused
+    when a server is saved and when its process is started; ALLOWED_COMMAND_DIRS
+    is an opt-in strict mode (B-08).
   * Audit entries for creating/editing a server name the old and new command and
     URL, an argument fingerprint and changed environment key names - never
     argument or environment values (B-08).

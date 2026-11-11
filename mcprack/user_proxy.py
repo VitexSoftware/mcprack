@@ -14,6 +14,7 @@ import time
 from pathlib import Path
 
 from . import audit
+from . import command_policy
 from . import health
 from . import telemetry
 
@@ -109,6 +110,7 @@ class UserProxyError(RuntimeError):
         tools_list_failed  tools/list itself failed
         handshake_failed   generic (older code paths)
         busy               too many instances are starting at once; retry shortly
+        forbidden          the command is refused by command_policy (location)
         unknown            anything raised without a class
 
     `str(exc)` is the administrator's view and may end with the tail of the
@@ -859,6 +861,16 @@ def ensure_user_server_proxy(user_id, server_id, server_name, command, args, env
     several on the same port."""
     if not command:
         raise UserProxyError("Cannot start user proxy for server without command")
+
+    # Checked again here, at the moment of execution: a row written straight into
+    # the database (or saved before the policy existed) must not get around it.
+    refused = command_policy.command_errors(command)
+    if refused:
+        raise UserProxyError(
+            f"Command of '{server_name}' refused by policy: {' '.join(refused)}",
+            kind="forbidden",
+            public=f"The command of '{server_name}' is not permitted by the administrator's policy.{_ASK_ADMIN}",
+        )
 
     # env_keys covers keys that exist only in this user's personal override -
     # server.env_var_names/env_config alone would miss them.

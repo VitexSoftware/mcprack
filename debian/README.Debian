@@ -193,6 +193,15 @@ New behaviour you should know about (details: `docs/AUDIT-2026-11.md`):
   with it and reports deleted, altered and unmirrored rows. It only helps if the
   attacker cannot rewrite the log as well: ship the journal off the host or
   `chattr +a` the file. `AUDIT_LOG_FILE=off` disables the file.
+* **Where a server's command may live**: a command in `/tmp`, `/var/tmp`,
+  `/dev/shm` ... or given as a relative path is always refused, when a server is saved
+  and when its process starts (so a row written straight into the database does not get
+  around it). A directory allowlist cannot make a command safe by itself - `/usr/bin`
+  contains shells and interpreters too - but it keeps a dropped payload out. The strict
+  mode is opt-in: `ALLOWED_COMMAND_DIRS=/usr/bin,/usr/local/bin,/var/lib/mcprack/installs`
+  (comma or colon separated; include the installer's directory if you use the package
+  installer). Servers already registered keep working unless their command is in one
+  of the refused places or - in strict mode - outside the allowed directories.
 * **Package installer**: registry packages only (no URLs/paths/VCS), pinned to an
   exact version by default (`INSTALL_REQUIRE_PINNED=false` to allow ranges); pip
   installs wheels only (`INSTALL_ALLOW_SOURCE_BUILDS=true` to allow sdists); npm

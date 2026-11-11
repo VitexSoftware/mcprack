@@ -8,6 +8,7 @@ from sqlalchemy import func
 from . import accounts
 from . import audit
 from . import catalog
+from . import command_policy
 from . import demo
 from . import detection
 from . import endpoint_policy
@@ -478,6 +479,7 @@ def validate_server_endpoint(transport, command, url):
         errors.append("Provide either a local command or a network URL.")
 
     errors.extend(endpoint_policy.url_errors(url))
+    errors.extend(command_policy.command_errors(command))
 
     if transport == "stdio" and not command and url:
         warnings.append(
