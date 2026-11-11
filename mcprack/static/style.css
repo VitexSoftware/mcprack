@@ -1694,8 +1694,23 @@ ol.wizard {
 }
 
 .auth-card {
+  width: 100%;
   max-width: 400px;
+  min-width: 0;
   margin: var(--space-xl) auto;
+  overflow-wrap: anywhere;
+}
+
+.auth-card > .card {
+  padding: var(--space-lg);
+}
+
+.auth-card ol {
+  padding-inline-start: 1.5rem;
+}
+
+.auth-card li + li {
+  margin-top: var(--space-xs);
 }
 
 .auth-card-wide {
@@ -2225,9 +2240,11 @@ ol.wizard {
   margin: var(--space-md, 1rem) 0;
 }
 .qr-code {
+  display: block;
   width: 100%;
   max-width: 240px;
   height: auto;
+  aspect-ratio: 1;
   background: #fff; /* scanners need a light quiet zone, also in dark themes */
   border-radius: 4px;
 }

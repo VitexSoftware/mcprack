@@ -805,6 +805,8 @@ def _begin(client):
 
 
 def test_the_setup_page_shows_a_qr_code_of_the_provisioning_address(app, clock):
+    from xml.etree import ElementTree
+
     pytest.importorskip("segno")
     from mcprack import qr
 
@@ -816,6 +818,11 @@ def test_the_setup_page_shows_a_qr_code_of_the_provisioning_address(app, clock):
         user = db.session.get(User, info["id"])
         uri = mfa.provisioning_uri(user, mfa.pending_secret(user))
         expected = str(qr.svg(uri, title="QR code for your authenticator app", description="Scan it with an authenticator app to add this account."))
+    root = ElementTree.fromstring(expected)
+    assert "width" not in root.attrib and "height" not in root.attrib
+    origin_x, origin_y, width, height = map(float, root.attrib["viewBox"].split())
+    assert origin_x == origin_y == 0
+    assert width == height and width > 0
     assert 'class="qr-code"' in body
     # the picture on the page is the code of the pending enrolment's address, nothing else
     assert expected.split("<path", 1)[1].split("/>", 1)[0] in body

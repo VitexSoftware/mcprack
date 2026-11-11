@@ -33,6 +33,7 @@ def svg(data: str, *, title: str = "", description: str = "") -> Markup | None:
         code.svg_inline(
             scale=6,
             border=4,
+            omitsize=True,
             dark="#000000",
             light="#ffffff",
             svgclass="qr-code",
