@@ -1253,6 +1253,7 @@ the catalog on `apt install`.
 - [InvokeAI](https://github.com/Vitexus/mcp-server-invokeai) (`mcp-server-invokeai` + companion)
 - [Email](https://github.com/Vitexus/mcp-server-email) (`mcp-server-email` + companion)
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) (+ companion)
+- [Google Workspace](https://github.com/VitexSoftware/mcp-server-googleoffice) (`mcp-server-googleoffice` + companion; fork of taylorwilsdon/google_workspace_mcp)
 - [Graylog](https://github.com/VitexSoftware/mcp-server-graylog) (`mcp-server-graylog` + companion)
 - [LibreNMS](https://github.com/VitexSoftware/mcp-server-librenms) (`mcp-server-librenms` + companion; fork of mhajder/librenms-mcp)
 - [LinkedIn](https://github.com/Vitexus/mcp-server-linkedin) (`mcp-server-linkedin` + companion)
