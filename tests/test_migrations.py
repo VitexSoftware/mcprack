@@ -1,0 +1,107 @@
+"""Every hardening migration must be reversible: downgrade to its parent and
+upgrade again on a real (file) database, with the schema as expected."""
+
+import pytest
+from flask_migrate import downgrade, upgrade
+from sqlalchemy import inspect
+
+from mcprack.app import create_app
+from mcprack.extensions import db
+
+from conftest import TestConfig
+
+# revision -> (parent revision, table, column added by the revision)
+HARDENING_MIGRATIONS = [
+    ("add_user_token_version", "add_user_override_env_config", "users", "token_version"),
+    ("add_user_session_version", "materialize_server_permissions", "users", "session_version"),
+    ("add_login_throttle", "add_user_session_version", "login_throttle", "locked_until"),
+    ("add_user_mfa", "add_login_throttle", "users", "totp_secret"),
+    ("add_user_mfa", "add_login_throttle", "users", "totp_enabled"),
+    ("add_user_mfa", "add_login_throttle", "users", "totp_last_step"),
+    ("add_user_mfa", "add_login_throttle", "users", "recovery_codes"),
+]
+
+
+@pytest.fixture
+def file_app(tmp_path):
+    class FileConfig(TestConfig):
+        SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp_path / 'migrate.db'}"
+
+    app = create_app(FileConfig)
+    with app.app_context():
+        yield app
+        db.session.remove()
+
+
+def _columns(table):
+    inspector = inspect(db.engine)
+    if not inspector.has_table(table):
+        return set()
+    return {col["name"] for col in inspector.get_columns(table)}
+
+
+@pytest.mark.parametrize("revision,parent,table,column", HARDENING_MIGRATIONS)
+def test_migration_round_trips(file_app, revision, parent, table, column):
+    # create_app() bootstraps a fresh database at head
+    assert column in _columns(table)
+
+    downgrade(revision=parent)
+    assert column not in _columns(table)
+
+    upgrade()
+    assert column in _columns(table)
+
+
+def test_materialize_server_permissions_keeps_everybodys_current_access(file_app):
+    """The data migration behind the fail-closed default (audit A-06): a user
+    with no rows gets an explicit grant for every ENABLED server, a user that
+    already has rows is untouched, and re-running does not duplicate."""
+    from sqlalchemy import text
+
+    downgrade(revision="add_user_token_version")
+    with db.engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, username, auth_type, is_admin, is_active, token_version) VALUES "
+                          "(1, 'open', 'local', 0, 1, 5), (2, 'curated', 'local', 0, 1, 6)"))
+        conn.execute(text("INSERT INTO mcp_servers (id, name, label, transport, allow_user_override, enabled) VALUES "
+                          "(10, 'a', 'A', 'stdio', 1, 1), (11, 'b', 'B', 'stdio', 1, 1), (12, 'off', 'Off', 'stdio', 1, 0)"))
+        conn.execute(text("INSERT INTO user_server_permissions (user_id, server_id, is_allowed) VALUES (2, 10, 0)"))
+
+    upgrade()
+
+    def rows():
+        with db.engine.connect() as conn:
+            return sorted(
+                (r[0], r[1], bool(r[2]))
+                for r in conn.execute(text("SELECT user_id, server_id, is_allowed FROM user_server_permissions"))
+            )
+
+    assert rows() == [(1, 10, True), (1, 11, True), (2, 10, False)]
+
+    downgrade(revision="add_user_token_version")  # a no-op for data
+    upgrade()
+    assert rows() == [(1, 10, True), (1, 11, True), (2, 10, False)]  # not duplicated
+
+
+def test_add_user_mfa_leaves_existing_accounts_without_a_second_factor(file_app):
+    """The upgrade from a release without MFA: every existing account keeps
+    working with the password alone (MFA off, nothing stored), and the
+    migration can be undone without losing the account."""
+    from sqlalchemy import text
+
+    downgrade(revision="add_login_throttle")
+    assert "totp_enabled" not in _columns("users")
+    with db.engine.begin() as conn:
+        conn.execute(text("INSERT INTO users (id, username, auth_type, is_admin, is_active, token_version, session_version) "
+                          "VALUES (1, 'old', 'local', 1, 1, 5, 7)"))
+
+    upgrade()
+
+    with db.engine.begin() as conn:
+        row = conn.execute(text("SELECT totp_enabled, totp_last_step, totp_secret, recovery_codes, is_admin FROM users WHERE id = 1")).one()
+    assert not row.totp_enabled and row.totp_last_step == 0 and row.totp_secret is None and row.recovery_codes is None
+    assert row.is_admin  # untouched
+
+    downgrade(revision="add_login_throttle")
+    with db.engine.begin() as conn:
+        assert conn.execute(text("SELECT username FROM users WHERE id = 1")).scalar() == "old"
+    upgrade()

@@ -80,6 +80,53 @@ default they use a signed path token in `/proxy/mcp/<token>/<id>`; with
 `OAUTH_ENABLED=true` they use Bearer tokens via the MCP Authorization Spec
 flow (see [Optional MCP OAuth](#optional-mcp-oauth)).
 
+### Two-factor authentication (TOTP)
+
+Every account — local or LDAP — can protect its sign-in with a time-based
+one-time code (RFC 6238: FreeOTP, Aegis, Google Authenticator, any authenticator
+app) from the user menu → *Two-factor authentication*. With it on, signing in is
+two steps: the password, then the 6-digit code (or one of ten single-use
+**recovery codes**, shown once when you turn it on). A code works once, wrong
+codes count toward the same lock-out as wrong passwords, and a password reset
+does not bypass the second factor. Setup is by typing the key into the app (or
+importing the displayed `otpauth://` address) — there is no QR code.
+
+**Administrators must have it** (`MFA_REQUIRED_FOR_ADMINS`, default `true`): an
+administrator without it is sent to the setup page instead of the admin area, in
+the browser and for the admin REST API alike, and cannot turn it off. API tokens
+are not asked for a code — they are created from an already signed-in session.
+Set `MFA_REQUIRED_FOR_ADMINS=false` only on a trusted private network. The public
+demo (`DEMO_MODE`) is exempt. An administrator who has not yet set it up cannot
+create a token that reaches the admin API (an unrestricted one, or any `admin:*`
+scope) — the password alone must not buy a credential that outlives the setup.
+**Admin API tokens created before the upgrade keep working without a code; review
+and rotate them** (Account → API tokens, or `mcprack user revoke-tokens`).
+Turning it on, off, or regenerating the recovery codes asks for the current
+password again (and, for the last two, a code).
+
+**Dangerous administrator actions ask again.** A stolen administrator session has
+already passed the password and the code, so registering or editing a server,
+installing a package, creating or changing an account, resetting a second factor
+and moving the secret store need a **fresh authentication**: the password (and the
+code, for an account with MFA) again, unless the session signed in or confirmed
+within the last `ADMIN_REAUTH_SECONDS` (default 600; `0` switches it off). The web
+UI sends you to *Confirm your identity* and back; the REST API answers
+`403 reauth_required` and takes `POST /api/v1/auth/reauth {"password": ..., "code": ...}`.
+Bearer tokens are not affected, and everything that only reads or takes access away
+stays one click. A new admin route must be classified in `mcprack/reauth.py`
+(a test fails until it is).
+
+A user who has lost both device and recovery codes: an administrator can reset
+the factor (Admin → Users → *Reset two-factor authentication*, or
+`POST /api/v1/admin/users/{id}/mfa-reset`); a locked-out administrator uses
+`mcprack user mfa-reset USERNAME` on the server (`mfa-status` shows the state).
+Resetting ends the user's sessions and is audited (`mfa_change`).
+
+The shared secret is stored encrypted with the same keys as the local secret
+store, so `SECRET_KEY_FALLBACKS` keeps enrolments valid across a key rotation.
+Further options: `MFA_ISSUER` (the name shown in the app), `MFA_PENDING_SECONDS`
+(time allowed between password and code, default 300), `MFA_RECOVERY_CODE_COUNT`.
+
 ### Forgot-password email
 
 The "Forgot your password?" link on the login page only works if outbound
@@ -155,7 +202,7 @@ for humans is still a separate future improvement.)
 
 - **Secrets in Vaultwarden, plain config in the DB** — Only the values an admin marks "citlivé"/sensitive (API keys, tokens, passwords) go to Vaultwarden; everything else lives directly in mcprack's own database, no Vaultwarden round-trip needed
 - **User-level credential override** — Users can optionally provide their own credentials for any server (stored as `MCP-<server>-user-<username>` in Vaultwarden, or locally encrypted if Vaultwarden isn't configured)
-- **Multi-client support** — Generate configs for Claude Desktop, Cursor, VS Code / GitHub Copilot (`claude`, `cursor`, `vscode`/`copilot` API clients)
+- **Multi-client support** — Generate configs for Claude Desktop, Claude Code (secret-free `.mcp.json`, see [Claude Code](#claude-code)), Cursor, VS Code / GitHub Copilot (`claude`, `claude-code`, `cursor`, `vscode`/`copilot` API clients)
 - **Client sync utilities** — Companion packages `mcprack-sync-claude`, `mcprack-sync-cursor`, and `mcprack-sync-vscode` pull `/api/v1/me/config/<client>` with a personal API token and keep the local IDE/desktop config files up to date (optional systemd user timers)
 - **Admin config hand-off** — Admins can view and download any user's client config from Admin → Users, for users who never log into the web UI themselves
 - **Per-user proxy** — Every user connects remotely; stdio servers are spawned on demand, one isolated instance per (user, server) pair, with credentials resolved at spawn time — never embedded in a downloaded config
@@ -491,8 +538,14 @@ Events currently logged:
 
 Request or response bodies, tool call arguments/results, and credential
 values are never written to the audit log — only the fact that an access or
-call happened. `error_message` is always a short, fixed string, never raw
-request content.
+call happened. `error_message` is a short description, never raw request
+content.
+
+Registering or editing an MCP server defines what the service user *executes*,
+so those entries say what changed: the old and new **command** and **URL**
+(host and port only; the path appears as a fingerprint, since webhook-style URLs keep a secret in it), the argument **count and a fingerprint**
+(`sha256:…`, never the arguments — they sometimes carry a `--token`), and the
+**names** — not values — of added or removed environment keys.
 
 ### Viewing it
 
@@ -500,7 +553,50 @@ Admins can browse the trail at **Admin → Audit Log**
 (`/admin/audit-log`), filterable by server, user, time window, and
 errors-only. Click the 🔗 on a row to see every event sharing its
 `request_id`. There is no way to edit or delete individual entries from the
-UI — the table is append-only by design.
+UI — the table is append-only by design (by convention: see the next section for
+what happens when somebody with database access ignores it).
+
+### Tamper evidence: the audit mirror
+
+Whoever can write to the database can edit or delete audit rows, and nothing in
+the table would show it. So every event is **also** written, as one line with an
+HMAC, somewhere the database does not control:
+
+- to standard error — the systemd journal of the service
+  (`journalctl -u mcprack | grep AUDIT`), which you can ship off the host; and
+- to a file, `/var/log/mcprack/audit.log` by default when that directory is
+  writable (`AUDIT_LOG_FILE=/other/path`, or `off`), rotated by logrotate.
+
+A line holds the row's id and the same fields as the row (never bodies or
+credentials) and a MAC keyed from `SECRET_KEY` (`SECRET_KEY_FALLBACKS` keeps old
+lines verifiable after a rotation). An event whose row could not be written —
+database down, or sabotaged — is still logged, with `"id": null`.
+
+```bash
+flask audit-verify                         # check the table against /var/log/mcprack/audit.log (+ rotated copies)
+flask audit-verify --log /srv/shipped/audit.log --days 30
+flask audit-verify --strict                # rows without a log line fail too
+```
+
+It reports **DELETED** (a line with no row), **ALTERED** (a row that differs from
+its line, with the fields), **TAMPERED LOG** (a line whose MAC is wrong) and rows
+**without any line** (inserted, or written while the mirror was off — a warning,
+a failure with `--strict`). Exit status 1 on the first three. Lines older than
+`AUDIT_RETENTION_DAYS` are not checked, because `audit-archive` legitimately
+removes those rows. **REUSED ID** means two different events carry the same id —
+a row was deleted and the next event was given its id (SQLite re-uses the highest
+id), which would otherwise hide the deletion. After *restoring a database backup*
+this is expected (new events reuse the ids of the ones the backup lost): rotate
+the log when you restore, and verify the new one. A deleted *user* blanks the reference in old rows
+(`ON DELETE SET NULL`); that is not reported as tampering.
+
+This is tamper-**evidence**, not prevention, and it only means something if the
+attacker cannot also rewrite the log: ship the journal off the host
+(`systemd-journal-upload`, rsyslog `imjournal`) or make the file append-only
+(`chattr +a /var/log/mcprack/audit.log`; logrotate then needs `nocreate`-style
+handling or `chattr -a` in a prerotate step). Run `audit-verify` periodically
+(cron) and alert on a non-zero exit. `AUDIT_MIRROR_ENABLED=false` switches the
+mirror off; `AUDIT_MIRROR_STDERR=false` only the journal copy.
 
 ### Retention & archival
 
@@ -915,6 +1011,69 @@ sees `Upstream MCP server did not respond within 10s` even though the
 backend would have answered, which can mask the backend's own error.
 
 See `debian/README.Debian` for more detail.
+
+### Claude Code
+
+Claude Code (the CLI) has its own format, separate from Claude Desktop's
+`claude_desktop_config.json`. mcprack generates it as the **`claude-code`**
+client (`/download/claude-code`, `/view/claude-code`,
+`GET /api/v1/me/config/claude-code`):
+
+```json
+{
+  "mcpServers": {
+    "zabbix": {
+      "type": "http",
+      "url": "https://mcprack.example.com/proxy/mcp/8",
+      "headers": { "Authorization": "Bearer ${MCPRACK_TOKEN}" }
+    }
+  }
+}
+```
+
+The file contains **no secret** — the URL is the plain relay route and the
+credential is read by Claude Code from the `MCPRACK_TOKEN` environment
+variable (`${VAR}` is expanded in `url` and `headers`). That makes it safe to
+save as `.mcp.json` in a project and commit (project scope; Claude Code asks
+each person to approve a project-scoped server before first use). The name is
+deliberately `MCPRACK_TOKEN`: Claude Code reads credential-looking variables
+such as `ANTHROPIC_API_KEY`, `NPM_TOKEN` or `HTTPS_PROXY` as empty inside the
+`url`/`headers` of a remote server.
+
+1. Create a token: Account → API tokens (or `POST /api/v1/tokens`) with the
+   scope **`proxy:access`**. Tokens expire after `API_TOKEN_DEFAULT_EXPIRY_DAYS`
+   (90) unless you ask for another lifetime.
+2. `export MCPRACK_TOKEN=<token>` (shell profile, direnv, a secret manager —
+   not the repository).
+3. Either save the download as `.mcp.json`, or use the copyable commands on the
+   *View & Copy* page, which add the servers for all your projects:
+
+       claude mcp add --transport http --scope user zabbix https://mcprack.example.com/proxy/mcp/8 --header "Authorization: Bearer $MCPRACK_TOKEN"
+
+   (`--scope local` is the default of `claude mcp add` and keeps it to the
+   current project in `~/.claude.json`; `--scope project` writes `.mcp.json`.)
+4. In Claude Code run `/mcp` to see the status. To check the setup *before* a
+   user tries it, run on the server
+
+       mcprack user config verify USERNAME claude-code
+
+   It does what the client will do — `initialize`, then `tools/list` — against
+   every URL in the generated configuration (through the reverse proxy and TLS,
+   the relay and the MCP server behind it), prints one line per server with the
+   number of tools and the negotiated protocol version, and exits non-zero if any
+   fails. For this format it creates a 15-minute token for the check and removes
+   it again. `--base-url http://127.0.0.1:8912` probes mcprack itself without the
+   reverse proxy in front (to tell which hop is broken). A server that is `failed`
+   in Claude Code can also be diagnosed with `mcprack-mcp-probe --bearer` (below).
+
+With [Optional MCP OAuth](#optional-mcp-oauth) enabled the generated file has
+**no `headers` at all**: Claude Code starts the OAuth login itself (`/mcp` →
+authenticate, or `claude mcp login`); `?auth=token` asks for the token header
+anyway. The tokenless route `/proxy/mcp/<id>` accepts an API token with
+`proxy:access` even when OAuth is off (`PROXY_BEARER_ENABLED=false` switches
+that off). The older path-token URL (`/proxy/mcp/<token>/<id>`, still used by
+the Claude Desktop, Cursor and VS Code downloads) carries a signed secret in
+the URL — do not commit those files.
 
 ### Diagnosing a proxy URL — `mcprack-mcp-probe`
 

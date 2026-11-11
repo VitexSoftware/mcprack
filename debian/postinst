@@ -1,6 +1,24 @@
 #!/bin/sh
 set -e
 
+# Quote a value for /etc/mcprack/env. The file is read by systemd (EnvironmentFile=)
+# AND sourced as shell code by this script and bin/mcprack, so a value with a
+# space, '$', a quote or '#' (a password!) must not be left bare.
+shq() {
+  printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
+# Read a secret without echoing it to the terminal.
+read_secret() {
+  _prompt="$1"
+  printf "%s (input hidden): " "$_prompt" >&2
+  stty -echo 2>/dev/null || true
+  read -r _secret || true
+  stty echo 2>/dev/null || true
+  echo "" >&2
+  printf '%s' "$_secret"
+}
+
 case "$1" in
   configure)
     # Install systemd service files from /usr/lib/mcprack
@@ -66,7 +84,7 @@ case "$1" in
         echo "========================================="
         echo ""
         
-        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
         
         printf "Vaultwarden server URL [https://vaultwarden.proxy.spojenet.cz]: "
         read -r BW_SERVER
@@ -75,11 +93,9 @@ case "$1" in
         printf "Bitwarden client ID: "
         read -r BW_CLIENTID
         
-        printf "Bitwarden client secret: "
-        read -r BW_CLIENTSECRET
+        BW_CLIENTSECRET=$(read_secret "Bitwarden client secret")
         
-        printf "Bitwarden master password: "
-        read -r BW_PASSWORD
+        BW_PASSWORD=$(read_secret "Bitwarden master password")
         
         printf "Enable LDAP? (y/N): "
         read -r ENABLE_LDAP
@@ -102,7 +118,7 @@ case "$1" in
         fi
       else
         # Non-interactive - use defaults
-        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || echo "change-me-$(date +%s)")
+        SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || od -An -N32 -tx1 /dev/urandom | tr -d ' \n')
         BW_SERVER="https://vaultwarden.proxy.spojenet.cz"
         BW_CLIENTID=""
         BW_CLIENTSECRET=""
@@ -119,22 +135,35 @@ case "$1" in
 # ⚠️  UPDATE with your actual credentials!
 
 SECRET_KEY=$SECRET_KEY
-SQLALCHEMY_DATABASE_URI=$DB_URI
+SQLALCHEMY_DATABASE_URI=$(shq "$DB_URI")
 
-LDAP_SERVER=$LDAP_SERVER
-LDAP_BASE_DN=$LDAP_BASE_DN
-LDAP_USER_OU=ou=Users,$LDAP_BASE_DN
+LDAP_SERVER=$(shq "$LDAP_SERVER")
+LDAP_BASE_DN=$(shq "$LDAP_BASE_DN")
+LDAP_USER_OU=$(shq "ou=Users,$LDAP_BASE_DN")
 LDAP_USER_FILTER='(sAMAccountName=%(user)s)'
-LDAP_BIND_DN=$LDAP_BIND_DN
+LDAP_BIND_DN=$(shq "$LDAP_BIND_DN")
 LDAP_BIND_PASSWORD=
+# Prefer ldaps:// in LDAP_SERVER, or keep ldap:// and set LDAP_STARTTLS=true
+# (the directory certificate is verified; LDAP_CA_FILE = CA bundle).
+#LDAP_STARTTLS=true
+#LDAP_REQUIRED_GROUP=CN=mcprack-users,OU=Groups,$LDAP_BASE_DN
 
-BW_SERVER=$BW_SERVER
-BW_CLIENTID=$BW_CLIENTID
-BW_CLIENTSECRET=$BW_CLIENTSECRET
-BW_PASSWORD=$BW_PASSWORD
+BW_SERVER=$(shq "$BW_SERVER")
+BW_CLIENTID=$(shq "$BW_CLIENTID")
+BW_CLIENTSECRET=$(shq "$BW_CLIENTSECRET")
+BW_PASSWORD=$(shq "$BW_PASSWORD")
 BW_ITEM_PREFIX=MCP-
 BITWARDENCLI_APPDATA_DIR=/var/lib/mcprack/.bw
 BW_BIN=/usr/bin/bw
+
+# --- Internet-facing deployment (see /usr/share/doc/mcprack/README.Debian) ---
+# Public URL of this instance. Set it as soon as mcprack is reachable from
+# outside: password-reset links and OAuth metadata are built from it, and the
+# application then refuses requests for any other Host.
+#PUBLIC_BASE_URL=https://mcprack.example.com
+# MCP proxy URLs (the secret in every generated client config) expire after
+# 90 days. Fresh installs only; remove the line for no expiry.
+PROXY_TOKEN_MAX_AGE_SECONDS=7776000
 ENV_FILE
       
     fi
@@ -188,11 +217,26 @@ with app.app_context():
 
     if [ "$ADMIN_EXISTS" != "1" ]; then
       ADMIN_PASS=$(python3 -c "import secrets; print(secrets.token_urlsafe(16))")
-      if su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=mcprack.app:create_app python3 -m flask create-admin --username admin --password '$ADMIN_PASS' --email ''" 2>/dev/null; then
+      # The password goes to the command through a file, not through its
+      # argument list (visible in ps). The file lives in a directory that only
+      # ROOT can modify (/run, mode 0711: the service user may traverse it but
+      # cannot list it or swap anything in it), is written while still
+      # root-only, and handed to the service user (chown) last - root never
+      # does path operations in a directory the service user controls.
+      ADMIN_PASS_DIR=$(mktemp -d /run/mcprack-admin.XXXXXX)
+      ADMIN_PASS_FILE="$ADMIN_PASS_DIR/password"
+      ( umask 077; printf '%s\n' "$ADMIN_PASS" > "$ADMIN_PASS_FILE" )
+      chmod 0711 "$ADMIN_PASS_DIR"
+      chown mcprack:mcprack "$ADMIN_PASS_FILE"
+      if su -s /bin/sh mcprack -c "cd /usr/lib/mcprack && set -a; . /etc/mcprack/env; set +a; FLASK_APP=mcprack.app:create_app python3 -m flask create-admin --username admin --password-file '$ADMIN_PASS_FILE' --email ''" 2>/dev/null; then
+        rm -rf "$ADMIN_PASS_DIR"
         install -m 0600 -o root -g root /dev/null /etc/mcprack/admin-credentials
         printf 'username=admin\npassword=%s\n' "$ADMIN_PASS" > /etc/mcprack/admin-credentials
         echo "✅ Initial admin account created (username: admin). Credentials saved to /etc/mcprack/admin-credentials"
+        echo "   Administrators must set up two-factor authentication (an authenticator app) at their first sign-in."
+        echo "   Locked out later? 'mcprack user mfa-reset admin' on this server switches it off again."
       else
+        rm -rf "$ADMIN_PASS_DIR"
         echo "ℹ️  Admin account setup deferred (likely missing SECRET_KEY). Run after 'mcprack-init-config':" >&2
         echo "     su - mcprack -s /bin/sh" >&2
         echo "     cd /usr/lib/mcprack && source /etc/mcprack/env && flask create-admin" >&2

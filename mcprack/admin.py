@@ -5,12 +5,19 @@ import time
 
 from sqlalchemy import func
 
+from . import accounts
 from . import audit
 from . import catalog
+from . import command_policy
+from . import demo
 from . import detection
+from . import endpoint_policy
 from . import env_detection
 from . import health
 from . import installer
+from . import mfa
+from . import server_changes
+from . import passwords
 from . import appstream_icons
 from . import secret_store
 from . import user_proxy
@@ -53,9 +60,11 @@ def _demo_mode_blocked():
     """Call at the top of any route that adds/edits/deletes an MCP server
     registration. Returns a redirect response if DEMO_MODE is on (nothing
     else is restricted), or None to let the route proceed."""
+    # The central guard (demo.guard, a before_request hook) already refuses
+    # these requests; the explicit calls in the routes stay as a second line.
     if not current_app.config.get("DEMO_MODE"):
         return None
-    flash("This is a public demo instance — registering, editing, and deleting MCP servers is disabled.", "error")
+    flash(demo.MESSAGE, "error")
     return redirect(url_for("admin.servers_list"))
 
 
@@ -250,7 +259,8 @@ def server_new():
         db.session.commit()
         _invalidate_health_cache()
         audit.log_audit_event(
-            "admin_change", "success", user=current_user, server=server, error_message="server created"
+            "admin_change", "success", user=current_user, server=server,
+            error_message=server_changes.describe(None, server_changes.snapshot(server)),
         )
         flash(f"Server '{server.name}' created.", "success")
         return redirect(url_for("admin.servers_list"))
@@ -294,11 +304,13 @@ def server_edit(server_id):
                 active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
+        before = server_changes.snapshot(server)
         _apply_server_form(server, request.form)
         db.session.commit()
         _invalidate_health_cache()
         audit.log_audit_event(
-            "admin_change", "success", user=current_user, server=server, error_message="server updated"
+            "admin_change", "success", user=current_user, server=server,
+            error_message=server_changes.describe(before, server_changes.snapshot(server)),
         )
         flash(f"Server '{server.name}' updated.", "success")
         return redirect(url_for("admin.servers_list"))
@@ -322,6 +334,11 @@ def server_edit(server_id):
             {"key": k, "value": v, "sensitive": True, "required": k in required_keys}
             for k, v in secret_values.items()
         ]
+        if secret_values:
+            audit.log_audit_event(
+                "credential_access", "success", user=current_user, server=server,
+                error_message="server secrets shown in the edit form",
+            )
         secrets_loaded = True
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
         t_secrets_end = time.time()
@@ -460,6 +477,9 @@ def validate_server_endpoint(transport, command, url):
 
     if not command and not url:
         errors.append("Provide either a local command or a network URL.")
+
+    errors.extend(endpoint_policy.url_errors(url))
+    errors.extend(command_policy.command_errors(command))
 
     if transport == "stdio" and not command and url:
         warnings.append(
@@ -765,6 +785,10 @@ def _create_install_server(form, install_method):
     name = (form.get("name") or "").strip()
     if not name:
         raise ValueError("Server name is required.")
+    try:
+        installer.validate_name(name)
+    except installer.InstallError as exc:
+        raise ValueError(str(exc))
     if _installable_name_taken(name):
         raise ValueError(f"A server named '{name}' is already registered.")
 
@@ -808,6 +832,12 @@ def install_pip():
     if not package_spec or not expected_binary:
         flash("Package spec and expected binary name are both required.", "error")
         return redirect(url_for("admin.install_wizard"))
+    try:
+        installer.validate_pip_spec(package_spec)
+        installer.validate_binary_name(expected_binary)
+    except installer.InstallError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
 
     try:
         server = _create_install_server(request.form, "pip")
@@ -850,6 +880,12 @@ def install_npm():
     if not package_spec or not expected_binary:
         flash("Package spec and expected binary name are both required.", "error")
         return redirect(url_for("admin.install_wizard"))
+    try:
+        installer.validate_npm_spec(package_spec)
+        installer.validate_binary_name(expected_binary)
+    except installer.InstallError as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("admin.install_wizard"))
 
     try:
         server = _create_install_server(request.form, "npm")
@@ -890,6 +926,11 @@ def install_docker():
     image_ref = (request.form.get("image_ref") or "").strip()
     if not image_ref:
         flash("Docker image reference is required.", "error")
+        return redirect(url_for("admin.install_wizard"))
+    try:
+        installer.validate_image_ref(image_ref)
+    except installer.InstallError as exc:
+        flash(str(exc), "error")
         return redirect(url_for("admin.install_wizard"))
 
     if not installer.docker_available():
@@ -1213,13 +1254,25 @@ def users_list():
 @admin_required
 def user_new():
     if request.method == "POST":
+        username = (request.form.get("username") or "").strip()
+        password = request.form.get("password", "")
+        problem = None
+        if not username:
+            problem = "A username is required."
+        elif User.query.filter_by(username=username).first() is not None:
+            problem = f"A user named '{username}' already exists."
+        else:
+            problem = passwords.check_strength(password, username)
+        if problem:
+            flash(problem, "error")
+            return render_template("admin/user_form.html", user=None), 400
         user = User(
-            username=request.form["username"],
+            username=username,
             email=request.form.get("email", ""),
             auth_type="local",
             is_admin=request.form.get("is_admin") == "on",
         )
-        user.set_password(request.form["password"])
+        user.set_password(password)
         db.session.add(user)
         db.session.commit()
         audit.log_audit_event(
@@ -1286,11 +1339,20 @@ def user_edit(user_id):
     permission_map = get_permission_map(user)
 
     if request.method == "POST":
-        user.is_admin = request.form.get("is_admin") == "on"
-        user.is_active_flag = request.form.get("is_active") == "on"
         new_password = request.form.get("password", "")
         if user.auth_type == "local" and new_password:
+            problem = passwords.check_strength(new_password, user.username)
+            if problem:
+                flash(problem, "error")
+                return redirect(url_for("admin.user_edit", user_id=user_id))
+        user.is_admin = request.form.get("is_admin") == "on"
+        user.is_active_flag = request.form.get("is_active") == "on"
+        if not user.is_active_flag:
+            # a disabled account must not keep running MCP servers
+            accounts.stop_processes(user)
+        if user.auth_type == "local" and new_password:
             user.set_password(new_password)
+            accounts.invalidate_sessions(user)
 
         # Persist explicit per-server ACL for currently available servers.
         permission_overrides = {
@@ -1337,6 +1399,43 @@ def user_edit(user_id):
         templates=templates,
         clients=list(catalog.RENDERERS.keys()),
     )
+
+
+@bp.route("/users/<int:user_id>/revoke-tokens", methods=["POST"])
+@admin_required
+def user_revoke_tokens(user_id):
+    """Revoke everything the user holds for programmatic access (MCP proxy
+    URLs, API tokens, OAuth tokens) and stop their running MCP servers. The
+    user keeps their account and can download a fresh configuration."""
+    user = db.get_or_404(User, user_id)
+    accounts.revoke_tokens(user)
+    db.session.commit()
+    accounts.stop_processes(user)
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"tokens of '{user.username}' revoked"
+    )
+    flash(
+        f"All tokens of '{user.username}' were revoked. They must download a new configuration.",
+        "success",
+    )
+    return redirect(url_for("admin.user_edit", user_id=user_id))
+
+
+@bp.route("/users/<int:user_id>/mfa-reset", methods=["POST"])
+@admin_required
+def user_mfa_reset(user_id):
+    """Switch a user's second factor off - for somebody who has lost both their
+    device and their recovery codes. Their sessions end, so the change cannot
+    be preceded by one the previous holder of a stolen device still has open."""
+    user = db.get_or_404(User, user_id)
+    mfa.disable(user)
+    accounts.invalidate_sessions(user)
+    db.session.commit()
+    audit.log_audit_event(
+        "mfa_change", "success", user=current_user, error_message=f"two-factor authentication of '{user.username}' reset by an administrator"
+    )
+    flash(f"Two-factor authentication of '{user.username}' was reset.", "success")
+    return redirect(url_for("admin.user_edit", user_id=user_id))
 
 
 @bp.route("/users/<int:user_id>/apply-template", methods=["POST"])

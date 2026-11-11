@@ -14,10 +14,12 @@ rolled back by, the caller's own unit of work.
 
 import logging
 import uuid
+from datetime import datetime, timezone
 
 import flask
 from sqlalchemy.exc import IntegrityError
 
+from . import audit_mirror
 from .extensions import db
 from .models import AuditLogEntry
 
@@ -78,30 +80,67 @@ def log_audit_event(
     if hostname is None and flask.has_request_context():
         hostname = flask.request.host
 
-    entry = AuditLogEntry(
-        user_id=resolved_user_id,
-        server_id=resolved_server_id,
-        server_name=resolved_server_name,
-        action=action,
-        result=result,
-        error_code=error_code,
-        error_message=(error_message[:500] if error_message else None),
-        source_ip=source_ip,
-        hostname=hostname,
-        duration_ms=duration_ms,
-        request_id=request_id or current_request_id(),
-    )
+    timestamp = datetime.now(timezone.utc)
+    clipped_message = error_message[:500] if error_message else None
+    resolved_request_id = request_id or current_request_id()
+
+    def build(uid, sid):
+        return AuditLogEntry(
+            timestamp=timestamp,
+            user_id=uid,
+            server_id=sid,
+            server_name=resolved_server_name,
+            action=action,
+            result=result,
+            error_code=error_code,
+            error_message=clipped_message,
+            source_ip=source_ip,
+            hostname=hostname,
+            duration_ms=duration_ms,
+            request_id=resolved_request_id,
+        )
+
+    def mirror(entry_id, uid, sid):
+        """The same event, outside the database (audit_mirror.py). `id` is None when
+        the row could not be written - the event is recorded regardless."""
+        audit_mirror.emit(
+            {
+                "v": 1,
+                "id": entry_id,
+                "ts": timestamp.isoformat(),
+                "action": action,
+                "result": result,
+                "user_id": uid,
+                "server_id": sid,
+                "server_name": resolved_server_name,
+                "error_code": error_code,
+                "error_message": clipped_message,
+                "source_ip": source_ip,
+                "hostname": hostname,
+                "duration_ms": duration_ms,
+                "request_id": resolved_request_id,
+            }
+        )
 
     if not flask.has_app_context():
         # Callers like user_proxy.py are plain functions with no guaranteed
         # Flask context (e.g. unit tests exercising them directly) — never
         # let auditing be the reason a context-less call blows up.
         logger.warning("Skipped audit log entry (no app context): action=%s", action)
+        mirror(None, resolved_user_id, resolved_server_id)
         return None
 
-    try:
+    def write(uid, sid):
+        entry = build(uid, sid)
         db.session.add(entry)
+        db.session.flush()  # assigns the id without a second query after the commit
+        entry_id = entry.id
         db.session.commit()
+        mirror(entry_id, uid, sid)
+        return entry
+
+    try:
+        return write(resolved_user_id, resolved_server_id)
     except IntegrityError as exc:
         # The row this event points at may have been deleted between the
         # event and this write (e.g. an admin deleted a server while one
@@ -117,6 +156,7 @@ def log_audit_event(
         message = str(getattr(exc, "orig", None) or exc)
         if _SERVER_ID_FK not in message and _USER_ID_FK not in message:
             logger.exception("Failed to write audit log entry (action=%s)", action)
+            mirror(None, resolved_user_id, resolved_server_id)
             return None
         if _SERVER_ID_FK in message:
             resolved_server_id = None
@@ -129,28 +169,15 @@ def log_audit_event(
             resolved_server_id,
             resolved_user_id,
         )
-        entry = AuditLogEntry(
-            user_id=resolved_user_id,
-            server_id=resolved_server_id,
-            server_name=resolved_server_name,
-            action=action,
-            result=result,
-            error_code=error_code,
-            error_message=(error_message[:500] if error_message else None),
-            source_ip=source_ip,
-            hostname=hostname,
-            duration_ms=duration_ms,
-            request_id=request_id or current_request_id(),
-        )
         try:
-            db.session.add(entry)
-            db.session.commit()
+            return write(resolved_user_id, resolved_server_id)
         except Exception:
             try:
                 db.session.rollback()
             except Exception:
                 pass
             logger.exception("Failed to write audit log entry (action=%s)", action)
+            mirror(None, resolved_user_id, resolved_server_id)
             return None
     except Exception:
         try:
@@ -158,5 +185,5 @@ def log_audit_event(
         except Exception:
             pass
         logger.exception("Failed to write audit log entry (action=%s)", action)
+        mirror(None, resolved_user_id, resolved_server_id)
         return None
-    return entry

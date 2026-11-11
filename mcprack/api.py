@@ -20,15 +20,20 @@ from datetime import datetime, timedelta, timezone
 from functools import wraps
 
 import yaml
-from flask import Blueprint, abort, g, jsonify, request
+from flask import Blueprint, abort, current_app, g, jsonify, request
 from flask_login import current_user
 
+from . import accounts
 from . import admin
 from . import audit
 from . import catalog
+from . import env_policy
+from . import mfa
+from . import server_changes
+from . import passwords
 from . import secret_store
 from . import vaultwarden
-from .extensions import db, limiter
+from .extensions import csrf, db, limiter
 from .models import (
     API_TOKEN_SCOPES,
     API_TOKEN_SCOPE_ALL,
@@ -77,6 +82,18 @@ def api_admin_required(view):
     def wrapped(*args, **kwargs):
         if not current_user.is_admin:
             return api_error(403, "forbidden", "Admin privileges required")
+        # A browser session of an administrator without a second factor does
+        # not reach the admin API either (MFA_REQUIRED_FOR_ADMINS). A bearer
+        # token is not affected: it was created from an authenticated session.
+        if getattr(g, "api_token", None) is None:
+            from .auth import mfa_enrollment_required
+
+            if mfa_enrollment_required():
+                return api_error(
+                    403,
+                    "mfa_required",
+                    "Administrators must set up two-factor authentication first (/account/mfa)",
+                )
         # A bearer token must additionally carry an admin scope: admin:write
         # for mutating methods, admin:read (or admin:write) for GETs.
         # Session-cookie users are interactive and always pass.
@@ -113,6 +130,25 @@ def api_scope_required(*required_scopes):
             return view(*args, **kwargs)
         return wrapped
     return decorator
+
+
+@bp.before_request
+def _csrf_for_cookie_authentication():
+    """The blueprint is exempt from Flask-WTF's global CSRF check because
+    bearer-token requests carry no ambient credential. The session cookie *is*
+    one, and this API accepts it - so a cookie-authenticated mutation has to
+    carry a CSRF token (header X-CSRFToken) like any form post
+    (docs/AUDIT-2026-11.md B-06). SameSite=Lax alone is the only thing that
+    stood in the way before."""
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    if not current_app.config.get("WTF_CSRF_ENABLED", True):
+        return None
+    # resolving current_user loads the session user first and only then the
+    # bearer token (which sets g.api_token)
+    if current_user.is_authenticated and getattr(g, "api_token", None) is None:
+        csrf.protect()
+    return None
 
 
 @bp.errorhandler(400)
@@ -159,6 +195,7 @@ def _user_summary(user):
         "auth_type": user.auth_type,
         "is_admin": user.is_admin,
         "is_active": user.is_active,
+        "mfa_enabled": mfa.is_enabled(user),
         "created_at": _iso(user.created_at),
         "config_template_id": user.config_template_id,
     }
@@ -210,7 +247,7 @@ def _server_detail(server, reveal_secrets=False):
         try:
             data["secrets"] = secret_store.load_server_secrets(server)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            data["secrets_error"] = str(exc)
+            data["secrets_error"] = secret_store.public_error(exc)
     return data
 
 
@@ -253,6 +290,14 @@ def _parse_token_expiry(data):
             return None, api_error(400, "invalid_request", "expires_at must be in the future")
         return expires_at, None
     return None, None
+
+
+def _reaches_admin_api(scopes):
+    """Whether a token created with `scopes` could call the admin API. There are
+    two spellings of "unrestricted" - no scope list (None) and a list containing
+    "*" - and the model treats both alike, so both are named here, in one place;
+    otherwise any scope starting with "admin:"."""
+    return scopes is None or API_TOKEN_SCOPE_ALL in scopes or any(scope.startswith("admin:") for scope in scopes)
 
 
 def _parse_token_scopes(data):
@@ -298,7 +343,7 @@ def _override_response(server, target_user, reveal):
         try:
             non_secret, secret = secret_store.load_user_override(server, target_user)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            return None, api_error(502, "vaultwarden_unreachable", str(exc))
+            return None, api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
         values = {**non_secret, **secret}
         # Which half a key lives in is sticky on a PUT, so a client that
         # cannot see the classification cannot reason about what it is
@@ -327,6 +372,9 @@ def _override_put_payload(server, target_user):
     values = data.get("env")
     if not isinstance(values, dict):
         return None, None, api_error(400, "invalid_request", "env must be an object of key/value pairs")
+    problems = env_policy.validate_override(server, values)
+    if problems:
+        return None, None, api_error(400, "invalid_env", " ".join(problems))
 
     explicit = data.get("secret_keys")
     if explicit is None:
@@ -425,9 +473,40 @@ def tokens_create():
     expires_at, error = _parse_token_expiry(data)
     if error:
         return error
+    # No expiry asked for -> the configured default (a token is as good as a
+    # password). Remembered, because a default - unlike an explicit request -
+    # is silently capped by the creating token's own expiry below.
+    default_days = int(current_app.config.get("API_TOKEN_DEFAULT_EXPIRY_DAYS", 90))
+    defaulted = expires_at is None and default_days > 0 and "expires_at" not in data and "expires_in_days" not in data
+    if defaulted:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=default_days)
     scopes, error = _parse_token_scopes(data)
     if error:
         return error
+
+    # An administrator who has still to enrol a second factor has proved the
+    # password and nothing else. A token minted in that state would reach the
+    # admin API without ever meeting MFA - and would outlive the enrolment that
+    # is supposed to close that gap. So such a session may mint only tokens that
+    # cannot reach the admin API (no unrestricted token, no admin:* scope).
+    if getattr(g, "api_token", None) is None and _reaches_admin_api(scopes):
+        # ... and one that has not freshly authenticated may not either: a token is
+        # exempt from the fresh-login check, so minting one would be a way round it
+        # (mcprack/reauth.py, CHECKED_IN_THE_VIEW).
+        from . import reauth
+
+        if reauth.needed():
+            return reauth.api_refusal()
+
+    if getattr(g, "api_token", None) is None:
+        from .auth import mfa_enrollment_required
+
+        if mfa_enrollment_required() and _reaches_admin_api(scopes):
+            return api_error(
+                403,
+                "mfa_required",
+                "Set up two-factor authentication (/account/mfa) before creating a token that can use the admin API",
+            )
 
     # A scoped bearer token can only mint tokens no more powerful than
     # itself: no broader scopes, and no lifetime past its own expiry.
@@ -447,6 +526,8 @@ def tokens_create():
                 f"Cannot grant scopes this token does not have: {', '.join(not_held)}",
             )
         creator_expires_at = creator.expires_at_utc
+        if defaulted and creator_expires_at is not None and expires_at > creator_expires_at:
+            expires_at = creator_expires_at  # the default never outlives the creator
         if creator_expires_at is not None and (expires_at is None or expires_at > creator_expires_at):
             return api_error(
                 403, "insufficient_scope", "Cannot create a token that outlives this token"
@@ -533,7 +614,8 @@ def admin_servers():
         db.session.commit()
         admin._invalidate_health_cache()
         audit.log_audit_event(
-            "admin_change", "success", user=current_user, server=server, error_message="server created via API"
+            "admin_change", "success", user=current_user, server=server,
+            error_message=server_changes.describe(None, server_changes.snapshot(server)) + " (via API)",
         )
 
         response = _server_detail(server)
@@ -560,6 +642,14 @@ def admin_servers():
 def admin_server_detail(server_id):
     server = db.get_or_404(McpServer, server_id)
     reveal = request.args.get("reveal_secrets") == "1"
+    if reveal:
+        # Reading every credential of a server back in clear text is the one
+        # administrator action that must always leave a trace (B-10): who, which
+        # server, when - never the values.
+        audit.log_audit_event(
+            "credential_access", "success", user=current_user, server=server,
+            error_message="server secrets read by an administrator (reveal_secrets=1)",
+        )
     return api_ok(_server_detail(server, reveal_secrets=reveal))
 
 
@@ -576,6 +666,7 @@ def admin_server_update(server_id):
     if errors:
         return api_error(400, "invalid_request", "; ".join(errors))
 
+    before = server_changes.snapshot(server)
     admin._apply_server_fields(server, update)
     secrets_error = None
     if "env" in data or "secrets" in data:
@@ -586,7 +677,8 @@ def admin_server_update(server_id):
     db.session.commit()
     admin._invalidate_health_cache()
     audit.log_audit_event(
-        "admin_change", "success", user=current_user, server=server, error_message="server updated via API"
+        "admin_change", "success", user=current_user, server=server,
+        error_message=server_changes.describe(before, server_changes.snapshot(server)) + " (via API)",
     )
 
     response = _server_detail(server)
@@ -718,7 +810,7 @@ def me_override_set(server_id):
         non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
         secret_store.save_user_override(server, current_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     return api_ok({"server_id": server.id, "env_keys": list(values.keys())})
@@ -734,7 +826,7 @@ def me_override_delete(server_id):
     try:
         secret_store.delete_user_override(server, current_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     return "", 204
@@ -751,6 +843,11 @@ def admin_user_override_get(user_id, server_id):
     data, error = _override_response(server, target_user, reveal)
     if error:
         return error
+    if reveal and data.get("has_override"):
+        audit.log_audit_event(
+            "credential_access", "success", user=current_user, server=server,
+            error_message=f"override values of user #{target_user.id} read by an administrator (reveal=1)",
+        )
     return api_ok(data)
 
 
@@ -771,7 +868,7 @@ def admin_user_override_set(user_id, server_id):
         non_secret, secret = secret_store.split_override_values(server, values, secret_keys=secret_keys)
         secret_store.save_user_override(server, target_user, non_secret, secret)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     audit.log_audit_event(
@@ -794,7 +891,7 @@ def admin_user_override_delete(user_id, server_id):
     try:
         secret_store.delete_user_override(server, target_user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return api_error(502, "vaultwarden_unreachable", str(exc))
+        return api_error(502, "vaultwarden_unreachable", secret_store.public_error(exc))
 
     db.session.commit()
     audit.log_audit_event(
@@ -813,7 +910,9 @@ def admin_user_override_delete(user_id, server_id):
 @api_login_required
 @api_scope_required("config:read")
 def me_config(client):
-    config_json, filename, error_message = catalog._build_client_config_json(client, user=current_user)
+    config_json, filename, error_message = catalog._build_client_config_json(
+        client, user=current_user, auth=request.args.get("auth")
+    )
     if config_json is None:
         audit.log_audit_event(
             "config_download",
@@ -868,6 +967,9 @@ def admin_users():
             return api_error(400, "invalid_request", "username and password are required")
         if User.query.filter_by(username=username).first():
             return api_error(409, "conflict", f"user '{username}' already exists")
+        problem = passwords.check_strength(password, username)
+        if problem:
+            return api_error(400, "invalid_password", problem)
 
         user = User(
             username=username,
@@ -900,10 +1002,17 @@ def admin_user_update(user_id):
     user = db.get_or_404(User, user_id)
     data = request.get_json(silent=True) or {}
 
+    if data.get("password") and user.auth_type == "local":
+        problem = passwords.check_strength(data["password"], user.username)
+        if problem:
+            return api_error(400, "invalid_password", problem)
+        accounts.invalidate_sessions(user)
     if "is_admin" in data:
         user.is_admin = bool(data["is_admin"])
     if "is_active" in data:
         user.is_active_flag = bool(data["is_active"])
+        if not user.is_active_flag:
+            accounts.stop_processes(user)
     if data.get("password") and user.auth_type == "local":
         user.set_password(data["password"])
     if "permissions" in data:
@@ -921,6 +1030,68 @@ def admin_user_update(user_id):
     return api_ok(_user_detail(user))
 
 
+@bp.route("/admin/users/<int:user_id>/revoke-tokens", methods=["POST"])
+@api_admin_required
+def admin_user_revoke_tokens(user_id):
+    """Revoke the user's MCP proxy URLs, API tokens and OAuth tokens and stop
+    their running MCP servers."""
+    user = db.get_or_404(User, user_id)
+    accounts.revoke_tokens(user)
+    db.session.commit()
+    accounts.stop_processes(user)
+    audit.log_audit_event(
+        "admin_change", "success", user=current_user, error_message=f"tokens of '{user.username}' revoked via API"
+    )
+    return api_ok(_user_detail(user))
+
+
+@bp.route("/auth/reauth", methods=["POST"])
+@limiter.limit(lambda: current_app.config["LOGIN_RATE_LIMIT"])
+@api_login_required
+def auth_reauth():
+    """Confirm the caller's password (and code, for an account with MFA) again, so
+    a browser session may carry out the dangerous administrator actions for the
+    next ADMIN_REAUTH_SECONDS. Cookie sessions only - a bearer token is a
+    credential of its own."""
+    from . import reauth
+    from .auth import _confirm_identity
+    from . import throttle
+
+    if getattr(g, "api_token", None) is not None:
+        return api_error(400, "not_applicable", "Bearer tokens are not asked to re-authenticate")
+    data = request.get_json(silent=True) or {}
+    user = current_user
+    wait = throttle.begin(user.username, user, request.remote_addr)
+    if wait:
+        audit.log_audit_event("login_failed", "error", user=user, error_message="re-authentication refused: too many failures")
+        response, status = api_error(429, "too_many_attempts", "Too many failed attempts")
+        response.headers["Retry-After"] = str(wait)
+        return response, status
+    if not _confirm_identity(user, str(data.get("password") or ""), str(data.get("code") or "")):
+        audit.log_audit_event("login_failed", "error", user=user, error_message="re-authentication failed (API)")
+        return api_error(403, "invalid_credentials", "The password or the code is not correct")
+    throttle.success(user.username, user, request.remote_addr)
+    reauth.mark_fresh()
+    audit.log_audit_event("login", "success", user=user, error_message="re-authenticated for an administrator action (API)")
+    return api_ok({"fresh_for": reauth.window()})
+
+
+@bp.route("/admin/users/<int:user_id>/mfa-reset", methods=["POST"])
+@api_admin_required
+def admin_user_mfa_reset(user_id):
+    """Switch off a user's second factor (lost device and recovery codes) and end
+    their sessions."""
+    user = db.get_or_404(User, user_id)
+    mfa.disable(user)
+    accounts.invalidate_sessions(user)
+    db.session.commit()
+    audit.log_audit_event(
+        "mfa_change", "success", user=current_user,
+        error_message=f"two-factor authentication of '{user.username}' reset by an administrator via API",
+    )
+    return api_ok(_user_detail(user))
+
+
 @bp.route("/admin/users/<int:user_id>", methods=["DELETE"])
 @api_admin_required
 def admin_user_delete(user_id):
@@ -929,6 +1100,7 @@ def admin_user_delete(user_id):
 
     user = db.get_or_404(User, user_id)
     username = user.username
+    accounts.stop_processes(user)  # before the row goes, so audit entries keep a valid user_id
     db.session.delete(user)
     db.session.commit()
     audit.log_audit_event(

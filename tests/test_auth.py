@@ -133,3 +133,56 @@ def test_ldap_login_wrong_password_rejected(app, client):
 
     with app.app_context():
         assert User.query.filter_by(username="dave").first() is None
+
+
+# --- LDAP_REQUIRED_GROUP (audit A-06) ----------------------------------------
+
+
+def _ldap_login_with_groups(app, client, groups, required):
+    app.config["LDAP_ENABLED"] = True
+    app.config["LDAP_REQUIRED_GROUP"] = required
+    class GroupEntry(FakeEntry):
+        def __getitem__(self, name):
+            if name == "memberOf":
+                attr = FakeAttr(None)
+                attr.values = list(groups)  # a multi-valued attribute
+                return attr
+            return super().__getitem__(name)
+
+    entry = GroupEntry(
+        "CN=Carol,OU=Users,DC=spojent,DC=cz",
+        {"givenName": "Carol", "sn": "Danvers", "mail": "carol@spojent.cz", "memberOf": None},
+    )
+    search_conn = _make_search_connection([entry])
+    bind_conn = MagicMock()
+    bind_conn.__enter__.return_value = bind_conn
+    bind_conn.__exit__.return_value = False
+
+    def connection_side_effect(server, user=None, password=None, auto_bind=None):
+        return bind_conn if user == entry.entry_dn else search_conn
+
+    with patch("mcprack.auth.ldap3.Connection", side_effect=connection_side_effect):
+        client.post("/login", data={"username": "carol", "password": "correct-ad-password"})
+    return client.get("/").status_code
+
+
+def test_ldap_required_group_member_can_log_in(app, client):
+    status = _ldap_login_with_groups(
+        app, client, ["CN=MCP-Users,OU=Groups,DC=spojent,DC=cz"], "cn=mcp-users,ou=groups,dc=spojent,dc=cz"
+    )
+
+    assert status == 200
+
+
+def test_ldap_required_group_non_member_is_refused_and_not_provisioned(app, client):
+    status = _ldap_login_with_groups(
+        app, client, ["CN=Other,OU=Groups,DC=spojent,DC=cz"], "CN=MCP-Users,OU=Groups,DC=spojent,DC=cz"
+    )
+
+    assert status == 302
+    with app.app_context():
+        assert User.query.filter_by(username="carol").first() is None
+
+
+def test_ldap_without_required_group_admits_everyone(app, client):
+    assert _ldap_login_with_groups(app, client, [], "") == 200

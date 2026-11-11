@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Two-factor authentication') }} — mcprack{% endblock %}
+{% block content %}
+
+<div class="auth-card">
+  <div class="auth-card-header">
+    <h1 class="mb-md">{{ _('Two-factor authentication') }}</h1>
+  </div>
+
+  {% if codes %}
+  <div class="card">
+    {% if just_enabled %}<p><strong>{{ _('Two-factor authentication is now on.') }}</strong></p>{% endif %}
+    <h2>{{ _('Your recovery codes') }}</h2>
+    <p class="text-muted">{{ _('Each code works once, if you lose your phone. They are shown only now — store them somewhere safe (a password manager, a printout).') }}</p>
+    <pre>{% for code in codes %}{{ code }}
+{% endfor %}</pre>
+    <a href="{{ url_for('auth.account_mfa') }}" class="btn btn-primary w-full mt-lg">{{ _('I have saved them') }}</a>
+  </div>
+
+  {% elif secret %}
+  <div class="card">
+    <h2>{{ _('Set up your authenticator app') }}</h2>
+    <ol>
+      <li>{{ _('In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) add an account by entering a key manually.') }}</li>
+      <li>{{ _('Key:') }} <code>{{ secret }}</code> ({{ _('time-based, 6 digits') }})</li>
+      <li>{{ _('Enter the code the app shows to confirm.') }}</li>
+    </ol>
+    <p class="text-sm text-muted">{{ _('Or import this address into an app that accepts it:') }} <code>{{ uri }}</code></p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="confirm">
+      <div class="form-group">
+        <label for="code">{{ _('Code from the app') }}</label>
+        <input type="text" id="code" name="code" required autofocus autocomplete="one-time-code" inputmode="numeric" maxlength="12">
+      </div>
+      <button type="submit" class="btn btn-primary w-full mt-lg">{{ _('Turn on') }}</button>
+    </form>
+  </div>
+
+  {% elif enabled %}
+  <div class="card">
+    <p><strong>{{ _('Two-factor authentication is on.') }}</strong>
+       {{ ngettext('%(num)d recovery code left.', '%(num)d recovery codes left.', remaining) }}</p>
+    <h2>{{ _('Generate new recovery codes') }}</h2>
+    <p class="text-muted">{{ _('The old ones stop working.') }}</p>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="regenerate">
+      <div class="form-group">
+        <label for="regen_password">{{ _('Current password') }}</label>
+        <input type="password" id="regen_password" name="current_password" required>
+      </div>
+      <div class="form-group">
+        <label for="regen_code">{{ _('Code') }}</label>
+        <input type="text" id="regen_code" name="code" required autocomplete="one-time-code" maxlength="32">
+      </div>
+      <button type="submit" class="btn btn-secondary w-full mt-lg">{{ _('Generate new codes') }}</button>
+    </form>
+  </div>
+
+  {% if not required %}
+  <div class="card mt-lg">
+    <h2>{{ _('Turn off') }}</h2>
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="disable">
+      <div class="form-group">
+        <label for="off_password">{{ _('Current password') }}</label>
+        <input type="password" id="off_password" name="current_password" required>
+      </div>
+      <div class="form-group">
+        <label for="off_code">{{ _('Code') }}</label>
+        <input type="text" id="off_code" name="code" required autocomplete="one-time-code" maxlength="32">
+      </div>
+      <button type="submit" class="btn btn-secondary w-full mt-lg">{{ _('Turn off two-factor authentication') }}</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="text-sm text-muted mt-lg">{{ _('Administrators cannot turn it off.') }}</p>
+  {% endif %}
+
+  {% else %}
+  <div class="card">
+    <p>{{ _('Two-factor authentication is off. With it on, signing in needs a code from an authenticator app in addition to your password.') }}</p>
+    {% if required %}<p><strong>{{ _('As an administrator you must set it up before you can use the admin area.') }}</strong></p>{% endif %}
+    <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="hidden" name="action" value="begin">
+      <div class="form-group">
+        <label for="begin_password">{{ _('Current password') }}</label>
+        <input type="password" id="begin_password" name="current_password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary w-full mt-lg">{{ _('Set up') }}</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}

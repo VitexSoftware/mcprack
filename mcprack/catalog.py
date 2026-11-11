@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from flask import (
     Blueprint,
     abort,
+    jsonify,
     current_app,
     flash,
     redirect,
@@ -25,14 +26,22 @@ from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
 from . import appstream_icons
 from . import audit
+from . import endpoint_policy
 from . import env_detection
+from . import env_policy
 from . import health
 from . import secret_store
 from . import telemetry
 from . import user_proxy
 from . import vaultwarden
-from .config_formats import render_claude_config, render_copilot_config
+from .config_formats import (
+    claude_code_commands,
+    render_claude_code_config,
+    render_claude_config,
+    render_copilot_config,
+)
 from .extensions import csrf, db
+from .urls import external_url
 from .models import (
     ApiToken,
     McpServer,
@@ -47,6 +56,9 @@ logger = logging.getLogger(__name__)
 
 RENDERERS = {
     "claude": (render_claude_config, "claude_desktop_config.json"),
+    # Claude Code: project-scope `.mcp.json`. No secret in the file - see
+    # config_formats.render_claude_code_config.
+    "claude-code": (render_claude_code_config, ".mcp.json"),
     "copilot": (render_copilot_config, "mcp.json"),
     # Cursor uses the Claude-shaped mcpServers map; VS Code Copilot uses
     # the servers map. Aliases so /download/cursor and /api/.../config/vscode
@@ -58,14 +70,24 @@ RENDERERS = {
 PROXY_TOKEN_SALT = "mcprack-user-proxy"
 
 
+def _signing_keys():
+    """SECRET_KEY plus its fallbacks, in the order itsdangerous wants them:
+    every key verifies, the LAST one signs."""
+    cfg = current_app.config
+    return [*reversed(cfg.get("SECRET_KEY_FALLBACKS") or []), cfg["SECRET_KEY"]]
+
+
 def _proxy_serializer():
-    from flask import current_app
-
-    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt=PROXY_TOKEN_SALT)
+    return URLSafeTimedSerializer(_signing_keys(), salt=PROXY_TOKEN_SALT)
 
 
-def _make_proxy_token(user_id, server_id):
-    return _proxy_serializer().dumps({"u": user_id, "s": server_id})
+def _make_proxy_token(user, server_id):
+    """Signed relay token for (user, server). `user` is a User or a user id;
+    the token carries the user's current token_version so that
+    accounts.revoke_tokens() invalidates it."""
+    if not hasattr(user, "id"):
+        user = db.session.get(User, user)
+    return _proxy_serializer().dumps({"u": user.id, "s": server_id, "v": user.token_version or 0})
 
 
 def _parse_proxy_token(token):
@@ -86,6 +108,16 @@ def _parse_proxy_token(token):
 # of hanging the whole worker (and, transitively, every other request
 # queued behind it) until the worker gets killed.
 _PROXY_REQUEST_TIMEOUT = 10  # seconds
+_PROXY_STREAM_IDLE_TIMEOUT = 60
+# A buffered (non-SSE) answer is read into memory before it is passed on. The
+# timeout bounds how long a backend may take, not how much it may send: without
+# a cap one hostile or broken backend could make a worker hold gigabytes
+# (docs/AUDIT-2026-11.md B-14). PROXY_MAX_RESPONSE_BYTES overrides it.
+_PROXY_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
+
+
+class _UpstreamTooLarge(Exception):
+    """The backend's answer is larger than the relay is willing to buffer."""
 
 
 def _jsonrpc_request_id(body):
@@ -119,6 +151,23 @@ def _is_empty_tools_list(request_body, payload):
     return isinstance(result, dict) and result.get("tools") == []
 
 
+# Only protocol headers cross the relay (docs/AUDIT-2026-11.md A-08). The
+# caller's own Authorization/Cookie/X-Forwarded-* must never reach a backend -
+# the MCP spec forbids a server to "accept or transit" tokens that were not
+# issued for it, and a backend operator would otherwise collect valid mcprack
+# tokens. The backend's own credential is injected from the server's
+# configuration instead (extra_headers).
+_FORWARDED_REQUEST_HEADERS = frozenset(
+    {"accept", "content-type", "mcp-session-id", "mcp-protocol-version", "last-event-id"}
+)
+# Same on the way back: no Set-Cookie, WWW-Authenticate (it would start an
+# OAuth dance against the backend's authorization server), CORS, CSP, HSTS or
+# redirects from a backend into mcprack's own origin.
+_FORWARDED_RESPONSE_HEADERS = frozenset(
+    {"content-type", "mcp-session-id", "mcp-protocol-version", "cache-control", "retry-after", "content-encoding"}
+)
+
+
 def _relay_request(conn, path, extra_headers=None, server_name=None, transport="http"):
     """Forward the current Flask request onto an already-open http.client
     connection at `path`, and translate the upstream response (or a
@@ -130,36 +179,66 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
     server) - so both get the same timeout, header-stripping, and telemetry
     handling."""
     body = request.get_data()
-    headers = {}
-    for key, value in request.headers.items():
-        key_lower = key.lower()
-        if key_lower in {
-            "host",
-            "content-length",
-            "connection",
-            "transfer-encoding",
-            "cookie",
-        }:
-            continue
-        headers[key] = value
+    headers = {
+        key: value
+        for key, value in request.headers.items()
+        if key.lower() in _FORWARDED_REQUEST_HEADERS
+    }
     if extra_headers:
+        # replace, case-insensitively, anything the caller sent under that name
+        injected = {name.lower() for name in extra_headers}
+        headers = {k: v for k, v in headers.items() if k.lower() not in injected}
         headers.update(extra_headers)
 
     start_time = time.monotonic()
+    streaming = False
     with telemetry.span(
         "mcp.server.call", {"server_name": server_name, "transport": transport}
     ) as current_span:
         try:
             conn.request(request.method, path, body=body, headers=headers)
             upstream = conn.getresponse()
-            payload = upstream.read()
-            response = Response(payload, status=upstream.status)
+            content_type = upstream.getheader("Content-Type")
+            is_sse = isinstance(content_type, str) and content_type.split(";", 1)[0].strip().lower() == "text/event-stream"
+            if is_sse:
+                if conn.sock is not None:
+                    conn.sock.settimeout(_PROXY_STREAM_IDLE_TIMEOUT)
+
+                def stream_response():
+                    try:
+                        while True:
+                            chunk = upstream.read1(65536)
+                            if not chunk:
+                                break
+                            yield chunk
+                    except (OSError, http.client.HTTPException):
+                        logger.warning("MCP stream for '%s' disconnected", server_name)
+                    finally:
+                        conn.close()
+
+                payload = b""
+                response = Response(stream_response(), status=upstream.status)
+                response.call_on_close(conn.close)
+                streaming = True
+            else:
+                limit = int(current_app.config.get("PROXY_MAX_RESPONSE_BYTES", _PROXY_MAX_RESPONSE_BYTES))
+                declared = upstream.getheader("Content-Length")
+                if isinstance(declared, str) and declared.isdigit() and int(declared) > limit:
+                    raise _UpstreamTooLarge  # refused before a byte of it is read
+                payload = upstream.read(limit + 1)
+                if len(payload) > limit:
+                    raise _UpstreamTooLarge
+                response = Response(payload, status=upstream.status)
 
             for key, value in upstream.getheaders():
                 key_lower = key.lower()
-                if key_lower in {"transfer-encoding", "connection", "keep-alive"}:
-                    continue
+                if key_lower not in _FORWARDED_RESPONSE_HEADERS:
+                    continue  # allowlist, not a blocklist (A-08): Set-Cookie, WWW-Authenticate, CORS, CSP ... stop here
+                if is_sse and key_lower == "content-length":
+                    continue  # a stream has no length; Content-Length is not in the allowlist anyway
                 response.headers[key] = value
+            if is_sse:
+                response.headers["X-Accel-Buffering"] = "no"  # ours, not the backend's: tell the proxy not to buffer
 
             result = "success" if upstream.status < 400 else "error"
             if result == "success" and _is_empty_tools_list(body, payload):
@@ -175,6 +254,17 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
             if current_span is not None:
                 current_span.set_attribute("mcp.result", result)
             return response
+        except _UpstreamTooLarge:
+            telemetry.record_mcp_server_call(
+                server_name, transport, "error", time.monotonic() - start_time
+            )
+            if current_span is not None:
+                current_span.set_attribute("mcp.result", "error")
+            logger.warning("MCP server '%s' answered with more than the relay's size limit", server_name)
+            return _jsonrpc_error_response(
+                _jsonrpc_request_id(body),
+                "Upstream MCP server's answer is larger than this relay will pass on.",
+            )
         except (socket.timeout, OSError, http.client.HTTPException) as exc:
             telemetry.record_mcp_server_call(
                 server_name, transport, "error", time.monotonic() - start_time
@@ -186,7 +276,8 @@ def _relay_request(conn, path, extra_headers=None, server_name=None, transport="
                 f"Upstream MCP server did not respond within {_PROXY_REQUEST_TIMEOUT}s: {exc}",
             )
         finally:
-            conn.close()
+            if not streaming:
+                conn.close()
 
 
 def _forward_to_user_proxy(port, server_name=None):
@@ -205,6 +296,16 @@ def _forward_to_backend_url(url, env, server):
     here, server-side, from `env` - never handed to the end user, same
     rationale as the per-user proxy path above (see
     _build_client_config_json's docstring)."""
+    # The registration form refuses link-local / metadata destinations, but a
+    # server saved before that check existed (or edited in the database) is
+    # still a stored URL. Check the destination again at the moment it is used.
+    refusals = endpoint_policy.destination_errors(url)
+    if refusals:
+        logger.error("Refusing to relay server %s: %s", server.name, "; ".join(refusals))
+        return _jsonrpc_error_response(
+            None, f"Server '{server.name}' points at a backend address that is not allowed. Ask an administrator."
+        )
+
     parts = urlsplit(url)
     scheme = parts.scheme or "http"
     host = parts.hostname
@@ -288,11 +389,7 @@ def _external_proxy_url(endpoint, **kwargs):
     whatever the request happens to carry. Behind a reverse proxy the
     request's own host and scheme are the internal ones, so a config
     generated from them points clients at an address they cannot reach."""
-    base_url = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
-    if base_url:
-        rel = url_for(endpoint, **kwargs)
-        return f"{base_url}{rel}"
-    return url_for(endpoint, _external=True, **kwargs)
+    return external_url(endpoint, **kwargs)
 
 
 def _proxy_relay_url(user, server):
@@ -306,7 +403,7 @@ def _proxy_relay_url(user, server):
             "catalog.user_proxy_mcp_oauth",
             server_id=server.id,
         )
-    token = _make_proxy_token(user.id, server.id)
+    token = _make_proxy_token(user, server.id)
     return _external_proxy_url(
         "catalog.user_proxy_mcp",
         token=token,
@@ -386,12 +483,16 @@ def _serve_user_proxy_mcp(user, server_id):
     if not selected:
         abort(403)
 
+    if request.method == "GET" and (server.command or server.transport != "sse"):
+        return Response(status=405, headers={"Allow": "POST, DELETE", "Cache-Control": "no-store"})
+
     request_id = _jsonrpc_request_id(request.get_data())
 
     try:
         env = secret_store.resolve_server_env(server, user=user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        return _jsonrpc_error_response(request_id, f"Could not resolve credentials: {exc}")
+        logger.error("Could not resolve credentials for server %s (user %s): %s", server.name, user.id, exc)
+        return _jsonrpc_error_response(request_id, f"Could not resolve credentials: {secret_store.public_error(exc)}")
 
     missing_required = [key for key in server.required_env_keys if not env.get(key)]
     if missing_required:
@@ -421,10 +522,18 @@ def _serve_user_proxy_mcp(user, server_id):
                 # we injected. Truncation stays after it, so the log keeps
                 # the whole message.
                 message = _redact_env_values(str(exc), env)
-                logger.error("Proxy start failed for server %s (user %s): %s", server.name, user.id, message)
-                if len(message) > _MAX_CLIENT_ERROR_CHARS:
-                    message = message[:_MAX_CLIENT_ERROR_CHARS] + "… (truncated; see the server log)"
-                return _jsonrpc_error_response(request_id, message)
+                logger.error(
+                    "Proxy start failed for server %s (user %s, %s): %s",
+                    server.name, user.id, getattr(exc, "kind", "unknown"), message,
+                )
+                # The administrator gets the whole story (log, audit entry,
+                # Admin -> Proxy instances); the end user's client gets the
+                # class of failure and who to ask - not log lines, which carry
+                # paths, host names and whatever the MCP server chose to print.
+                public = _redact_env_values(getattr(exc, "public_message", message), env)
+                if len(public) > _MAX_CLIENT_ERROR_CHARS:
+                    public = public[:_MAX_CLIENT_ERROR_CHARS] + "… (truncated; see the server log)"
+                return _jsonrpc_error_response(request_id, public)
 
             if request.method == "GET":
                 # A GET relay carries a long-lived SSE stream — holding
@@ -474,27 +583,40 @@ def user_proxy_mcp(token, server_id):
         abort(403)
 
     user = db.get_or_404(User, data.get("u"))
+    # A disabled account, or a token minted before the user's tokens were
+    # revoked, is refused (docs/AUDIT-2026-11.md A-03). Tokens from before
+    # versions existed carry no "v" and count as 0.
+    if not user.is_active or data.get("v", 0) != (user.token_version or 0):
+        abort(403)
     return _serve_user_proxy_mcp(user, server_id)
 
 
 @bp.route("/proxy/mcp/<int:server_id>", methods=["GET", "POST", "DELETE", "OPTIONS"])
 def user_proxy_mcp_oauth(server_id):
-    """Tokenless MCP relay — requires OAUTH_ENABLED and a Bearer credential.
-
-    MCP clients discover the Authorization Server via the 401
-    WWW-Authenticate challenge / Protected Resource Metadata, complete
-    the OAuth dance, then call this URL with Authorization: Bearer."""
+    """Tokenless MCP relay: the URL carries no secret, the caller presents
+    Authorization: Bearer - an OAuth access token when OAUTH_ENABLED (clients
+    discover the Authorization Server from the 401 challenge), or a personal
+    API token with the ``proxy:access`` scope (always). The second makes the
+    secret-free URL available without running an OAuth server, which is what
+    lets a `.mcp.json` be committed to git (docs/AUDIT-2026-11.md section 8).
+    PROXY_BEARER_ENABLED=false turns the route off unless OAuth is on."""
     if request.method == "OPTIONS":
         return Response(status=204)
 
-    if not current_app.config.get("OAUTH_ENABLED"):
+    oauth_on = bool(current_app.config.get("OAUTH_ENABLED"))
+    if not oauth_on and not current_app.config.get("PROXY_BEARER_ENABLED", True):
         abort(404)
 
     user = _resolve_bearer_proxy_user()
     if user is None:
-        from . import oauth
+        if oauth_on:
+            from . import oauth
 
-        return oauth.oauth_unauthorized_response(server_id)
+            return oauth.oauth_unauthorized_response(server_id)
+        response = jsonify({"error": "invalid_token", "error_description": "Bearer token required"})
+        response.status_code = 401
+        response.headers["WWW-Authenticate"] = 'Bearer realm="mcprack"'
+        return response
 
     return _serve_user_proxy_mcp(user, server_id)
 
@@ -617,7 +739,7 @@ def get_user_override_context(server, user):
     try:
         user_non_secret, user_secret = secret_store.load_user_override(server, user)
     except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-        flash(f"Could not reach Vaultwarden to load your credentials: {exc}", "error")
+        flash(f"Could not load your credentials: {secret_store.public_error(exc)}", "error")
         user_non_secret, user_secret = {}, {}
 
     admin_non_secret = dict(server.env_config or {})
@@ -679,6 +801,22 @@ def _override_row_ids(form):
 
 
 def parse_user_override_form(server, form):
+    """The override editor's submitted rows -> (non_secret, secret, error),
+    validated against env_policy (A-02): a submission that sets a variable
+    which changes how the server process starts is rejected as a whole.
+
+    Rows -> values parsing is _parse_override_rows(); this adds the policy.
+    """
+    non_secret, secret, error = _parse_override_rows(server, form)
+    if error:
+        return non_secret, secret, error
+    problems = env_policy.validate_override(server, {**non_secret, **secret})
+    if problems:
+        return {}, {}, " ".join(problems)
+    return non_secret, secret, None
+
+
+def _parse_override_rows(server, form):
     """The override editor's submitted rows -> (non_secret, secret, error).
     Shared by catalog.override and admin.user_override so the self-service
     and admin editors cannot drift apart.
@@ -807,7 +945,7 @@ def override(server_id):
             try:
                 secret_store.delete_user_override(server, current_user)
             except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-                flash(f"Could not reach Vaultwarden: {exc} (ask an admin to check the diagnostics wizard).", "error")
+                flash(f"Could not reset your credentials: {secret_store.public_error(exc)}", "error")
                 return redirect(url_for("catalog.index"))
             db.session.commit()
             flash(f"Reverted '{server.label}' to the default credentials.", "success")
@@ -828,7 +966,7 @@ def override(server_id):
         try:
             secret_store.save_user_override(server, current_user, user_non_secret, user_secret)
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
-            flash(f"Could not save your credentials: {exc} (ask an admin to check the diagnostics wizard).", "error")
+            flash(f"Could not save your credentials: {secret_store.public_error(exc)}", "error")
             return redirect(url_for("catalog.index"))
 
         db.session.commit()
@@ -891,7 +1029,27 @@ def _selected_server_connectors(user):
     return [_server_connector(user, server) for server in _selected_enabled_allowed_servers(user)]
 
 
-def _build_client_config_json(client, user=None):
+# Clients whose generated file must not contain the per-user path token: they
+# get the secret-free Bearer URL instead.
+BEARER_CLIENTS = frozenset({"claude-code"})
+
+
+def _bearer_relay_url(server):
+    return _external_proxy_url("catalog.user_proxy_mcp_oauth", server_id=server.id)
+
+
+def _claude_code_uses_header(auth=None):
+    """Whether a Claude Code file carries the `Authorization: Bearer
+    ${MCPRACK_TOKEN}` header. With OAuth on, Claude Code does the login itself
+    and the file has no header; `auth=token` asks for the header anyway."""
+    if auth == "token":
+        return True
+    if auth == "oauth":
+        return False
+    return not current_app.config.get("OAUTH_ENABLED")
+
+
+def _build_client_config_json(client, user=None, auth=None):
     """Resolve `user`'s (default: the current user) selected+enabled servers
     into a rendered client config, as a pretty-printed JSON string. Returns
     (config_json, filename, error_message) — config_json is None and
@@ -929,7 +1087,7 @@ def _build_client_config_json(client, user=None):
         # string is a bearer credential for user_proxy_mcp — writing it
         # to a log file or stderr would leak a usable access credential
         # outside the config the user actually asked for.
-        relay_url = _proxy_relay_url(user, server)
+        relay_url = _bearer_relay_url(server) if client in BEARER_CLIENTS else _proxy_relay_url(user, server)
         entries.append(
             {
                 "name": server.name,
@@ -943,7 +1101,10 @@ def _build_client_config_json(client, user=None):
             }
         )
 
-    payload = render_fn(entries)
+    if client == "claude-code":
+        payload = render_fn(entries, header=_claude_code_uses_header(auth))
+    else:
+        payload = render_fn(entries)
     return json.dumps(payload, indent=2), filename, None
 
 
@@ -951,7 +1112,7 @@ def _build_client_config_json(client, user=None):
 @login_required
 def download(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename, error_message = _build_client_config_json(client)
+        config_json, filename, error_message = _build_client_config_json(client, auth=request.args.get("auth"))
     if config_json is None:
         flash(error_message, "error")
         audit.log_audit_event(
@@ -975,11 +1136,18 @@ def download(client):
 @login_required
 def view(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename, error_message = _build_client_config_json(client)
+        config_json, filename, error_message = _build_client_config_json(client, auth=request.args.get("auth"))
     if config_json is None:
         flash(error_message, "error")
         return redirect(url_for("catalog.index"))
 
+    commands = None
+    if client == "claude-code":
+        servers = json.loads(config_json)["mcpServers"]
+        commands = claude_code_commands(
+            [{"name": name, "url": entry["url"]} for name, entry in servers.items()],
+            header=any("headers" in entry for entry in servers.values()),
+        )
     return render_template(
-        "view_config.html", client=client, filename=filename, config_json=config_json
+        "view_config.html", client=client, filename=filename, config_json=config_json, commands=commands
     )

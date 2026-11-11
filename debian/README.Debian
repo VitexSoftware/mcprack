@@ -52,24 +52,37 @@ By default mcprack is intranet-oriented. To run it as an internet-facing
 service, in addition to putting a TLS-terminating reverse proxy in front of
 it (see below), review and set as needed:
 
-    SECRET_KEY=<random-string>            # required — see warning below
+    SECRET_KEY=<random-string>            # required — see below
+    PUBLIC_BASE_URL=https://mcprack.example.com   # set it: reset links, OAuth metadata, accepted Host
     SESSION_COOKIE_SECURE=true            # default; needs the reverse proxy below
     GUNICORN_BIND=127.0.0.1:8912          # default; loopback only — see below
-    LOGIN_RATE_LIMIT=10 per minute;50 per hour   # default; per gunicorn worker (x4)
+    LOGIN_MAX_FAILURES=5                  # default; per account AND address (shared by all workers)
+    LOGIN_ACCOUNT_MAX_FAILURES=50         # default; per account over all addresses
+    LOGIN_IP_MAX_FAILURES=30              # default; per address
     PASSWORD_RESET_RATE_LIMIT=5 per minute;20 per hour   # default; /forgot-password + /reset-password
-    OAUTH_TOKEN_RATE_LIMIT=30 per minute  # default; /oauth/token, /oauth/register, /oauth/revoke
+    OAUTH_TOKEN_RATE_LIMIT=30 per minute  # default; /oauth/token, /oauth/revoke
+    OAUTH_REGISTER_RATE_LIMIT=10 per minute;100 per hour   # default; /oauth/register (per IPv6 /64)
     MAX_CONTENT_LENGTH=2097152            # default 2 MiB request body cap
-    STRICT_SERVER_PERMISSIONS=false       # see warning below before setting true
+    STRICT_SERVER_PERMISSIONS=true        # default; a user sees only the servers an admin granted
+    PROXY_TOKEN_MAX_AGE_SECONDS=7776000   # fresh installs: MCP proxy URLs expire after 90 days
 
-mcprack refuses to start if `SECRET_KEY` is unset or left at its insecure
-built-in default — it signs both Flask sessions and the per-user MCP proxy
-URLs handed to clients (see catalog.py), so treat it like a password.
+mcprack refuses to start if `SECRET_KEY` is missing, a placeholder
+(`change-me…`, `dev-…`, `secret`, …), shorter than 32 characters or has too
+little variety — it signs Flask sessions, the per-user MCP proxy URLs and
+password-reset links and protects the locally encrypted secrets, so treat it
+like a password. To **rotate** it without logging everybody out, breaking
+every client configuration and losing the local secret store, keep the old
+value in `SECRET_KEY_FALLBACKS=<old1>,<old2>` (comma separated; each entry must
+be as strong as a SECRET_KEY) until nothing signed with it is left.
 
-`STRICT_SERVER_PERMISSIONS=true` makes a user with no explicit
-`UserServerPermission` grant see *no* servers instead of all enabled ones.
-Before enabling it, use Admin → Users to explicitly grant every user
-(including admins) access to the servers they need — otherwise turning this
-on with no grants locks everyone out of everything.
+`STRICT_SERVER_PERMISSIONS` is now **true by default**: a user with no
+explicit grant sees no server at all, which is what an internet-facing
+instance needs (any directory account is provisioned on its first LDAP login).
+On upgrade a data migration (`materialize_server_permissions`) gives every
+*existing* user an explicit grant for each server enabled at that moment, so
+nobody loses access. Servers created later, and new users, need a grant
+(Admin → Users, or apply a template). On a trusted intranet where everybody
+should see everything, set `STRICT_SERVER_PERMISSIONS=false`.
 
 `GUNICORN_BIND` is where gunicorn listens; it defaults to `127.0.0.1:8912`,
 i.e. loopback only, so gunicorn cannot be reached directly from the network
@@ -85,6 +98,21 @@ In both of those cases the port is exposed to the network, so restrict it to
 whatever is actually allowed to reach it, e.g. for a proxy on another host:
 
     nft add rule inet filter input tcp dport 8912 ip saddr != <proxy-ip> drop
+
+The service uses four Gunicorn `gthread` workers with eight threads each.
+MCP SSE connections are streamed without nginx buffering; do not switch to
+`sync` workers, where a long-lived MCP connection monopolizes a worker.
+The worker heartbeat timeout is 120 seconds; upstream connection and stream
+idle timeouts are handled separately by the relay. Allow at least 60 seconds
+for the reverse proxy's read timeout. The `X-Accel-Buffering: no` response
+header must not be ignored or removed by nginx.
+
+For Streamable HTTP, the optional standalone `GET` stream returns `405`
+with `Allow: POST, DELETE`. Clients use `POST` for MCP requests and streamed
+responses instead of occupying one worker thread per idle notification
+stream. Legacy SSE backends retain their `GET` transport. This is separate
+from the relay's idle timeout: heartbeat messages keep an idle stream alive,
+so increasing that timeout cannot prevent thread exhaustion.
 
 `SESSION_COOKIE_SECURE=true` (the default) means the browser will not send
 the session cookie back except over HTTPS, so mcprack must sit behind a
@@ -106,6 +134,145 @@ admin-account compromise) that aren't fully closed by configuration alone.
 Internet-facing installs should prefer `OAUTH_ENABLED=true` (below) so
 proxy credentials are revocable Bearer tokens instead of signed URL path
 secrets.
+
+### Hardening in this release: upgrade notes and internet checklist
+
+New behaviour you should know about (details: `docs/AUDIT-2026-11.md`):
+
+* **Password policy**: at least 12 characters (`PASSWORD_MIN_LENGTH`), no empty,
+  common or username-based passwords, for every way a password is set. Existing
+  passwords are untouched; an account that holds a blank password can no longer
+  log in (reset it with `mcprack user passwd`).
+* **Login throttling** is stored in the database, so it holds across workers and
+  restarts; failed logins no longer put the typed name into the audit log.
+  Locked-out users see HTTP 429 with `Retry-After`.
+* **Two-factor authentication (TOTP)** is available to every account and
+  **required for administrators** (`MFA_REQUIRED_FOR_ADMINS=true`, the default):
+  on upgrade an existing administrator is sent to *Account → Two-factor
+  authentication* the first time they open the admin area, and cannot use it
+  until they have set up an authenticator app. Nothing else changes for anybody
+  until they enrol, and the migration only adds columns (it is reversible). The
+  way back for a locked-out administrator is `mcprack user mfa-reset USERNAME` on
+  the server. Set `MFA_REQUIRED_FOR_ADMINS=false` only on a trusted private network.
+  Admin API tokens created before the upgrade are not asked for a code - review and
+  rotate them.
+* **Logout** (the menu button) ends the account's sessions everywhere; changing
+  the password does too. A copy of a session cookie no longer outlives either.
+* **Taking access away**: disabling or deleting a user stops their running MCP
+  servers and the proxy URL stops working. `mcprack user revoke-tokens NAME`
+  (or Admin → Users, or `POST /api/v1/admin/users/{id}/revoke-tokens`)
+  invalidates every proxy URL, API token and OAuth token of a user; they must
+  download a new configuration. Tokens issued before this release keep working
+  until revoked.
+* **Per-user overrides**: a user may only set variables the server declares,
+  plus credential-looking names (`MY_API_TOKEN`); process-altering names
+  (`PATH`, `LD_*`, `NODE_OPTIONS`, proxy and CA settings …) are never accepted.
+  `OVERRIDE_UNDECLARED_KEYS=any` allows other free-form names (the denylist still
+  applies). If a user re-points an endpoint variable (`…_URL`, `…_HOST`,
+  `…_INSTANCE`) the admin's *shared* secrets are not passed along with it.
+* **MCP server processes** inherit only `PATH`, `LANG`, `LC_*`, `HOME`, proxy and
+  CA-bundle settings — none of mcprack's own secrets. Add names with
+  `MCP_CHILD_ENV_ALLOW=NAME1,NAME2` (secrets can never be added). Their
+  resolved credentials now live in `/run/mcprack` (tmpfs, 0600, removed when the
+  process is reaped or the service stops), not in `/var/lib/mcprack`.
+* **Backend URLs**: a server's URL must be http(s) without credentials in it, and
+  link-local destinations (169.254.0.0/16, fe80::/10 — cloud metadata services),
+  `0.0.0.0` and multicast are refused when a server is registered
+  (`BACKEND_ALLOW_LINK_LOCAL=true` if a real backend lives there). Host names are
+  not resolved at that point, so also restrict the `mcprack` user's egress (below).
+* **Resource limits of the relay**: an answer that is buffered (not an SSE stream)
+  may be at most `PROXY_MAX_RESPONSE_BYTES` (16 MiB); at most
+  `MCP_COLD_START_CONCURRENCY` (3) MCP servers start at once in a worker process,
+  further ones wait `MCP_COLD_START_WAIT` (10 s) and are then told to retry; the
+  `dpkg-query` behind icon lookups has a 5 s timeout and its answers are cached.
+* **Audit mirror** (tamper evidence): every audit event is also written, with an
+  HMAC, to the journal (`journalctl -u mcprack | grep AUDIT`) and to
+  `/var/log/mcprack/audit.log` - on an upgrade this starts by itself, the
+  directory already exists and logrotate already covers `*.log`. `flask
+  audit-verify` (run it from cron, alert on a non-zero exit) compares the table
+  with it and reports deleted, altered and unmirrored rows. It only helps if the
+  attacker cannot rewrite the log as well: ship the journal off the host or
+  `chattr +a` the file. `AUDIT_LOG_FILE=off` disables the file.
+* **Fresh authentication for dangerous administrator actions** (`ADMIN_REAUTH_SECONDS`,
+  default 600; `0` = off): registering or editing a server, installing packages,
+  creating or changing accounts, resetting a second factor and moving the secret
+  store ask the administrator for the password (and the code) again unless the
+  session signed in or confirmed within the window. The REST API answers
+  `403 reauth_required`; scripts that use a session cookie must `POST
+  /api/v1/auth/reauth` first, scripts that use an API token are not affected.
+* **Where a server's command may live**: a command in `/tmp`, `/var/tmp`,
+  `/dev/shm` ... or given as a relative path is always refused, when a server is saved
+  and when its process starts (so a row written straight into the database does not get
+  around it). A directory allowlist cannot make a command safe by itself - `/usr/bin`
+  contains shells and interpreters too - but it keeps a dropped payload out. The strict
+  mode is opt-in: `ALLOWED_COMMAND_DIRS=/usr/bin,/usr/local/bin,/var/lib/mcprack/installs`
+  (comma or colon separated; include the installer's directory if you use the package
+  installer). Servers already registered keep working unless their command is in one
+  of the refused places or - in strict mode - outside the allowed directories.
+* **Package installer**: registry packages only (no URLs/paths/VCS), pinned to an
+  exact version by default (`INSTALL_REQUIRE_PINNED=false` to allow ranges); pip
+  installs wheels only (`INSTALL_ALLOW_SOURCE_BUILDS=true` to allow sdists); npm
+  never runs lifecycle scripts.
+* **LDAP**: use `ldaps://` or `LDAP_STARTTLS=true`; the directory certificate is
+  verified (`LDAP_CA_FILE`, `LDAP_TLS_VALIDATE`). Plain `ldap://` still works
+  and is flagged in the log. `LDAP_REQUIRED_GROUP=<group DN>` restricts login
+  to members of a group.
+* **OAuth** (only with `OAUTH_ENABLED=true`): dynamic client registration accepts
+  loopback redirects, `https://` redirects to `OAUTH_ALLOWED_REDIRECT_HOSTS`
+  (default `claude.ai,claude.com`; `*.example.com` allowed) and custom schemes
+  listed in `OAUTH_ALLOWED_REDIRECT_PREFIXES`; the consent page shows where the
+  code goes; tokens are stored hashed; refresh tokens are really issued and last
+  `OAUTH_REFRESH_TOKEN_EXPIRES`. Registration is capped (`OAUTH_MAX_CLIENTS`);
+  a coordinated flood from many addresses can still fill it for
+  `OAUTH_CLIENT_MIN_AGE_SECONDS` — restrict `/oauth/register` at the proxy if
+  that matters to you.
+* **Public demo (`DEMO_MODE=true`)**: all routes that register servers, change
+  accounts or passwords, or move secrets are refused, including through the REST
+  API. Overrides there accept only declared variable names.
+* **systemd**: gunicorn uses threads (`GUNICORN_THREADS`, default 8) so one slow
+  MCP server cannot occupy a whole worker; `RuntimeDirectory=mcprack` holds the
+  volatile state.
+
+Checklist before exposing an instance to the internet:
+
+1. `SECRET_KEY` strong; `PUBLIC_BASE_URL` set (also restricts the accepted Host);
+   TLS terminated by a reverse proxy; `GUNICORN_BIND` left on loopback.
+2. The Apache vhost from `apache-mcprack.conf`: dead-end default vhost, client
+   `X-Forwarded-*` headers dropped, request size limits, and — recommended —
+   `/admin` and `/api/v1/admin` restricted to your network, because anyone who
+   can register a server can run commands as the service user.
+3. Grant servers explicitly (`STRICT_SERVER_PERMISSIONS`), and prefer OAuth or
+   short-lived proxy URLs (`PROXY_TOKEN_MAX_AGE_SECONDS`).
+4. Keep outbound traffic of the `mcprack` user in check — MCP servers are
+   arbitrary programs. Example (nftables), blocking cloud metadata and loopback
+   backends other than the proxy ports:
+
+       table inet mcprack_egress {
+         chain output {
+           type filter hook output priority 0; policy accept;
+           meta skuid mcprack ip daddr 169.254.0.0/16 reject
+           meta skuid mcprack ip6 daddr fe80::/10 reject
+           # add: meta skuid mcprack ip daddr { <networks MCP servers must NOT reach> } reject
+         }
+       }
+
+5. fail2ban on the **Apache** access log (gunicorn only ever sees 127.0.0.1).
+   A failed login answers 200 (the form again) or 429; a good one 302:
+
+       # /etc/fail2ban/filter.d/mcprack-login.conf
+       [Definition]
+       failregex = ^<HOST> \S+ \S+ \[[^\]]+\] "POST /(login|forgot-password|oauth/register)\S* HTTP/[0-9.]+" (200|429) 
+       # /etc/fail2ban/jail.d/mcprack.conf
+       [mcprack-login]
+       enabled  = true
+       filter   = mcprack-login
+       logpath  = /var/log/apache2/mcprack-access.log
+       maxretry = 10
+       findtime = 10m
+       bantime  = 1h
+
+6. Verify with `curl -H 'Host: x.invalid' https://<server>/login` (must not reach
+   mcprack) and, after setting `PUBLIC_BASE_URL`, a password-reset e-mail link.
 
 ### Authentication (optional, LDAP disabled by default)
 

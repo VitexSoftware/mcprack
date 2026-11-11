@@ -1,4 +1,5 @@
 import os
+import subprocess
 import time
 import xml.etree.ElementTree as ET
 from glob import glob
@@ -170,6 +171,41 @@ def _binary_candidates(server):
     return {c for c in candidates if c}
 
 
+# `dpkg-query -S` walks the whole package database. It used to run, unbounded,
+# on every icon lookup - i.e. while rendering a page - so a slow or wedged dpkg
+# held a request thread for as long as it liked (docs/AUDIT-2026-11.md B-14).
+_DPKG_TIMEOUT = 5  # seconds
+_DPKG_CACHE_TTL = 600  # seconds; which package owns a file changes only on (un)install
+_dpkg_cache = {}
+
+
+def _owning_package(command):
+    """The Debian package that owns `command`, or None. Bounded in time and
+    remembered for a while - including "unknown", so a failing lookup is not
+    retried on every request."""
+    now = time.monotonic()
+    cached = _dpkg_cache.get(command)
+    if cached is not None and now - cached[0] < _DPKG_CACHE_TTL:
+        return cached[1]
+    package = None
+    try:
+        result = subprocess.run(
+            ["dpkg-query", "-S", command],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_DPKG_TIMEOUT,
+        )
+        if result.returncode == 0 and result.stdout:
+            package = result.stdout.split(":", 1)[0].strip()
+    except (OSError, subprocess.TimeoutExpired):
+        package = None
+    if len(_dpkg_cache) > 512:
+        _dpkg_cache.clear()
+    _dpkg_cache[command] = (now, package)
+    return package
+
+
 def resolve_server_icon_path(server):
     index = _get_index()
 
@@ -179,22 +215,11 @@ def resolve_server_icon_path(server):
             return icon_path
 
     if server.command and os.path.isabs(server.command) and os.path.exists(server.command):
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["dpkg-query", "-S", server.command],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            if result.returncode == 0 and result.stdout:
-                pkg = result.stdout.split(":", 1)[0].strip()
-                icon_path = index["by_package"].get(pkg)
-                if icon_path and os.path.isfile(icon_path):
-                    return icon_path
-        except OSError:
-            return None
+        pkg = _owning_package(server.command)
+        if pkg:
+            icon_path = index["by_package"].get(pkg)
+            if icon_path and os.path.isfile(icon_path):
+                return icon_path
 
     return None
 

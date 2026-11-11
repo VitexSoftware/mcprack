@@ -5,6 +5,8 @@ services:
     container_name: mcprack-demo
     network_mode: host
     restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     env_file:
       - ./env
 
@@ -17,5 +19,7 @@ services:
     network_mode: host
     restart: unless-stopped
     shm_size: 2g
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
     env_file:
       - ./env

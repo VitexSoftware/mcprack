@@ -29,6 +29,8 @@ def test_stop_pid_escalates_to_sigkill_and_tolerates_a_dead_pid(state_dir):
     """killpg fails (no such group) and os.kill fails (no such process):
     both must be swallowed, and after the timeout SIGKILL is attempted."""
     with patch("mcprack.user_proxy._pid_running", return_value=True), patch(
+        "mcprack.user_proxy.os.getpgid", return_value=4242
+    ), patch(
         "mcprack.user_proxy.os.killpg", side_effect=ProcessLookupError
     ), patch("mcprack.user_proxy.os.kill", side_effect=OSError("no such process")) as kill:
         user_proxy._stop_pid(4242, timeout=0.2)
@@ -98,7 +100,7 @@ def test_spawn_failure_with_log_includes_its_tail(state_dir):
 def test_stop_user_server_proxy_clears_the_state_files(app, state_dir):
     paths = user_proxy._paths(1, 11)
     paths["pid"].parent.mkdir(parents=True, exist_ok=True)
-    paths["pid"].write_text("4242")
+    paths["pid"].write_text("9004242")  # above pid_max: never a real process
     paths["port"].write_text(str(user_proxy._port_for(1, 11)))
     paths["last_used"].write_text(str(time.time()))
 

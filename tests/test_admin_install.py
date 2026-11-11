@@ -68,7 +68,7 @@ def test_install_docker_blocked_when_docker_not_available(app, client):
     with patch("mcprack.installer.docker_available", return_value=False):
         resp = client.post(
             "/admin/install/docker",
-            data={"name": "foo", "image_ref": "ghcr.io/org/foo:latest"},
+            data={"name": "foo", "image_ref": "ghcr.io/org/foo:1.0.0"},
             follow_redirects=True,
         )
 
@@ -84,17 +84,17 @@ def test_install_docker_registers_server_with_run_args(app, client):
          patch("mcprack.installer.start_docker_pull") as mock_pull:
         resp = client.post(
             "/admin/install/docker",
-            data={"name": "foo", "image_ref": "ghcr.io/org/foo:latest"},
+            data={"name": "foo", "image_ref": "ghcr.io/org/foo:1.0.0"},
             follow_redirects=True,
         )
 
     assert resp.status_code == 200
-    mock_pull.assert_called_once_with("foo", "ghcr.io/org/foo:latest")
+    mock_pull.assert_called_once_with("foo", "ghcr.io/org/foo:1.0.0")
 
     with app.app_context():
         server = McpServer.query.filter_by(name="foo").first()
         assert server.command == "docker"
-        assert server.args == ["run", "--rm", "-i", "ghcr.io/org/foo:latest"]
+        assert server.args == ["run", "--rm", "-i", "ghcr.io/org/foo:1.0.0"]
         assert server.install_method == "docker"
 
 

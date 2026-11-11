@@ -18,6 +18,17 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
+def new_token_version(previous=None):
+    """A random, non-zero token version. Zero is reserved for accounts that
+    existed before versions did (their old tokens carry no version). Random
+    rather than a counter so a token of a deleted user can never match a new
+    account that happens to be given the same id."""
+    while True:
+        version = secrets.randbelow(2**31 - 2) + 1
+        if version != previous:
+            return version
+
+
 def _safe_json_loads(raw, default):
     if not raw:
         return default
@@ -40,6 +51,24 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=True)
     is_admin = db.Column(db.Boolean, nullable=False, default=False)
     is_active_flag = db.Column("is_active", db.Boolean, nullable=False, default=True)
+    # Embedded in every MCP proxy path token; changing it revokes them all
+    # (accounts.revoke_tokens). New accounts start at a random value (see
+    # new_token_version); accounts and tokens from before this column existed
+    # are version 0.
+    token_version = db.Column(db.Integer, nullable=False, default=new_token_version, server_default="0")
+    # Embedded in the session cookie at login and checked on every request
+    # (auth.load_user); changing it kills every session of the account.
+    # Accounts from before this column existed are 0, as are their cookies.
+    session_version = db.Column(db.Integer, nullable=False, default=new_token_version, server_default="0")
+    # Second factor (TOTP, docs/AUDIT-2026-11.md B-03). The shared secret is
+    # stored encrypted (mfa.py); `totp_enabled` flips only once the user has
+    # proved they can produce a code, so a half-finished enrolment locks nobody
+    # out. `totp_last_step` is the time step of the last accepted code - a code
+    # is good once. `recovery_codes` is a JSON list of keyed hashes.
+    totp_secret = db.Column(db.String(255), nullable=True)
+    totp_enabled = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    totp_last_step = db.Column(db.BigInteger, nullable=False, default=0, server_default="0")
+    recovery_codes = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime(timezone=True), default=_utcnow)
 
     # Which ConfigTemplate (if any) was last applied to this user — purely
@@ -68,12 +97,17 @@ class User(UserMixin, db.Model):
         return self.is_active_flag
 
     def set_password(self, raw_password):
+        # Never store a hash of "nothing": an account with a blank password
+        # can be logged into with a blank password (docs/AUDIT-2026-11.md B-03).
+        # Strength is judged by mcprack.passwords at the entry points.
+        if not isinstance(raw_password, str) or not raw_password:
+            raise ValueError("a password must not be empty")
         self.auth_type = "local"
         self.password_hash = generate_password_hash(raw_password)
 
     def check_password(self, raw_password):
-        if not self.password_hash:
-            return False
+        if not self.password_hash or not raw_password:
+            return False  # empty never verifies, even against a legacy blank-password hash
         return check_password_hash(self.password_hash, raw_password)
 
     @property
@@ -457,6 +491,23 @@ class UserServerOverride(db.Model):
         self.env_config_json = json.dumps(dict(value or {}))
 
 
+class LoginThrottle(db.Model):
+    """Failed-login counter shared by all workers (see throttle.py). `key` is
+    a keyed hash of the lower-cased username (scope "user") or of the client
+    address (scope "ip"); neither is stored in clear."""
+
+    __tablename__ = "login_throttle"
+
+    scope = db.Column(db.String(8), primary_key=True)
+    key = db.Column(db.String(64), primary_key=True)
+    failures = db.Column(db.Integer, nullable=False, default=0)
+    first_failure_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    locked_until = db.Column(db.DateTime(timezone=True), nullable=True)
+    # how many times this key has been locked in the current window; drives the
+    # growth of the lock (base * 2**(level-1))
+    lock_level = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+
 class AuditLogEntry(db.Model):
     """Append-only security audit trail. Rows are written once by
     audit.log_audit_event() and never modified — this model deliberately
@@ -477,6 +528,10 @@ class AuditLogEntry(db.Model):
         "login",
         "login_failed",
         "password_change",
+        "oauth_client_registered",
+        "oauth_consent",
+        "oauth_token_issued",
+        "mfa_change",
     )
     RESULTS = ("success", "error")
 

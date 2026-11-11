@@ -10,6 +10,7 @@ unchanged.
 """
 
 import json
+import os
 from pathlib import Path
 
 import click
@@ -17,9 +18,12 @@ from dotenv import dotenv_values
 from flask import current_app
 from flask.cli import AppGroup
 
+from . import accounts
 from . import admin
 from . import catalog
+from . import env_policy
 from . import health
+from . import passwords
 from . import secret_store
 from . import vaultwarden
 from .env_detection import looks_sensitive_name
@@ -124,6 +128,9 @@ def user_create(username, password, email, admin):
     """Create a local user account."""
     if User.query.filter_by(username=username).first():
         raise click.ClickException(f"User '{username}' already exists.")
+    problem = passwords.check_strength(password, username)
+    if problem:
+        raise click.ClickException(problem)
     user = User(username=username, email=email, auth_type="local", is_admin=admin)
     user.set_password(password)
     db.session.add(user)
@@ -137,6 +144,7 @@ def user_create(username, password, email, admin):
 def user_delete(username):
     """Delete a user account."""
     user = _get_user_or_fail(username)
+    accounts.stop_processes(user)
     db.session.delete(user)
     db.session.commit()
     click.echo(f"User '{username}' deleted.")
@@ -152,7 +160,11 @@ def user_passwd(username, password):
         raise click.ClickException(
             f"User '{username}' authenticates via {user.auth_type}, not a local password."
         )
+    problem = passwords.check_strength(password, username)
+    if problem:
+        raise click.ClickException(problem)
     user.set_password(password)
+    accounts.invalidate_sessions(user)
     db.session.commit()
     click.echo(f"Password updated for '{username}'.")
 
@@ -174,7 +186,46 @@ def user_disable(username):
     user = _get_user_or_fail(username)
     user.is_active_flag = False
     db.session.commit()
+    accounts.stop_processes(user)
     click.echo(f"User '{username}' disabled.")
+
+
+@user_cli.command("revoke-tokens")
+@click.argument("username")
+def user_revoke_tokens(username):
+    """Revoke a user's MCP proxy URLs, API tokens and OAuth tokens and stop
+    their running MCP servers (the account itself stays usable)."""
+    user = _get_user_or_fail(username)
+    accounts.revoke_tokens(user)
+    db.session.commit()
+    accounts.stop_processes(user)
+    click.echo(f"All tokens of '{username}' revoked; they must download a new configuration.")
+
+
+@user_cli.command("mfa-reset")
+@click.argument("username")
+def user_mfa_reset(username):
+    """Switch off a user's two-factor authentication (lost device and recovery
+    codes) and end their sessions. The way back in for a locked-out
+    administrator - it needs shell access to the server, as it should."""
+    from . import mfa
+
+    user = _get_user_or_fail(username)
+    mfa.disable(user)
+    accounts.invalidate_sessions(user)
+    db.session.commit()
+    click.echo(f"Two-factor authentication of '{username}' is off; their sessions were ended.")
+
+
+@user_cli.command("mfa-status")
+@click.argument("username")
+def user_mfa_status(username):
+    """Show whether a user has two-factor authentication and how many recovery codes are left."""
+    from . import mfa
+
+    user = _get_user_or_fail(username)
+    state = "on" if mfa.is_enabled(user) else ("being set up" if mfa.is_enrolling(user) else "off")
+    click.echo(f"{username}: two-factor authentication {state}; {mfa.remaining_recovery_codes(user)} recovery code(s) left")
 
 
 @user_cli.command("promote")
@@ -289,6 +340,9 @@ def user_override_set(username, server_name, pairs):
         for raw_pair in pairs:
             key, value = _parse_key_value_pair(raw_pair, "KEY=VALUE")
             values[key] = value
+        problems = env_policy.validate_override(server, values)
+        if problems:
+            raise click.ClickException(" ".join(problems))
         non_secret, secret = secret_store.split_override_values(
             server, values, secret_keys=existing_secret.keys()
         )
@@ -344,6 +398,93 @@ def user_config_show(username, client):
     click.echo(config_json)
 
 
+@user_config_cli.command("verify")
+@click.argument("username")
+@click.argument("client", default="claude-code")
+@click.option(
+    "--base-url",
+    default=None,
+    help="Probe this origin instead of the one in the configuration - e.g. http://127.0.0.1:8912 to test "
+    "mcprack itself without the reverse proxy in front of it.",
+)
+@click.option("--server", "only", multiple=True, metavar="NAME", help="Verify only this server (repeatable).")
+@click.option("--timeout", type=float, default=60.0, show_default=True, help="Seconds allowed per server (a cold start takes a while).")
+@click.option(
+    "--insecure",
+    is_flag=True,
+    help="Allow sending the credential - the token header, or the token inside the URL of the older formats - "
+    "over plain http to a non-loopback host (trusted private network only).",
+)
+def user_config_verify(username, client, base_url, only, timeout, insecure):
+    """Check that a user's generated client config actually works.
+
+    Does what the client will do - initialize, then tools/list - against every
+    URL in the configuration, through the reverse proxy and TLS, the relay and
+    the MCP server behind it. For the claude-code format a short-lived token
+    (15 minutes, scope proxy:access) is created for the check and removed again.
+    Exit status 0 only if every server answered with tools."""
+    from datetime import datetime, timedelta, timezone
+    from urllib.parse import urlsplit, urlunsplit
+
+    from . import audit, config_formats, probe
+    from .models import ApiToken
+
+    user = _get_user_or_fail(username)
+    config_json, _filename, error_message = _build_user_config_or_fail(user, client)
+    if config_json is None:
+        raise click.ClickException(error_message)
+    document = json.loads(config_json)
+    servers = next((document[key] for key in ("mcpServers", "servers") if isinstance(document.get(key), dict)), {})
+    if only:
+        servers = {name: entry for name, entry in servers.items() if name in only}
+    if not servers:
+        raise click.ClickException("Nothing to verify: no server in that configuration" + (" matches --server." if only else "."))
+
+    placeholder = "${" + config_formats.CLAUDE_CODE_TOKEN_VARIABLE + "}"
+    temporary = None
+    failures = 0
+    try:
+        for name, entry in sorted(servers.items()):
+            url = entry.get("url") if isinstance(entry, dict) else None
+            if not url:
+                click.echo(f"SKIP  {name}: no URL in the configuration (a local command - nothing to probe)")
+                continue
+            if base_url:
+                target = urlsplit(base_url)
+                parts = urlsplit(url)
+                url = urlunsplit((target.scheme, target.netloc, parts.path, parts.query, parts.fragment))
+            bearer = None
+            if placeholder in json.dumps(entry.get("headers") or {}):
+                if temporary is None:
+                    raw, temporary = ApiToken.generate(
+                        "cli-verify", user.id,
+                        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15), scopes=["proxy:access"],
+                    )
+                    db.session.add(temporary)
+                    db.session.commit()
+                    audit.log_audit_event(
+                        "credential_access", "success", user=user,
+                        error_message="temporary verification token created by `user config verify`",
+                    )
+                    bearer = raw
+                else:
+                    bearer = raw
+            result = probe.probe(url, bearer=bearer, timeout=timeout, allow_insecure=insecure)
+            if result.ok:
+                click.echo(f"OK    {name}: {result.tools} tool(s), protocol {result.protocol or '?'}, {result.seconds:.1f}s")
+            else:
+                failures += 1
+                click.echo(f"FAIL  {name}: {result.step}: {result.detail}")
+    finally:
+        if temporary is not None:
+            db.session.delete(temporary)
+            db.session.commit()
+    if failures:
+        click.echo(f"{failures} of {len(servers)} server(s) failed.")
+        raise SystemExit(1)
+    click.echo(f"All {len(servers)} server(s) verified.")
+
+
 @user_config_cli.command("download")
 @click.argument("username")
 @click.argument("client")
@@ -360,7 +501,12 @@ def user_config_download(username, client, out_path):
     if config_json is None:
         raise click.ClickException(error_message)
     target = Path(out_path) if out_path else Path(filename)
-    target.write_text(config_json)
+    # The file holds the user's proxy URLs, i.e. their credentials: create it
+    # 0600 and tighten a pre-existing one, regardless of the umask.
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:  # closes fd, even if the next line fails
+        os.fchmod(handle.fileno(), 0o600)
+        handle.write(config_json)
     click.echo(f"Wrote {target}")
 
 

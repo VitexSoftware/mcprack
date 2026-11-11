@@ -111,4 +111,21 @@
 </form>
 <p><a href="{{ url_for('admin.templates_list') }}">{{ _('Manage templates') }}</a></p>
 {% endif %}
+
+{% if user %}
+<h2>{{ _('Security') }}</h2>
+<p class="text-muted">
+  {% if user.totp_enabled %}{{ _('Two-factor authentication is on for this user.') }}{% else %}{{ _('Two-factor authentication is off for this user.') }}{% endif %}
+</p>
+<form method="post" action="{{ url_for('admin.user_revoke_tokens', user_id=user.id) }}" data-confirm="{{ _('Revoke all tokens of this user? They will have to download a new configuration.') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit">{{ _('Revoke all tokens') }}</button>
+</form>
+{% if user.totp_enabled or user.totp_secret %}
+<form method="post" action="{{ url_for('admin.user_mfa_reset', user_id=user.id) }}" data-confirm="{{ _('Turn off two-factor authentication for this user? Use this when they have lost their device and recovery codes. They sign in with the password only until they set it up again.') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit">{{ _('Reset two-factor authentication') }}</button>
+</form>
+{% endif %}
+{% endif %}
 {% endblock %}

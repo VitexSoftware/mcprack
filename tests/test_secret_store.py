@@ -75,7 +75,7 @@ def test_resolve_server_env_merges_config_and_vaultwarden_secrets(app):
              patch("mcprack.secret_store.vaultwarden._serialized"), \
              patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
              patch("mcprack.secret_store.vaultwarden.lock"), \
-             patch("mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}):
+             patch("mcprack.secret_store.vaultwarden.resolve_env_layers", return_value=({"AUTH_TOKEN": "secret"}, {})):
             env = secret_store.resolve_server_env(server)
 
         assert env == {"REGION": "eu", "AUTH_TOKEN": "secret"}
@@ -90,7 +90,7 @@ def test_resolve_server_env_caches_vaultwarden_lookup_within_ttl(app):
              patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
              patch("mcprack.secret_store.vaultwarden.lock"), \
              patch(
-                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
+                 "mcprack.secret_store.vaultwarden.resolve_env_layers", return_value=({"AUTH_TOKEN": "secret"}, {})
              ) as mock_resolve_env:
             first = secret_store.resolve_server_env(server)
             second = secret_store.resolve_server_env(server)
@@ -120,7 +120,7 @@ def test_resolve_server_env_skips_unlock_if_cache_filled_while_waiting_for_lock(
              patch("mcprack.secret_store.vaultwarden._serialized", side_effect=fake_serialized), \
              patch("mcprack.secret_store.vaultwarden.unlock") as mock_unlock, \
              patch("mcprack.secret_store.vaultwarden.lock") as mock_lock, \
-             patch("mcprack.secret_store.vaultwarden.resolve_env") as mock_resolve_env:
+             patch("mcprack.secret_store.vaultwarden.resolve_env_layers") as mock_resolve_env:
             env = secret_store.resolve_server_env(server)
 
         assert env == {"AUTH_TOKEN": "from-other-worker"}
@@ -139,7 +139,7 @@ def test_resolve_server_env_cache_expires_after_ttl(app):
              patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
              patch("mcprack.secret_store.vaultwarden.lock"), \
              patch(
-                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
+                 "mcprack.secret_store.vaultwarden.resolve_env_layers", return_value=({"AUTH_TOKEN": "secret"}, {})
              ) as mock_resolve_env:
             secret_store.resolve_server_env(server)
             import time as _time
@@ -160,7 +160,7 @@ def test_save_server_secrets_invalidates_cache(app):
              patch("mcprack.secret_store.vaultwarden.lock"), \
              patch("mcprack.secret_store.vaultwarden.session"), \
              patch(
-                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "old"}
+                 "mcprack.secret_store.vaultwarden.resolve_env_layers", return_value=({"AUTH_TOKEN": "old"}, {})
              ) as mock_resolve_env, \
              patch("mcprack.secret_store.vaultwarden.set_notes"):
             secret_store.resolve_server_env(server)
@@ -185,7 +185,7 @@ def test_save_user_override_secrets_only_invalidates_that_users_cache(app):
              patch("mcprack.secret_store.vaultwarden.lock"), \
              patch("mcprack.secret_store.vaultwarden.session"), \
              patch(
-                 "mcprack.secret_store.vaultwarden.resolve_env", return_value={"AUTH_TOKEN": "secret"}
+                 "mcprack.secret_store.vaultwarden.resolve_env_layers", return_value=({"AUTH_TOKEN": "secret"}, {})
              ) as mock_resolve_env:
             secret_store.resolve_server_env(server, user=alice)
             secret_store.resolve_server_env(server, user=bob)

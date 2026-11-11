@@ -141,6 +141,29 @@ def _connection(host, port, timeout, https=False):
     return cls(host, port, timeout=timeout)
 
 
+def _read_mcp_response(response, request_id):
+    content_type = response.getheader("Content-Type")
+    if not isinstance(content_type, str) or content_type.split(";", 1)[0].strip().lower() != "text/event-stream":
+        return response.read()
+
+    data_lines = []
+    while True:
+        line = response.readline()
+        if not line:
+            raise ValueError("MCP stream ended before its JSON-RPC response")
+        line = line.rstrip(b"\r\n")
+        if line.startswith(b"data:"):
+            data_lines.append(line[5:].lstrip(b" "))
+        elif not line and data_lines:
+            payload = b"\n".join(data_lines)
+            data_lines = []
+            message = json.loads(payload)
+            if isinstance(message, dict) and message.get("id") == request_id and (
+                "result" in message or "error" in message
+            ):
+                return payload
+
+
 def _send_jsonrpc_request(
     host, port, method, params=None, timeout=5.0, session_id=None,
     path="/mcp", https=False, extra_headers=None,
@@ -169,7 +192,7 @@ def _send_jsonrpc_request(
         conn = _connection(host, port, timeout, https)
         conn.request("POST", path, body=payload, headers=headers)
         response = conn.getresponse()
-        data = response.read().decode('utf-8')
+        data = _read_mcp_response(response, request_id).decode('utf-8')
         conn.close()
 
         if response.status != 200:
@@ -191,6 +214,11 @@ def _send_jsonrpc_request(
             return False, f"Invalid JSON response: {data}"
     except (socket.timeout, OSError) as e:
         return False, f"Connection failed: {e}"
+    except (http.client.HTTPException, ValueError) as e:
+        return False, f"Invalid MCP response: {e}"
+    finally:
+        if "conn" in locals():
+            conn.close()
 
 
 def probe_tools(host, port, timeout=8.0, path="/mcp", https=False, extra_headers=None):
@@ -220,7 +248,7 @@ def probe_tools(host, port, timeout=8.0, path="/mcp", https=False, extra_headers
             },
         }).encode("utf-8"), headers=init_headers)
         response = conn.getresponse()
-        raw = response.read().decode("utf-8")
+        raw = _read_mcp_response(response, "mcprack-probe-init").decode("utf-8")
         session_id = response.getheader(_MCP_SESSION_HEADER)
         conn.close()
         if response.status != 200:
@@ -228,6 +256,9 @@ def probe_tools(host, port, timeout=8.0, path="/mcp", https=False, extra_headers
         init_response = _parse_mcp_body(raw)
     except (socket.timeout, OSError, http.client.HTTPException, ValueError) as exc:
         return False, 0, f"initialize failed: {exc}"
+    finally:
+        if "conn" in locals():
+            conn.close()
     if "error" in init_response:
         return False, 0, "initialize returned a JSON-RPC error"
 
@@ -274,7 +305,7 @@ def get_server_capabilities(host, port, timeout=8.0):
             "Accept": _MCP_ACCEPT,
         })
         response = conn.getresponse()
-        raw = response.read().decode('utf-8')
+        raw = _read_mcp_response(response, "mcprack-init").decode('utf-8')
         session_id = response.getheader(_MCP_SESSION_HEADER)
         conn.close()
 
@@ -283,6 +314,9 @@ def get_server_capabilities(host, port, timeout=8.0):
             return None
     except (socket.timeout, OSError, json.JSONDecodeError, ValueError):
         return None
+    finally:
+        if "conn" in locals():
+            conn.close()
 
     # Step 2: Get tools list
     tools = []
@@ -564,7 +598,7 @@ def probe_http_capabilities(url, timeout=15.0, extra_headers=None):
             headers=init_headers,
         )
         response = conn.getresponse()
-        raw = response.read().decode("utf-8")
+        raw = _read_mcp_response(response, "mcprack-cli-init").decode("utf-8")
         session_id = response.getheader(_MCP_SESSION_HEADER)
         conn.close()
         if response.status != 200:
@@ -572,6 +606,9 @@ def probe_http_capabilities(url, timeout=15.0, extra_headers=None):
         init_response = _parse_mcp_body(raw)
     except (socket.timeout, OSError, http.client.HTTPException, ValueError) as exc:
         return False, f"initialize failed: {exc}"
+    finally:
+        if "conn" in locals():
+            conn.close()
     if "error" in init_response:
         return False, _list_call_error("initialize", init_response["error"]) or (
             f"initialize returned a JSON-RPC error: {init_response['error']}"

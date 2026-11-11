@@ -302,6 +302,7 @@ def test_spawn_probe_requires_tools_when_asked():
     class Resp:
         status = 200
         def read(self): return body
+        def getheader(self, name): return None
 
     class Conn:
         def __init__(self, *a, **k): pass

@@ -91,7 +91,7 @@ def test_start_docker_pull_does_not_gate_itself(tmp_path):
     """start_docker_pull doesn't re-check docker_available() — the caller
     (admin.py's install_docker route) is responsible for that gate."""
     with patch("mcprack.installer.subprocess.Popen", return_value=MagicMock(pid=1)) as mock_popen:
-        installer.start_docker_pull("foo", "ghcr.io/org/foo:latest")
+        installer.start_docker_pull("foo", "ghcr.io/org/foo:1.0.0")
     assert mock_popen.called
 
 

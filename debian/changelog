@@ -1,3 +1,71 @@
+mcprack (1.7.0-1) UNRELEASED; urgency=medium
+
+  * Security hardening for internet-facing deployments (docs/AUDIT-2026-11.md).
+  * UPGRADE NOTES: STRICT_SERVER_PERMISSIONS now defaults to true (a data
+    migration grants every existing user the servers enabled today); passwords
+    need 12+ characters; weak or placeholder SECRET_KEY values refuse to start
+    (rotate with SECRET_KEY_FALLBACKS); per-user variable overrides are limited
+    to declared and credential-style names (OVERRIDE_UNDECLARED_KEYS=any
+    relaxes it); installs require pinned versions (INSTALL_REQUIRE_PINNED).
+  * DEMO_MODE guard now covers the REST API and account/password changes.
+  * Proxy access: disabled users are refused, per-user token revocation (UI,
+    API, `mcprack user revoke-tokens`), disabling/deleting a user stops their
+    MCP servers; MCP servers no longer inherit mcprack's secrets and keep their
+    credentials in /run/mcprack (RuntimeDirectory), removed when reaped.
+  * Dangerous administrator actions (servers, installs, accounts, MFA reset, secret
+    store) need a fresh password/code confirmation from a browser session
+    (ADMIN_REAUTH_SECONDS, default 600; POST /api/v1/auth/reauth for the API);
+    bearer tokens are not affected (B-08).
+  * Commands in /tmp, /var/tmp, /dev/shm ... or given as a relative path are refused
+    when a server is saved and when its process is started; ALLOWED_COMMAND_DIRS
+    is an opt-in strict mode (B-08).
+  * Audit entries for creating/editing a server name the old and new command and
+    URL, an argument fingerprint and changed environment key names - never
+    argument or environment values (B-08).
+  * Audit mirror (B-10): every audit event is also written, with an HMAC, to the
+    journal and to /var/log/mcprack/audit.log (AUDIT_LOG_FILE); `flask
+    audit-verify` reports deleted, altered and unmirrored audit rows and edited
+    log lines. Events that cannot be written to the database are still logged.
+  * Two-factor authentication (TOTP, RFC 6238, no new dependency) for local and
+    LDAP accounts with single-use recovery codes, a code accepted only once,
+    throttled like passwords; REQUIRED for administrators by default
+    (MFA_REQUIRED_FOR_ADMINS) - they are sent to the setup page on first use of
+    the admin area, in the browser and for the admin API. Reset by an
+    administrator (UI, API) or `mcprack user mfa-reset`. New migration add_user_mfa.
+  * New `mcprack user config verify USERNAME [CLIENT]`: probes every URL of a
+    generated client configuration the way the client does (initialize, tools/list).
+  * Relay limits: buffered answers capped (PROXY_MAX_RESPONSE_BYTES), concurrent
+    cold starts per worker limited (MCP_COLD_START_CONCURRENCY/WAIT), dpkg-query
+    for icons bounded and cached.
+  * Backend URLs: only http(s), no credentials, no link-local/metadata/unspecified
+    destinations (BACKEND_ALLOW_LINK_LOCAL to allow).
+  * MCP server start-up: failures are classified (spawn_failed, exited_early,
+    startup_timeout, handshake_error, no_tools, ...), a dead process is reported
+    at once, administrators get the log tail and end users only the class of
+    failure; a recycled pid is never signalled, children are reaped.
+  * Claude Code: `claude-code` client format (secret-free .mcp.json with
+    Authorization: Bearer ${MCPRACK_TOKEN}), Bearer relay route usable without
+    OAuth, API tokens expire after 90 days by default, mcprack-mcp-probe
+    --bearer; Cache-Control: no-store on per-user responses; a client-supplied
+    X-Forwarded-Prefix that is not a plain path is dropped.
+  * Relay forwards only protocol headers (no Authorization/Cookie to backends).
+  * Login: database-backed throttling, server-side session revocation (logout,
+    password change), clean session at login, CSRF token for cookie-authenticated
+    REST API writes, password-reset links from PUBLIC_BASE_URL with TRUSTED_HOSTS,
+    reset tokens without the password hash, LDAPS/StartTLS with certificate
+    validation and LDAP_REQUIRED_GROUP.
+  * OAuth: redirect URI policy, consent page shows the redirect, capped and
+    pruned registrations, hashed tokens, working refresh tokens, audit events.
+  * Vaultwarden session key no longer on the bw command line or in error
+    messages; users see a generic message for credential-store failures.
+  * Installer runs without a shell and validates every input.
+  * systemd: gthread workers, RuntimeDirectory; Apache vhost: dead-end default
+    vhost, forwarded-header hygiene, size limits; Docker demo runs as non-root
+    with dropped capabilities; postinst hides password input, quotes env values
+    and passes the admin password in a 0600 file.
+
+ -- Vítězslav Dvořák <info@vitexsoftware.cz>  Tue, 10 Nov 2026 17:54:26 +0100
+
 mcprack (1.6.0-1) unstable; urgency=medium
 
   * Release 1.6.0

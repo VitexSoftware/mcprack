@@ -289,7 +289,7 @@ def test_user_secret_on_a_server_without_admin_secrets_is_not_dropped(app):
              patch("mcprack.secret_store.vaultwarden._serialized", MagicMock()), \
              patch("mcprack.secret_store.vaultwarden.unlock", return_value="sess"), \
              patch("mcprack.secret_store.vaultwarden.lock"), \
-             patch("mcprack.secret_store.vaultwarden.resolve_env", return_value={"MY_TOKEN": "mine"}):
+             patch("mcprack.secret_store.vaultwarden.resolve_env_layers", return_value=({"MY_TOKEN": "mine"}, {})):
             env = secret_store.resolve_server_env(server, user=user)
 
     assert env == {"MY_TOKEN": "mine"}

@@ -1,10 +1,12 @@
 import os
+from urllib.parse import urlsplit
 
 import click
-from flask import current_app, Flask, jsonify, render_template, request, session
+from flask import current_app, Flask, jsonify, render_template, request, Response, session
 from flask_babel import gettext as _
 from flask_migrate import stamp
 from sqlalchemy import inspect
+from werkzeug.exceptions import SecurityError
 
 from .config import Config
 from .extensions import babel, csrf, db, limiter, login_manager, migrate
@@ -18,55 +20,71 @@ from .secret_store import INSECURE_DEFAULT_SECRET_KEY
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "migrations")
 
 
+_PLACEHOLDER_PREFIXES = ("change", "dev-", "dev_", "example", "test", "secret", "password", "default", "insecure")
+MIN_SECRET_KEY_LENGTH = 32
+
+
+def _weak_secret_key(key):
+    """Why `key` is not acceptable as a production SECRET_KEY, or None."""
+    if not key or key == INSECURE_DEFAULT_SECRET_KEY:
+        return "it is missing or still the well-known default"
+    if key.lower().startswith(_PLACEHOLDER_PREFIXES):
+        return "it looks like a placeholder"
+    if len(key) < MIN_SECRET_KEY_LENGTH:
+        return f"it is shorter than {MIN_SECRET_KEY_LENGTH} characters"
+    if len(set(key)) < 8:
+        return "it has too little variety"
+    return None
+
+
 def _enforce_secret_key(app):
-    """Refuse to boot in production with the well-known insecure default
-    SECRET_KEY - it signs Flask sessions and per-user proxy tokens
-    (catalog.py's _proxy_serializer), so running with it is equivalent to
-    having no session/token security at all. Mirrors secret_store.py's own
-    guard for the local encrypted-secrets Fernet key."""
+    """Refuse to boot in production with a weak SECRET_KEY - it signs Flask
+    sessions, per-user proxy tokens and reset links, and is the root of the
+    key that encrypts the local secret store (secret_store.py). The old guard
+    rejected only the literal default, so `change-me` from .env.example or
+    `change-me-<epoch>` slipped through (docs/AUDIT-2026-11.md B-16)."""
     if app.config.get("DEBUG") or app.config.get("TESTING"):
         return
     key = app.config.get("SECRET_KEY", "")
-    if not key or key == INSECURE_DEFAULT_SECRET_KEY:
+    problem = _weak_secret_key(key)
+    # A fallback key still VERIFIES signatures (sessions, proxy URLs, reset
+    # links) and decrypts the local secret store, so a weak one is as bad as a
+    # weak SECRET_KEY: anybody who guesses it can forge what it verifies.
+    for index, old_key in enumerate(app.config.get("SECRET_KEY_FALLBACKS") or [], start=1):
+        weak = _weak_secret_key(old_key)
+        if weak and not problem:
+            problem = f"SECRET_KEY_FALLBACKS entry #{index} is not acceptable: {weak}"
+    if problem:
         error_msg = (
             "\n"
-            "╔════════════════════════════════════════════════════════════════╗\n"
-            "║                     CONFIGURATION ERROR                        ║\n"
-            "╚════════════════════════════════════════════════════════════════╝\n"
+            "MCprack cannot start: the secret key configuration is not acceptable - " + problem + ".\n"
             "\n"
-            "❌ MCprack cannot start: SECRET_KEY is not configured\n"
+            "SECRET_KEY signs Flask sessions and per-user proxy tokens and protects the\n"
+            "locally encrypted secrets, so it must be a strong random value.\n"
             "\n"
-            "REASON:\n"
-            "  SECRET_KEY is missing from /etc/mcprack/env. This key signs Flask sessions\n"
-            "  and per-user proxy tokens, so it must be a strong random value in production.\n"
+            "Fix (as root):\n"
+            "    sudo mcprack-init-config --force      # generates a new one and restarts\n"
+            "or generate one yourself:\n"
+            "    python3 -c \"import secrets; print('SECRET_KEY=' + secrets.token_hex(32))\"\n"
+            "and put it in /etc/mcprack/env, then: sudo systemctl restart mcprack\n"
             "\n"
-            "SOLUTION:\n"
-            "  Run the initialization script as root:\n"
-            "\n"
-            "    sudo mcprack-init-config\n"
-            "\n"
-            "  This will:\n"
-            "    • Generate a secure SECRET_KEY\n"
-            "    • Write it to /etc/mcprack/env\n"
-            "    • Fix file permissions\n"
-            "    • Restart the mcprack service\n"
-            "\n"
-            "MANUAL FIX (if script is not available):\n"
-            "  1. Generate a secret key:\n"
-            "       python3 -c \"import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))\"\n"
-            "\n"
-            "  2. Add it to /etc/mcprack/env:\n"
-            "       echo 'SECRET_KEY=<value-from-step-1>' | sudo tee -a /etc/mcprack/env\n"
-            "\n"
-            "  3. Restart the service:\n"
-            "       sudo systemctl restart mcprack\n"
-            "\n"
-            "  4. Check status:\n"
-            "       sudo systemctl status mcprack\n"
-            "\n"
-            "For more help: https://github.com/VitexSoftware/mcprack#configuration\n"
+            "Rotating an existing key? Keep the old one in SECRET_KEY_FALLBACKS so existing\n"
+            "sessions, client configurations and local secrets keep working - but only a\n"
+            "strong old key is accepted there, and a weak one must be re-created, not kept.\n"
         )
         raise RuntimeError(error_msg)
+
+
+def _derive_trusted_hosts(app):
+    """With a public URL configured, refuse requests for any other Host
+    (docs/AUDIT-2026-11.md A-05: Host-header poisoning of links, redirects and
+    OAuth metadata). Loopback names stay valid so the reverse proxy host's own
+    health checks keep working. An explicit TRUSTED_HOSTS wins."""
+    if app.config.get("TRUSTED_HOSTS"):
+        return
+    public = urlsplit(app.config.get("PUBLIC_BASE_URL") or "").hostname
+    if public:
+        app.config["TRUSTED_HOSTS"] = [public, "localhost", "127.0.0.1", "[::1]"]
 
 
 def get_locale():
@@ -85,6 +103,19 @@ def create_app(config_object=Config):
     app = Flask(__name__)
     app.config.from_object(config_object)
     _enforce_secret_key(app)
+    _derive_trusted_hosts(app)
+    from . import audit_mirror
+
+    audit_mirror.init_app(app)
+    if (
+        app.config.get("LDAP_ENABLED")
+        and not str(app.config.get("LDAP_SERVER", "")).lower().startswith("ldaps://")
+        and not app.config.get("LDAP_STARTTLS")
+    ):
+        app.logger.warning(
+            "LDAP is enabled over unencrypted ldap://: directory passwords (and the bind password) cross "
+            "the network in clear text. Use ldaps:// or set LDAP_STARTTLS=true."
+        )
 
     db.init_app(app)
     migrate.init_app(app, db, directory=MIGRATIONS_DIR)
@@ -125,6 +156,11 @@ def create_app(config_object=Config):
         when mcprack is reached directly or the vhost is misconfigured;
         setdefault so a view that needs its own value still wins."""
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        # Pages and API answers are per-user and carry client configurations,
+        # tokens and secrets: a shared proxy or the browser's back/forward
+        # cache must not keep them. Only static assets may be cached.
+        if not request.path.startswith("/static/"):
+            response.headers.setdefault("Cache-Control", "no-store")
         response.headers.setdefault("X-Frame-Options", "DENY")
         response.headers.setdefault("Referrer-Policy", "same-origin")
         # No 'unsafe-inline' for styles: every style comes from style.css
@@ -192,6 +228,12 @@ def create_app(config_object=Config):
             or request.path.startswith("/oauth/")
             or request.accept_mimetypes.best == "application/json"
         )
+
+    @app.errorhandler(SecurityError)
+    def handle_untrusted_host(err):
+        """A Host header outside TRUSTED_HOSTS. Answered without a template:
+        rendering the error page would itself need request.host / url_for."""
+        return Response("Bad Request: unknown host\n", status=400, mimetype="text/plain")
 
     @app.errorhandler(400)
     def handle_bad_request(err):
@@ -301,6 +343,12 @@ def create_app(config_object=Config):
     # - see api.py's module docstring for the full rationale.
     csrf.exempt(api_bp)
 
+    # One central DEMO_MODE write guard for HTML *and* API routes.
+    from . import demo, reauth
+
+    app.before_request(demo.guard)
+    app.before_request(reauth.guard)
+
     from . import oauth
 
     oauth.init_oauth(app)
@@ -392,21 +440,106 @@ def register_cli(app):
 
     @app.cli.command("create-admin")
     @click.option("--username", prompt=True)
-    @click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True)
+    @click.option("--password", default=None, help="Password (visible in the process list - prefer --password-file).")
+    @click.option(
+        "--password-file",
+        type=click.Path(exists=True, dir_okay=False, readable=True),
+        default=None,
+        help="Read the password from this file (first line). Without either option you are prompted.",
+    )
     @click.option("--email", default="")
-    def create_admin(username, password, email):
+    def create_admin(username, password, password_file, email):
         """Create the first local admin account."""
+        from . import passwords
         from .models import User
+
+        if password_file:
+            with open(password_file, encoding="utf-8") as handle:
+                password = handle.readline().rstrip("\r\n")
+        elif password is None:
+            password = click.prompt("Password", hide_input=True, confirmation_prompt=True)
 
         if User.query.filter_by(username=username).first():
             click.echo(f"User '{username}' already exists.")
             return
+        problem = passwords.check_strength(password, username)
+        if problem:
+            raise click.ClickException(problem)
 
         user = User(username=username, email=email, auth_type="local", is_admin=True)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
         click.echo(f"Admin user '{username}' created.")
+
+    @app.cli.command("audit-verify")
+    @click.option(
+        "--log",
+        "logs",
+        multiple=True,
+        type=click.Path(),
+        help="Mirror log to check (repeatable; rotated copies audit.log.1, audit.log.2.gz ... are included). "
+        "Default: AUDIT_LOG_FILE.",
+    )
+    @click.option("--days", type=int, default=None, help="Only check the last N days (defaults to AUDIT_RETENTION_DAYS).")
+    @click.option("--strict", is_flag=True, help="Treat rows without a mirror line, and unreadable lines, as failures too.")
+    @click.option("--max-report", type=int, default=20, show_default=True, help="Most ids to list per category.")
+    def audit_verify_command(logs, days, strict, max_report):
+        """Compare the audit mirror with the audit table and report tampering.
+
+        Exit status 1 if a mirror line has a wrong MAC, a row is missing or was
+        changed; with --strict also if a row has no mirror line. 2 if there is no
+        log to check."""
+        from . import audit_mirror, audit_verify
+
+        configured = audit_mirror.resolve_file(current_app.config.get("AUDIT_LOG_FILE"))
+        paths = []
+        for requested in logs or ([configured] if configured else []):
+            paths.extend(audit_verify.log_files(requested))
+        if not paths:
+            click.echo(
+                "No mirror log found. Pass --log PATH, or set AUDIT_LOG_FILE (default /var/log/mcprack/audit.log) - "
+                "the journal copy (`journalctl -u mcprack | grep ^AUDIT`) can be saved to a file and checked too.",
+                err=True,
+            )
+            raise SystemExit(2)
+
+        retention = days if days is not None else current_app.config["AUDIT_RETENTION_DAYS"]
+        report = audit_verify.verify(paths, keys=audit_mirror._keys(), retention_days=retention)
+
+        def listing(items):
+            shown = ", ".join(str(item) for item in items[:max_report])
+            return shown + (f" ... (+{len(items) - max_report} more)" if len(items) > max_report else "")
+
+        click.echo(f"Read {report.lines} line(s) from {len(report.files)} file(s); {report.checked} event(s) checked"
+                   + (f" since {report.window_start.isoformat(timespec='seconds')}." if report.window_start else "."))
+        if report.unwritten:
+            click.echo(f"note: {report.unwritten} event(s) could not be written to the database at the time (logged with no id).")
+        if report.bad_mac:
+            click.echo(f"TAMPERED LOG: {len(report.bad_mac)} line(s) with an invalid MAC: "
+                       + listing([f"{name}:{number}" for name, number in report.bad_mac]))
+        if report.missing_in_db:
+            click.echo(f"DELETED: {len(report.missing_in_db)} event(s) are in the log but not in the database: "
+                       + listing(report.missing_in_db))
+        if report.reused_ids:
+            click.echo(f"REUSED ID: {len(report.reused_ids)} id(s) belong to two different events in the log - a row was "
+                       "deleted and its id given to a later event (after restoring a database backup this is expected: "
+                       "start a new log): " + listing(report.reused_ids))
+        if report.altered:
+            click.echo(f"ALTERED: {len(report.altered)} row(s) differ from the log: "
+                       + listing([f"{rid} ({', '.join(fields)})" for rid, fields in report.altered]))
+        if report.unmirrored:
+            click.echo(f"{'UNMIRRORED' if strict else 'warning'}: {len(report.unmirrored)} row(s) have no line in the log "
+                       f"(inserted, or written while the mirror was off): " + listing(report.unmirrored))
+        if report.garbled:
+            click.echo(f"{'UNREADABLE' if strict else 'warning'}: {report.garbled} line(s) could not be read.")
+        failed = report.tampering or (strict and report.warnings)
+        if report.window_start is None and not report.bad_mac:
+            click.echo("Nothing to check: the log holds no authentic events.", err=True)
+            raise SystemExit(2)
+        click.echo("FAILED" if failed else "OK: the audit table agrees with the mirror.")
+        if failed:
+            raise SystemExit(1)
 
     @app.cli.command("audit-archive")
     @click.option(

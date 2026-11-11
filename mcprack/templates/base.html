@@ -64,9 +64,15 @@
               {% if current_user.auth_type == 'local' %}
                 <div class="header-user-menu-divider"></div>
                 <a href="{{ url_for('auth.account_password') }}" class="header-user-menu-item">{{ _('Change Password') }}</a>
+              {% else %}
+                <div class="header-user-menu-divider"></div>
               {% endif %}
+              <a href="{{ url_for('auth.account_mfa') }}" class="header-user-menu-item">{{ _('Two-factor authentication') }}</a>
               <div class="header-user-menu-divider"></div>
-              <a href="{{ url_for('auth.logout') }}" class="header-user-menu-item danger">{{ _('Log out') }}</a>
+              <form method="post" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="header-user-menu-item danger">{{ _('Log out') }}</button>
+              </form>
             </div>
           </div>
         </div>

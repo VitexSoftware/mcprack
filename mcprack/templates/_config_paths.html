@@ -22,6 +22,19 @@
 
   <p class="text-sm text-muted">{{ _('Or install <code>mcprack-sync-claude</code> and run <code>mcprack-sync-claude sync</code> to keep this file up to date automatically.') }}</p>
 </details>
+{% elif client == 'claude-code' %}
+<details class="config-paths">
+  <summary>📁 {{ _('Where to put this file') }}</summary>
+
+  <p class="text-sm text-muted">{{ _('Claude Code, project scope — save it as .mcp.json in the root of the project. The file contains no secret, so it can be committed; Claude Code reads the token from the MCPRACK_TOKEN environment variable and asks for approval before using a project-scoped server.') }}</p>
+  <table>
+    <tbody>
+      <tr><td>{{ _('Any OS') }}</td><td><code>&lt;project&gt;/.mcp.json</code></td></tr>
+    </tbody>
+  </table>
+
+  <p class="text-sm text-muted">{{ _('For all your projects use the claude mcp add commands on the View & Copy page instead (user scope).') }}</p>
+</details>
 {% elif client == 'copilot' or client == 'vscode' %}
 <details class="config-paths">
   <summary>📁 {{ _('Where to put this file') }}</summary>

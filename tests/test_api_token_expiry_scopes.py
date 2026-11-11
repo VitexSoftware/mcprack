@@ -138,6 +138,7 @@ def test_scope_payload_validation(app, client):
 def test_legacy_token_without_expiry_or_scopes_is_unrestricted(app, client):
     """A token minted without the new options — i.e. every token that
     existed before this feature — must keep working exactly as before."""
+    app.config["API_TOKEN_DEFAULT_EXPIRY_DAYS"] = 0  # the pre-default behaviour: no expiry
     _create_user(app)
     _login(client, "alice")
     data = _mint_token(client)
@@ -205,7 +206,7 @@ def test_admin_read_scope_allows_gets_but_not_writes(app, client):
     assert _bearer_get(app, "/api/v1/admin/servers", raw).status_code == 200
 
     resp = _bearer_request(
-        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "pw"}
+        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "a-long-enough-pass-1"}
     )
     assert resp.status_code == 403
     assert resp.get_json()["error"]["code"] == "insufficient_scope"
@@ -218,7 +219,7 @@ def test_admin_write_scope_covers_reads_and_writes(app, client):
 
     assert _bearer_get(app, "/api/v1/admin/users", raw).status_code == 200
     resp = _bearer_request(
-        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "pw"}
+        app, "POST", "/api/v1/admin/users", raw, json={"username": "mallory", "password": "a-long-enough-pass-1"}
     )
     assert resp.status_code == 201
 
@@ -297,17 +298,27 @@ def test_scoped_token_cannot_mint_a_longer_lived_token(app, client):
     )
     assert resp.status_code == 403
 
-    # A no-expiry child would outlive the creator — rejected.
+    # Asking for no expiry explicitly would outlive the creator - rejected.
+    resp = _bearer_request(
+        app, "POST", "/api/v1/tokens", creator, json={"name": "child", "scopes": ["config:read"], "expires_at": None}
+    )
+    assert resp.status_code == 403
+
+    # Saying nothing gets the default - but never one longer than the creator's
+    # own remaining life.
     resp = _bearer_request(
         app, "POST", "/api/v1/tokens", creator, json={"name": "child", "scopes": ["config:read"]}
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 201
+    child = datetime.fromisoformat(resp.get_json()["data"]["expires_at"]).replace(tzinfo=timezone.utc)
+    assert child <= datetime.now(timezone.utc) + timedelta(days=30, seconds=5)
 
 
 # --- serialization + model helpers ----------------------------------------------
 
 
 def test_token_list_shows_expiry_and_scopes(app, client):
+    app.config["API_TOKEN_DEFAULT_EXPIRY_DAYS"] = 0
     _create_user(app)
     _login(client, "alice")
     _mint_token(client, name="scoped", scopes=["config:read"], expires_in_days=30)

@@ -17,6 +17,17 @@
       <code>{{ current_user.username }}</code>.
     </p>
 
+    <p class="mt-md">
+      {{ _('After you allow this, the authorization code is sent to:') }}
+      <code>{{ redirect_uri }}</code>
+      (<strong>{{ redirect_host }}</strong>)
+    </p>
+    {% if loopback_redirect %}
+    <p class="note-box">
+      {{ _('This address is on this computer. Only allow it if you just started this connection from an application running on this computer.') }}
+    </p>
+    {% endif %}
+
     <ul class="consent-details text-muted mt-md">
       <li>{{ _('Access is limited to MCP servers you have selected in the catalog.') }}</li>
       <li>{{ _('Backend credentials stay on the server — they are never sent to the client.') }}</li>
