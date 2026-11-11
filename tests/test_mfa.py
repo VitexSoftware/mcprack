@@ -363,6 +363,7 @@ def test_confirming_with_the_right_code_enables_it_and_shows_recovery_codes_once
     body = response.get_data(as_text=True)
     shown = re.findall(r"\b[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\b", body)
     assert len(shown) == 10 and len(set(shown)) == 10
+    assert re.search(r'<a href="/"[^>]*>I have saved them</a>', body)
     with app.app_context():
         user = db.session.get(User, info["id"])
         assert user.totp_enabled is True and mfa.remaining_recovery_codes(user) == 10
@@ -429,8 +430,22 @@ def test_regenerating_replaces_the_recovery_codes(app, clock):
 
     response = client.post("/account/mfa", data={"action": "regenerate", "current_password": PW, "code": _advance_and_code(clock, info)})
 
-    new = re.findall(r"\b[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\b", response.get_data(as_text=True))
+    body = response.get_data(as_text=True)
+    new = re.findall(r"\b[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\b", body)
     assert len(new) == 10 and old not in new
+    assert re.search(r'<a href="/"[^>]*>I have saved them</a>', body)
+    assert client.get("/").status_code == 200
+    with app.app_context():
+        stored = db.session.get(User, info["id"]).recovery_codes
+    for _visit in range(2):
+        settings = client.get("/account/mfa").get_data(as_text=True)
+        assert '<details id="recovery-code-settings" class="mt-lg">' in settings
+        assert re.search(r'<a href="/"[^>]*>Back to Catalog</a>', settings)
+        assert not any(code in settings for code in new)
+        with app.app_context():
+            user = db.session.get(User, info["id"])
+            assert user.recovery_codes == stored
+            assert mfa.remaining_recovery_codes(user) == 10
     other = app.test_client()
     _password_step(other)
     assert other.post("/login/mfa", data={"code": old}).status_code == 200  # the old ones are dead

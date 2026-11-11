@@ -14,7 +14,7 @@
     <p class="text-muted">{{ _('Each code works once, if you lose your phone. They are shown only now — store them somewhere safe (a password manager, a printout).') }}</p>
     <pre>{% for code in codes %}{{ code }}
 {% endfor %}</pre>
-    <a href="{{ url_for('auth.account_mfa') }}" class="btn btn-primary w-full mt-lg">{{ _('I have saved them') }}</a>
+    <a href="{{ url_for('catalog.index') }}" class="btn btn-primary w-full mt-lg">{{ _('I have saved them') }}</a>
   </div>
 
   {% elif secret %}
@@ -54,21 +54,24 @@
   <div class="card">
     <p><strong>{{ _('Two-factor authentication is on.') }}</strong>
        {{ ngettext('%(num)d recovery code left.', '%(num)d recovery codes left.', remaining) }}</p>
-    <h2>{{ _('Generate new recovery codes') }}</h2>
-    <p class="text-muted">{{ _('The old ones stop working.') }}</p>
-    <form method="post">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <input type="hidden" name="action" value="regenerate">
-      <div class="form-group">
-        <label for="regen_password">{{ _('Current password') }}</label>
-        <input type="password" id="regen_password" name="current_password" required>
-      </div>
-      <div class="form-group">
-        <label for="regen_code">{{ _('Code') }}</label>
-        <input type="text" id="regen_code" name="code" required autocomplete="one-time-code" maxlength="32">
-      </div>
-      <button type="submit" class="btn btn-secondary w-full mt-lg">{{ _('Generate new codes') }}</button>
-    </form>
+    <a href="{{ url_for('catalog.index') }}" class="btn btn-primary w-full mt-lg">{{ _('Back to Catalog') }}</a>
+    <details id="recovery-code-settings" class="mt-lg">
+      <summary>{{ _('Generate new recovery codes') }}</summary>
+      <p class="text-muted">{{ _('The old ones stop working.') }}</p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="regenerate">
+        <div class="form-group">
+          <label for="regen_password">{{ _('Current password') }}</label>
+          <input type="password" id="regen_password" name="current_password" required>
+        </div>
+        <div class="form-group">
+          <label for="regen_code">{{ _('Code') }}</label>
+          <input type="text" id="regen_code" name="code" required autocomplete="one-time-code" maxlength="32">
+        </div>
+        <button type="submit" class="btn btn-secondary w-full mt-lg">{{ _('Generate new codes') }}</button>
+      </form>
+    </details>
   </div>
 
   {% if not required %}
