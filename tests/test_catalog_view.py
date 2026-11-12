@@ -71,6 +71,85 @@ def _add_selected_stdio_server(app, user_id, name="retry-stdio"):
         return stdio.id
 
 
+def test_server_page_shows_subscribers_only_to_admin(app):
+    with app.app_context():
+        admin = User(username="catalog-admin", auth_type="local", is_admin=True)
+        admin.set_password("pw")
+        subscriber = User(username="subscribed-user", auth_type="local")
+        subscriber.set_password("pw")
+        server = McpServer(
+            name="subscriber-test",
+            label="Subscriber test",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add_all([admin, subscriber, server])
+        db.session.commit()
+        db.session.add(UserServerSelection(user_id=subscriber.id, server_id=server.id))
+        db.session.commit()
+        server_uuid = server.uuid
+
+    admin_client = app.test_client()
+    admin_client.post("/login", data={"username": "catalog-admin", "password": "pw"})
+    admin_response = admin_client.get(f"/server/{server_uuid}")
+    assert admin_response.status_code == 200
+    assert b"Subscribed users (1)" in admin_response.data
+    assert b"subscribed-user" in admin_response.data
+
+    user_client = app.test_client()
+    user_client.post("/login", data={"username": "subscribed-user", "password": "pw"})
+    user_response = user_client.get(f"/server/{server_uuid}")
+    assert user_response.status_code == 200
+    assert b"Subscribed users" not in user_response.data
+    assert b"subscribed-user" not in user_response.data
+
+
+def test_server_page_allows_subscribe_and_unsubscribe(app, client):
+    user_id = _login(client)
+    server_id = _add_enabled_server(app, name="subscription-toggle")
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+
+    response = client.get(f"/server/{server_uuid}")
+    assert response.status_code == 200
+    assert b">Subscribe</button>" in response.data
+
+    response = client.post(
+        f"/server/{server_uuid}/subscription", data={"action": "subscribe"}
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert UserServerSelection.query.filter_by(
+            user_id=user_id, server_id=server_id
+        ).first() is not None
+
+    response = client.get(f"/server/{server_uuid}")
+    assert b">Unsubscribe</button>" in response.data
+    response = client.post(
+        f"/server/{server_uuid}/subscription", data={"action": "unsubscribe"}
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert UserServerSelection.query.filter_by(
+            user_id=user_id, server_id=server_id
+        ).first() is None
+
+
+def test_server_subscription_refuses_new_subscription_without_permission(app, client):
+    app.config["STRICT_SERVER_PERMISSIONS"] = True
+    _login(client)
+    server_id = _add_enabled_server(app, name="denied-subscription")
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+
+    response = client.post(
+        f"/server/{server_uuid}/subscription", data={"action": "subscribe"}
+    )
+
+    assert response.status_code == 403
+
+
 def test_index_shows_aggregate_url_and_accessible_servers(app, client):
     """The home page exposes one aggregate URL and lists its selected servers,
     never the individual relay URL."""

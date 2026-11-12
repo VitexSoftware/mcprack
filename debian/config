@@ -17,4 +17,12 @@ if [ -f /usr/share/dbconfig-common/dpkg/config ]; then
     dbc_go mcprack "$@"
 fi
 
+if [ ! -f /etc/mcprack/env ] && command -v db_input >/dev/null 2>&1; then
+    db_input medium mcprack/public_base_url || true
+    db_input low mcprack/gunicorn_bind || true
+    db_input low mcprack/oauth_enabled || true
+    db_input low mcprack/session_cookie_secure || true
+    db_go
+fi
+
 #DEBHELPER#

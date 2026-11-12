@@ -38,6 +38,19 @@
         <code class="connector-value connector-url">{{ relay_url }}</code>
         <button type="button" class="btn btn-secondary copy-btn" data-copy-value="{{ relay_url }}">{{ _('Copy URL') }}</button>
       </div>
+      {% endif %}
+      {% if selected %}
+      <form method="post" action="{{ url_for('catalog.server_subscription', server_uuid=server.uuid) }}" class="mt-md">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="unsubscribe">
+        <button type="submit" class="btn btn-secondary">{{ _('Unsubscribe') }}</button>
+      </form>
+      {% elif server.enabled and permission_allowed %}
+      <form method="post" action="{{ url_for('catalog.server_subscription', server_uuid=server.uuid) }}" class="mt-md">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="subscribe">
+        <button type="submit" class="btn btn-primary">{{ _('Subscribe') }}</button>
+      </form>
       {% elif not server.enabled %}
       <p class="text-muted">{{ _('This server is disabled by an administrator.') }}</p>
       {% elif not permission_allowed %}
@@ -54,8 +67,6 @@
       {% else %}
       <p class="text-muted">{{ _('An administrator has not allowed access to this server.') }}</p>
       {% endif %}
-      {% elif not selected %}
-      <p class="text-muted">{{ _('Select this server on the MCP servers page to get its individual URL.') }}</p>
       {% endif %}
     </div>
 
@@ -140,6 +151,18 @@
       <dl class="info-list">
         {% if server.command %}<dt>{{ _('Command') }}</dt><dd><code>{{ server.command }}{% for a in server.args %} {{ a }}{% endfor %}</code></dd>{% endif %}
         {% if server.url %}<dt>URL</dt><dd><code>{{ server.url }}</code></dd>{% endif %}
+        <dt>{{ _('Subscribed users') }} ({{ subscribers | length }})</dt>
+        <dd>
+          {% if subscribers %}
+          <ul>
+            {% for subscriber in subscribers %}
+            <li><a href="{{ url_for('admin.user_edit', user_id=subscriber.id) }}">{{ subscriber.username }}</a></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <span class="text-muted">{{ _('No users have subscribed to this server.') }}</span>
+          {% endif %}
+        </dd>
         <dt>{{ _('Metadata sources') }}</dt>
         <dd>
           manifest: {% if info.manifest_format == 'server.json' %}server.json ✓{% elif info.manifest_format %}{{ info.manifest_format }} ({{ _('only lhm.plugin.json found — add server.json') }}){% else %}✗{% endif %} ·

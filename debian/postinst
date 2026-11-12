@@ -54,10 +54,11 @@ case "$1" in
     dbc_dbfile_owner=mcprack:mcprack
     dbc_dbfile_perms=0640
 
+    if [ -f /usr/share/debconf/confmodule ]; then
+      . /usr/share/debconf/confmodule
+    fi
+
     if [ -f /usr/share/dbconfig-common/dpkg/postinst ]; then
-      if [ -f /usr/share/debconf/confmodule ]; then
-        . /usr/share/debconf/confmodule
-      fi
       . /usr/share/dbconfig-common/dpkg/postinst
       dbc_go mcprack "$@"
     fi
@@ -76,6 +77,21 @@ case "$1" in
 
     # Configuration if /etc/mcprack/env doesn't exist
     if [ ! -f /etc/mcprack/env ]; then
+      PUBLIC_BASE_URL=""
+      GUNICORN_BIND="127.0.0.1:8912"
+      OAUTH_ENABLED="false"
+      SESSION_COOKIE_SECURE="true"
+      if command -v db_get >/dev/null 2>&1; then
+        db_get mcprack/public_base_url
+        PUBLIC_BASE_URL=$RET
+        db_get mcprack/gunicorn_bind
+        GUNICORN_BIND=$RET
+        db_get mcprack/oauth_enabled
+        OAUTH_ENABLED=$RET
+        db_get mcprack/session_cookie_secure
+        SESSION_COOKIE_SECURE=$RET
+      fi
+
       if [ "$INTERACTIVE" = "true" ]; then
         # Interactive configuration
         echo ""
@@ -136,6 +152,10 @@ case "$1" in
 
 SECRET_KEY=$SECRET_KEY
 SQLALCHEMY_DATABASE_URI=$(shq "$DB_URI")
+PUBLIC_BASE_URL=$(shq "$PUBLIC_BASE_URL")
+GUNICORN_BIND=$(shq "$GUNICORN_BIND")
+OAUTH_ENABLED=$(shq "$OAUTH_ENABLED")
+SESSION_COOKIE_SECURE=$(shq "$SESSION_COOKIE_SECURE")
 
 LDAP_SERVER=$(shq "$LDAP_SERVER")
 LDAP_BASE_DN=$(shq "$LDAP_BASE_DN")

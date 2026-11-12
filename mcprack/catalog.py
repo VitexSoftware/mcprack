@@ -402,6 +402,32 @@ def servers():
     )
 
 
+@bp.route("/server/<uuid:server_uuid>/subscription", methods=["POST"])
+@login_required
+def server_subscription(server_uuid):
+    server = McpServer.query.filter_by(uuid=str(server_uuid)).first_or_404()
+    selection = UserServerSelection.query.filter_by(
+        user_id=current_user.id, server_id=server.id
+    ).first()
+    action = request.form.get("action")
+
+    if action == "subscribe":
+        if not server.enabled or not _server_permission_allowed(current_user.id, server.id):
+            abort(403)
+        if selection is None:
+            db.session.add(UserServerSelection(user_id=current_user.id, server_id=server.id))
+        flash(_("Subscribed to %(server)s.", server=server.label), "success")
+    elif action == "unsubscribe":
+        if selection is not None:
+            db.session.delete(selection)
+        flash(_("Unsubscribed from %(server)s.", server=server.label), "success")
+    else:
+        abort(400)
+
+    db.session.commit()
+    return redirect(url_for("catalog.server_page", server_uuid=server.uuid))
+
+
 @bp.route("/server/<uuid:server_uuid>")
 @login_required
 def server_page(server_uuid):
@@ -442,6 +468,14 @@ def server_page(server_uuid):
         relay_url = _proxy_relay_url(current_user, server)
 
     server_info.sync_uuid(server)
+    subscribers = []
+    if current_user.is_admin:
+        subscribers = (
+            User.query.join(UserServerSelection, User.id == UserServerSelection.user_id)
+            .filter(UserServerSelection.server_id == server.id)
+            .order_by(User.username.asc())
+            .all()
+        )
     return render_template(
         "server_page.html",
         server=server,
@@ -452,6 +486,7 @@ def server_page(server_uuid):
         relay_url=relay_url,
         access_request_status=request_row.status if request_row else None,
         can_request_access=(not current_user.is_admin and server.enabled and not permission_allowed),
+        subscribers=subscribers,
     )
 
 

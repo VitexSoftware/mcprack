@@ -1,0 +1,36 @@
+Template: mcprack/public_base_url
+Type: string
+Priority: medium
+Default:
+Description: Public base URL of this mcprack instance:
+ Enter the externally reachable URL, for example
+ https://mcprack.example.com. It is used for password-reset links,
+ OAuth metadata and Host validation. Leave empty to configure it later
+ in /etc/mcprack/env.
+
+Template: mcprack/gunicorn_bind
+Type: string
+Priority: low
+Default: 127.0.0.1:8912
+Description: Address and port where the mcprack web server listens:
+ The default listens on the local machine only. Change this only when
+ mcprack must accept connections on another interface; expose it through
+ a trusted reverse proxy or firewall.
+
+Template: mcprack/oauth_enabled
+Type: boolean
+Priority: low
+Default: false
+Description: Enable the OAuth authorization server:
+ Enable OAuth authorization for MCP clients. This requires PUBLIC_BASE_URL
+ to be set to the externally reachable address. If disabled, clients can
+ continue to use aggregate URLs with signed path tokens.
+
+Template: mcprack/session_cookie_secure
+Type: boolean
+Priority: low
+Default: true
+Description: Require HTTPS for authentication cookies:
+ Leave enabled for internet-facing installations or when TLS is terminated
+ by a reverse proxy. Disable only for a trusted intranet served over plain
+ HTTP.
