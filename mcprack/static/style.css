@@ -1266,6 +1266,10 @@ tr.row-warn {
   font-size: var(--font-size-xs);
 }
 
+.aggregate-url {
+  font-size: calc(var(--font-size-xs) * 2);
+}
+
 /* ========================================
    PER-SERVER CONNECTOR POPUP (catalog page)
    ======================================== */

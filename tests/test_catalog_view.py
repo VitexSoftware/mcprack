@@ -7,7 +7,13 @@ from unittest.mock import patch
 import pytest
 
 from mcprack.extensions import db
-from mcprack.models import McpServer, User, UserServerPermission, UserServerSelection
+from mcprack.models import (
+    McpServer,
+    User,
+    UserServerAccessRequest,
+    UserServerPermission,
+    UserServerSelection,
+)
 
 
 def _login(client, username="alice"):
@@ -65,12 +71,94 @@ def _add_selected_stdio_server(app, user_id, name="retry-stdio"):
         return stdio.id
 
 
-def test_index_renders_copyable_name_and_url_for_each_configured_server(app, client):
-    """The catalog page must offer a name+URL pair (with copy buttons) per
-    selected server - the friendlier way to add a server to Claude
-    Desktop's "Add custom connector" dialog, which wants those two fields
-    rather than a JSON config file. A server the user hasn't selected must
-    not appear here."""
+def test_server_page_shows_subscribers_only_to_admin(app):
+    with app.app_context():
+        admin = User(username="catalog-admin", auth_type="local", is_admin=True)
+        admin.set_password("pw")
+        subscriber = User(username="subscribed-user", auth_type="local")
+        subscriber.set_password("pw")
+        server = McpServer(
+            name="subscriber-test",
+            label="Subscriber test",
+            transport="stdio",
+            command="/bin/true",
+            enabled=True,
+        )
+        db.session.add_all([admin, subscriber, server])
+        db.session.commit()
+        admin_id = admin.id
+        server_id = server.id
+        db.session.add(UserServerSelection(user_id=subscriber.id, server_id=server.id))
+        db.session.commit()
+        server_uuid = server.uuid
+
+    admin_client = app.test_client()
+    admin_client.post("/login", data={"username": "catalog-admin", "password": "pw"})
+    admin_response = admin_client.get(f"/server/{server_uuid}")
+    assert admin_response.status_code == 200
+    assert b"Subscribed users (1)" in admin_response.data
+    assert b"subscribed-user" in admin_response.data
+    admin_body = admin_response.data.decode()
+    assert f"/admin/users/{admin_id}/override/{server_id}" in admin_body
+    assert f"/admin/servers/{server_id}/edit" in admin_body
+    assert "Global server configuration" in admin_body
+
+    user_client = app.test_client()
+    user_client.post("/login", data={"username": "subscribed-user", "password": "pw"})
+    user_response = user_client.get(f"/server/{server_uuid}")
+    assert user_response.status_code == 200
+    assert b"Subscribed users" not in user_response.data
+    assert b"subscribed-user" not in user_response.data
+
+
+def test_server_page_allows_subscribe_and_unsubscribe(app, client):
+    user_id = _login(client)
+    server_id = _add_enabled_server(app, name="subscription-toggle")
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+
+    response = client.get(f"/server/{server_uuid}")
+    assert response.status_code == 200
+    assert b">Subscribe</button>" in response.data
+
+    response = client.post(
+        f"/server/{server_uuid}/subscription", data={"action": "subscribe"}
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert UserServerSelection.query.filter_by(
+            user_id=user_id, server_id=server_id
+        ).first() is not None
+
+    response = client.get(f"/server/{server_uuid}")
+    assert b">Unsubscribe</button>" in response.data
+    response = client.post(
+        f"/server/{server_uuid}/subscription", data={"action": "unsubscribe"}
+    )
+    assert response.status_code == 302
+    with app.app_context():
+        assert UserServerSelection.query.filter_by(
+            user_id=user_id, server_id=server_id
+        ).first() is None
+
+
+def test_server_subscription_refuses_new_subscription_without_permission(app, client):
+    app.config["STRICT_SERVER_PERMISSIONS"] = True
+    _login(client)
+    server_id = _add_enabled_server(app, name="denied-subscription")
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+
+    response = client.post(
+        f"/server/{server_uuid}/subscription", data={"action": "subscribe"}
+    )
+
+    assert response.status_code == 403
+
+
+def test_index_shows_aggregate_url_and_accessible_servers(app, client):
+    """The home page exposes one aggregate URL and lists its selected servers,
+    never the individual relay URL."""
     user_id = _login(client)
     server_id = _add_selected_server(app, user_id)
 
@@ -78,12 +166,12 @@ def test_index_renders_copyable_name_and_url_for_each_configured_server(app, cli
 
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert 'data-copy-value="jenkins"' in body
-    assert f"/proxy/mcp/" in body
-    assert f"/{server_id}\"" in body
+    assert "/proxy/mcp/aggregate/" in body
+    assert "Jenkins" in body
+    assert f"/proxy/mcp/{server_id}" not in body
     assert "copy-connector.js" in body
     assert f"/icon/server/{server_id}" in body
-    assert 'class="connector-icon"' in body
+    assert f"/server/" in body
 
 
 def test_index_omits_connector_section_when_nothing_selected(app, client):
@@ -101,30 +189,102 @@ def test_index_omits_connector_section_when_nothing_selected(app, client):
     assert "copy-connector.js" in body
 
 
-def test_index_renders_per_server_connector_popup_button(app, client):
-    """Every server in the "Available Servers" list gets its own
-    "Connector" button carrying that server's name+URL, even when the
-    server isn't selected yet - the popup lets a user grab a single
-    server's connector details without first saving a selection."""
-    user_id = _login(client)
+def test_server_discovery_lists_servers_without_individual_urls(app, client):
+    """The subscription page lists servers but keeps per-server relay URLs on their cards."""
+    _login(client)
     server_id = _add_enabled_server(app, name="standalone-tool")
 
-    resp = client.get("/")
+    resp = client.get("/servers")
 
     assert resp.status_code == 200
     body = resp.data.decode()
-    assert 'data-connector-name="standalone-tool"' in body
-    assert f"/proxy/mcp/" in body
-    assert f"/{server_id}&#34;" in body or f'/{server_id}"' in body
-    assert 'id="connector-popup"' in body
+    assert "standalone-tool" in body
+    assert f"/server/" in body
+    assert f"/proxy/mcp/" not in body
+    assert f"data-connector-url" not in body
+
+
+def test_aggregate_proxy_uses_only_current_selected_allowed_servers(app, client):
+    from mcprack import composition_proxy
+    from mcprack.catalog import _make_composition_token, _parse_proxy_token
+
+    user_id = _login(client)
+    selected_id = _add_selected_server(app, user_id)
+    denied_id = _add_enabled_server(app, name="denied-upstream")
+    with app.app_context():
+        db.session.add_all(
+            [
+                UserServerPermission(user_id=user_id, server_id=selected_id, is_allowed=True),
+                UserServerPermission(user_id=user_id, server_id=denied_id, is_allowed=False),
+            ]
+        )
+        db.session.commit()
+        token = _make_composition_token(user_id)
+
+    captured = {}
+
+    def ensure(user_id_arg, connectors, fingerprint):
+        captured["user_id"] = user_id_arg
+        captured["connectors"] = connectors
+        captured["fingerprint"] = fingerprint
+        return 35123
+
+    with patch.object(composition_proxy, "ensure_user_composition_proxy", side_effect=ensure), patch(
+        "mcprack.catalog._forward_to_user_proxy",
+        return_value=app.response_class("ok", status=200),
+    ):
+        resp = client.post(f"/proxy/mcp/aggregate/{token}", data='{"jsonrpc":"2.0","id":1,"method":"initialize"}')
+
+    assert resp.status_code == 200
+    assert captured["user_id"] == user_id
+    assert len(captured["connectors"]) == 1
+    connector = captured["connectors"][0]
+    assert connector["namespace"] == f"jenkins_{selected_id}"
+    signed_parts = connector["url"].rstrip("/").split("/")
+    claims = _parse_proxy_token(signed_parts[-2])
+    assert claims["u"] == user_id and claims["s"] == selected_id
+
+    with app.app_context():
+        UserServerSelection.query.filter_by(user_id=user_id, server_id=selected_id).delete()
+        db.session.commit()
+    with patch.object(composition_proxy, "ensure_user_composition_proxy") as ensure_proxy:
+        resp = client.post(f"/proxy/mcp/aggregate/{token}")
+    assert resp.status_code == 403
+    ensure_proxy.assert_not_called()
+
+
+def test_aggregate_proxy_rejects_invalid_token(app, client):
+    _login(client)
+    assert client.post("/proxy/mcp/aggregate/not-a-token").status_code == 403
+
+
+def test_denied_server_access_request_is_persisted(app, client):
+    user_id = _login(client)
+    server_id = _add_enabled_server(app, name="requestable")
+    with app.app_context():
+        server = db.session.get(McpServer, server_id)
+        db.session.add(UserServerPermission(user_id=user_id, server_id=server_id, is_allowed=False))
+        db.session.commit()
+        server_uuid = server.uuid
+
+    card = client.get(f"/server/{server_uuid}")
+    assert card.status_code == 200
+    assert b"Request access" in card.data
+    assert b"/proxy/mcp/" not in card.data
+
+    for _ in range(2):
+        response = client.post(f"/servers/{server_id}/request-access")
+        assert response.status_code == 302
+
+    with app.app_context():
+        request_row = db.session.get(UserServerAccessRequest, (user_id, server_id))
+        assert request_row is not None
+        assert request_row.status == "pending"
+        assert UserServerAccessRequest.query.count() == 1
 
 
 def test_view_renders_textarea_with_config_json(app, client):
-    """Every server — including one with a real network `url` of its own,
-    like Jenkins here — is rendered as a /proxy/mcp/ relay URL, never its
-    raw backend address or an embedded credential. See
-    test_view_always_uses_user_proxy_urls_for_stdio_servers for the stdio
-    equivalent."""
+    """Client configs contain only the aggregate relay, never backend details."""
     user_id = _login(client)
     _add_selected_server(app, user_id)
 
@@ -136,8 +296,10 @@ def test_view_renders_textarea_with_config_json(app, client):
     body = resp.data.decode()
     assert "<textarea" in body
     assert "mcpServers" in body
-    assert "jenkins" in body
-    assert "/proxy/mcp/" in body
+    payload = json.loads(_extract_textarea_text(body))
+    assert list(payload["mcpServers"]) == ["mcprack"]
+    assert "/proxy/mcp/aggregate/" in payload["mcpServers"]["mcprack"]["url"]
+    assert "jenkins" not in body
     assert "secret-value" not in body
     assert "Copy to clipboard" in body
 
@@ -221,11 +383,8 @@ def _extract_textarea_text(html_body):
 
 
 def test_view_and_download_render_identical_payload(app, client):
-    # The relay URL carries a URLSafeTimedSerializer token, whose payload
-    # embeds a one-second-granularity timestamp. These are two separate
-    # requests, so without pinning the token the assertion fails whenever
-    # they happen to straddle a second boundary.
-    with patch("mcprack.catalog._make_proxy_token", return_value="fixed-token"):
+    # Pin the aggregate token so separate requests have identical config JSON.
+    with patch("mcprack.catalog._make_composition_token", return_value="fixed-token"):
         user_id = _login(client)
         _add_selected_server(app, user_id)
 
@@ -837,7 +996,7 @@ def test_override_page_handles_malformed_env_var_names_json(app, client):
     assert b"Configuration for Broken Override" in resp.data
 
 
-def test_catalog_hides_servers_explicitly_denied_for_user(app, client):
+def test_server_discovery_shows_denied_servers_without_relay_urls(app, client):
     user_id = _login(client)
 
     with app.app_context():
@@ -866,14 +1025,16 @@ def test_catalog_hides_servers_explicitly_denied_for_user(app, client):
         )
         db.session.commit()
 
-    resp = client.get("/")
+    resp = client.get("/servers")
     body = resp.data.decode()
     assert resp.status_code == 200
     assert "Allowed" in body
-    assert "Denied" not in body
+    assert "Denied" in body
+    assert "Access not allowed" in body
+    assert "/proxy/mcp/" not in body
 
 
-def test_download_excludes_explicitly_denied_selected_server(app, client):
+def test_download_uses_aggregate_with_denied_server_selection(app, client):
     user_id = _login(client)
     with app.app_context():
         allowed = McpServer(
@@ -910,7 +1071,8 @@ def test_download_excludes_explicitly_denied_selected_server(app, client):
 
     payload = resp.data.decode()
     assert resp.status_code == 200
-    assert "allowed-dl" in payload
+    assert "/proxy/mcp/aggregate/" in payload
+    assert "allowed-dl" not in payload
     assert "denied-dl" not in payload
 
 

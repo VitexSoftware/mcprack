@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}{{ _('Access requests') }} — {{ _('Admin') }} — mcprack{% endblock %}
+{% block content %}
+
+<section class="section">
+  <h1>{{ _('MCP server access requests') }}</h1>
+  {% if requests %}
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>{{ _('User') }}</th><th>{{ _('MCP server') }}</th><th>{{ _('Requested') }}</th><th>{{ _('Actions') }}</th></tr>
+      </thead>
+      <tbody>
+        {% for item in requests %}
+        <tr>
+          <td>{{ item.user.display_name }} <small class="text-muted">({{ item.user.username }})</small></td>
+          <td><a href="{{ url_for('catalog.server_page', server_uuid=item.server.uuid) }}">{{ item.server.label }}</a></td>
+          <td>{{ item.requested_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+          <td>
+            <div class="flex-gap-sm">
+              <form method="post" action="{{ url_for('admin.access_request_resolve', user_id=item.user_id, server_id=item.server_id, decision='approve') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-primary">{{ _('Allow') }}</button>
+              </form>
+              <form method="post" action="{{ url_for('admin.access_request_resolve', user_id=item.user_id, server_id=item.server_id, decision='deny') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-sm btn-secondary">{{ _('Deny') }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-muted">{{ _('There are no pending server access requests.') }}</p>
+  {% endif %}
+</section>
+
+{% endblock %}

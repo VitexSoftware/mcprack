@@ -62,17 +62,16 @@ def test_claude_code_config_contains_no_secret(app, client, carol):
 
     assert body["filename"] == ".mcp.json"
     servers = body["config"]["mcpServers"]
-    entry = servers["zabbix"]
+    entry = servers["mcprack"]
     assert entry == {
         "type": "http",
-        "url": f"https://mcprack.example.com/proxy/mcp/{carol['server']}",
+        "url": "https://mcprack.example.com/proxy/mcp/aggregate",
         "headers": {"Authorization": "Bearer ${MCPRACK_TOKEN}"},
     }
     # nothing signed, nothing that could be replayed, if the file is committed
     raw = json.dumps(body["config"])
     assert "Ijo" not in raw and ".eJ" not in raw
-    assert raw.count("/proxy/mcp/") == len(servers)
-    assert all(e["url"].rsplit("/", 1)[1].isdigit() for e in servers.values())
+    assert raw.count("/proxy/mcp/") == 1
 
 
 def test_the_token_variable_is_not_one_claude_code_blanks_out(app, client, carol):
@@ -81,7 +80,7 @@ def test_the_token_variable_is_not_one_claude_code_blanks_out(app, client, carol
     the name must be our own."""
     _login(client)
 
-    entry = client.get("/api/v1/me/config/claude-code").get_json()["data"]["config"]["mcpServers"]["zabbix"]
+    entry = client.get("/api/v1/me/config/claude-code").get_json()["data"]["config"]["mcpServers"]["mcprack"]
 
     variable = entry["headers"]["Authorization"].split("${")[1].rstrip("}")
     assert variable == "MCPRACK_TOKEN"
@@ -92,16 +91,16 @@ def test_with_oauth_enabled_the_file_has_no_header_at_all(app, client, carol):
     app.config["OAUTH_ENABLED"] = True
     _login(client)
 
-    entry = client.get("/api/v1/me/config/claude-code").get_json()["data"]["config"]["mcpServers"]["zabbix"]
+    entry = client.get("/api/v1/me/config/claude-code").get_json()["data"]["config"]["mcpServers"]["mcprack"]
 
-    assert entry == {"type": "http", "url": f"https://mcprack.example.com/proxy/mcp/{carol['server']}"}
+    assert entry == {"type": "http", "url": "https://mcprack.example.com/proxy/mcp/aggregate"}
 
 
 def test_the_token_variant_can_be_asked_for_even_with_oauth_enabled(app, client, carol):
     app.config["OAUTH_ENABLED"] = True
     _login(client)
 
-    entry = client.get("/api/v1/me/config/claude-code?auth=token").get_json()["data"]["config"]["mcpServers"]["zabbix"]
+    entry = client.get("/api/v1/me/config/claude-code?auth=token").get_json()["data"]["config"]["mcpServers"]["mcprack"]
 
     assert entry["headers"] == {"Authorization": "Bearer ${MCPRACK_TOKEN}"}
 
@@ -113,7 +112,7 @@ def test_download_is_a_dot_mcp_json_attachment(app, client, carol):
 
     assert resp.status_code == 200
     assert resp.headers["Content-Disposition"] == "attachment; filename=.mcp.json"
-    assert json.loads(resp.data)["mcpServers"]["zabbix"]["type"] == "http"
+    assert json.loads(resp.data)["mcpServers"]["mcprack"]["type"] == "http"
 
 
 def test_the_view_page_offers_copyable_claude_commands(app, client, carol):

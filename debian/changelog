@@ -1,3 +1,10 @@
+mcprack (1.8.0-1) UNRELEASED; urgency=medium
+
+  * Add a per-user FastMCP composition endpoint and aggregate client configs.
+  * Separate the user home page from server discovery and subscriptions.
+
+ -- Vítězslav Dvořák <info@vitexsoftware.cz>  Thu, 12 Nov 2026 15:33:24 +0100
+
 mcprack (1.7.0-1) UNRELEASED; urgency=medium
 
   * Security hardening for internet-facing deployments (docs/AUDIT-2026-11.md).

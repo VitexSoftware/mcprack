@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-07 14:18+0100\n"
+"POT-Creation-Date: 2026-11-12 16:31+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,100 +17,175 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: mcprack/app.py:205
+#: mcprack/admin.py:211
+msgid "This access request has already been resolved."
+msgstr ""
+
+#: mcprack/admin.py:216
+msgid "Enable the account and server before granting access."
+msgstr ""
+
+#: mcprack/admin.py:238
+msgid "Access request updated."
+msgstr ""
+
+#: mcprack/app.py:247
 msgid "Bad Request"
 msgstr ""
 
-#: mcprack/app.py:206
+#: mcprack/app.py:248
 msgid "The request could not be understood by the server."
 msgstr ""
 
-#: mcprack/app.py:218
+#: mcprack/app.py:260
 msgid "Access Denied"
 msgstr ""
 
-#: mcprack/app.py:219
+#: mcprack/app.py:261
 msgid "You do not have permission to access this resource."
 msgstr ""
 
-#: mcprack/app.py:231
+#: mcprack/app.py:273
 msgid "Page Not Found"
 msgstr ""
 
-#: mcprack/app.py:232
+#: mcprack/app.py:274
 msgid "The page or resource you requested could not be found."
 msgstr ""
 
-#: mcprack/app.py:244
+#: mcprack/app.py:286
 msgid "Request Too Large"
 msgstr ""
 
-#: mcprack/app.py:245
+#: mcprack/app.py:287
 msgid "The data you submitted is larger than this server accepts."
 msgstr ""
 
-#: mcprack/app.py:258
+#: mcprack/app.py:300
 msgid "Too Many Requests"
 msgstr ""
 
-#: mcprack/app.py:259
+#: mcprack/app.py:301
 msgid ""
 "Too many requests from your IP address. Please slow down and try again "
 "later."
 msgstr ""
 
-#: mcprack/app.py:273
+#: mcprack/app.py:315
 msgid "Internal Server Error"
 msgstr ""
 
-#: mcprack/app.py:274
+#: mcprack/app.py:316
 msgid "An unexpected server error occurred. Please contact the administrator."
 msgstr ""
 
-#: mcprack/app.py:286
+#: mcprack/app.py:328
 msgid "Bad Gateway"
 msgstr ""
 
-#: mcprack/app.py:287
+#: mcprack/app.py:329
 msgid "The upstream service did not respond properly."
 msgstr ""
 
-#: mcprack/auth.py:165 mcprack/auth.py:197
+#: mcprack/auth.py:148
+msgid ""
+"Administrators must set up two-factor authentication before using the "
+"admin area."
+msgstr ""
+
+#: mcprack/auth.py:287
+msgid "Your sign-in expired. Please enter your password again."
+msgstr ""
+
+#: mcprack/auth.py:295 mcprack/auth.py:338 mcprack/auth.py:515
+#: mcprack/auth.py:548 mcprack/auth.py:584
+msgid "Too many failed attempts. Try again in a few minutes."
+msgstr ""
+
+#: mcprack/auth.py:308
+#, python-format
+msgid ""
+"You signed in with a recovery code. %(count)d left - consider generating "
+"new ones."
+msgstr ""
+
+#: mcprack/auth.py:314
+msgid "That code is not valid."
+msgstr ""
+
+#: mcprack/auth.py:354 mcprack/auth.py:384
 msgid "Invalid username or password."
 msgstr ""
 
-#: mcprack/auth.py:185
+#: mcprack/auth.py:374
 msgid "This account has been deactivated."
 msgstr ""
 
-#: mcprack/auth.py:236
+#: mcprack/auth.py:437
 msgid ""
 "Your account is managed externally (LDAP) — its password can't be changed"
 " here."
 msgstr ""
 
-#: mcprack/auth.py:245
+#: mcprack/auth.py:446
 msgid "Current password is incorrect."
 msgstr ""
 
-#: mcprack/auth.py:247 mcprack/auth.py:317
-#, python-format
-msgid "New password must be at least %(n)d characters."
-msgstr ""
-
-#: mcprack/auth.py:249 mcprack/auth.py:319
+#: mcprack/auth.py:448 mcprack/auth.py:661
 msgid "New password and confirmation don't match."
 msgstr ""
 
-#: mcprack/auth.py:256
+#: mcprack/auth.py:458
 msgid "Password changed."
 msgstr ""
 
-#: mcprack/auth.py:282
+#: mcprack/auth.py:478
+msgid "QR code for your authenticator app"
+msgstr ""
+
+#: mcprack/auth.py:479
+msgid "Scan it with an authenticator app to add this account."
+msgstr ""
+
+#: mcprack/auth.py:506
+msgid ""
+"Two-factor authentication is already on. Turn it off first to set it up "
+"again."
+msgstr ""
+
+#: mcprack/auth.py:519
+msgid "Your password is not correct."
+msgstr ""
+
+#: mcprack/auth.py:529
+msgid "That code is not valid. Check the time on your phone and try again."
+msgstr ""
+
+#: mcprack/auth.py:539
+msgid "Two-factor authentication is not on."
+msgstr ""
+
+#: mcprack/auth.py:543
+msgid "Administrators cannot turn two-factor authentication off."
+msgstr ""
+
+#: mcprack/auth.py:554 mcprack/auth.py:594
+msgid "Your password or the code is not correct."
+msgstr ""
+
+#: mcprack/auth.py:565
+msgid "Two-factor authentication is now off."
+msgstr ""
+
+#: mcprack/auth.py:568
+msgid "Unknown action."
+msgstr ""
+
+#: mcprack/auth.py:626
 msgid "mcprack password reset"
 msgstr ""
 
-#: mcprack/auth.py:284
+#: mcprack/auth.py:628
 #, python-format
 msgid ""
 "Someone (hopefully you) requested a password reset for the mcprack "
@@ -123,23 +198,34 @@ msgid ""
 " changed."
 msgstr ""
 
-#: mcprack/auth.py:296
+#: mcprack/auth.py:640
 msgid ""
 "If that account exists and has an email on file, a reset link has been "
 "sent."
 msgstr ""
 
-#: mcprack/auth.py:309
+#: mcprack/auth.py:653
 msgid "This password reset link is invalid or has expired."
 msgstr ""
 
-#: mcprack/auth.py:326
+#: mcprack/auth.py:671
 msgid "Password reset. You can now log in."
+msgstr ""
+
+#: mcprack/catalog.py:476
+msgid "Your access request was sent to the administrators."
+msgstr ""
+
+#: mcprack/reauth.py:159
+msgid ""
+"Please confirm your password to continue. Your changes were not saved - "
+"submit them again afterwards."
 msgstr ""
 
 #: mcprack/templates/_config_paths.html:4
 #: mcprack/templates/_config_paths.html:27
-#: mcprack/templates/_config_paths.html:42
+#: mcprack/templates/_config_paths.html:40
+#: mcprack/templates/_config_paths.html:55
 msgid "Where to put this file"
 msgstr ""
 
@@ -148,21 +234,21 @@ msgid "Claude Desktop app — replace the whole file at:"
 msgstr ""
 
 #: mcprack/templates/_config_paths.html:9
-#: mcprack/templates/_config_paths.html:32
-#: mcprack/templates/_config_paths.html:47
+#: mcprack/templates/_config_paths.html:45
+#: mcprack/templates/_config_paths.html:60
 msgid "Linux"
 msgstr ""
 
 #: mcprack/templates/_config_paths.html:10
-#: mcprack/templates/_config_paths.html:33
-#: mcprack/templates/_config_paths.html:48
+#: mcprack/templates/_config_paths.html:46
+#: mcprack/templates/_config_paths.html:61
 msgid "macOS"
 msgstr ""
 
 #: mcprack/templates/_config_paths.html:11
 #: mcprack/templates/_config_paths.html:19
-#: mcprack/templates/_config_paths.html:34
-#: mcprack/templates/_config_paths.html:49
+#: mcprack/templates/_config_paths.html:47
+#: mcprack/templates/_config_paths.html:62
 msgid "Windows"
 msgstr ""
 
@@ -184,30 +270,137 @@ msgstr ""
 
 #: mcprack/templates/_config_paths.html:29
 msgid ""
+"Claude Code, project scope — save it as .mcp.json in the root of the "
+"project. The file contains no secret, so it can be committed; Claude Code"
+" reads the token from the MCPRACK_TOKEN environment variable and asks for"
+" approval before using a project-scoped server."
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:32
+msgid "Any OS"
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:36
+msgid ""
+"For all your projects use the claude mcp add commands on the View & Copy "
+"page instead (user scope)."
+msgstr ""
+
+#: mcprack/templates/_config_paths.html:42
+msgid ""
 "VS Code (user profile — applies to every workspace). If the file already "
 "exists, merge the \"servers\" key into it instead of overwriting it:"
 msgstr ""
 
-#: mcprack/templates/_config_paths.html:38
+#: mcprack/templates/_config_paths.html:51
 msgid ""
 "Or install <code>mcprack-sync-vscode</code> and run <code>mcprack-sync-"
 "vscode sync</code> to keep this file up to date automatically."
 msgstr ""
 
-#: mcprack/templates/_config_paths.html:44
+#: mcprack/templates/_config_paths.html:57
 msgid ""
 "Cursor (user profile). If the file already exists, merge the "
 "\"mcpServers\" key into it instead of overwriting it:"
 msgstr ""
 
-#: mcprack/templates/_config_paths.html:50
+#: mcprack/templates/_config_paths.html:63
 msgid "Also checked"
 msgstr ""
 
-#: mcprack/templates/_config_paths.html:54
+#: mcprack/templates/_config_paths.html:67
 msgid ""
 "Or install <code>mcprack-sync-cursor</code> and run <code>mcprack-sync-"
 "cursor sync</code> to keep this file up to date automatically."
+msgstr ""
+
+#: mcprack/templates/_nav.html:11
+msgid "Main navigation"
+msgstr ""
+
+#: mcprack/templates/_nav.html:13
+msgid "Workspace"
+msgstr ""
+
+#: mcprack/templates/_nav.html:14 mcprack/templates/catalog.html:2
+msgid "Overview"
+msgstr ""
+
+#: mcprack/templates/_nav.html:15 mcprack/templates/server_page.html:21
+#: mcprack/templates/servers.html:2 mcprack/templates/servers.html:6
+msgid "MCP servers"
+msgstr ""
+
+#: mcprack/templates/_nav.html:19
+msgid "Registry"
+msgstr ""
+
+#: mcprack/templates/_nav.html:20
+msgid "All Servers"
+msgstr ""
+
+#: mcprack/templates/_nav.html:21
+msgid "Install New Server"
+msgstr ""
+
+#: mcprack/templates/_nav.html:22
+msgid "Config Templates"
+msgstr ""
+
+#: mcprack/templates/_nav.html:25 mcprack/templates/admin/user_form.html:78
+msgid "Access"
+msgstr ""
+
+#: mcprack/templates/_nav.html:26
+msgid "All Users"
+msgstr ""
+
+#: mcprack/templates/_nav.html:27
+msgid "Access Requests"
+msgstr ""
+
+#: mcprack/templates/_nav.html:28
+msgid "Proxy Instances"
+msgstr ""
+
+#: mcprack/templates/_nav.html:31
+msgid "Observability"
+msgstr ""
+
+#: mcprack/templates/_nav.html:32 mcprack/templates/admin/audit_log.html:2
+#: mcprack/templates/admin/audit_log.html:6
+#: mcprack/templates/admin/audit_log_detail.html:2
+msgid "Audit Log"
+msgstr ""
+
+#: mcprack/templates/_nav.html:35
+msgid "System"
+msgstr ""
+
+#: mcprack/templates/_nav.html:36
+msgid "Vaultwarden Setup"
+msgstr ""
+
+#: mcprack/templates/_nav.html:37
+msgid "OAuth Diagnostics"
+msgstr ""
+
+#: mcprack/templates/_nav.html:38
+msgid "OTEL Diagnostics"
+msgstr ""
+
+#: mcprack/templates/_nav.html:42 mcprack/templates/admin/user_form.html:34
+msgid "Account"
+msgstr ""
+
+#: mcprack/templates/_nav.html:44 mcprack/templates/base.html:59
+msgid "Change Password"
+msgstr ""
+
+#: mcprack/templates/_nav.html:46 mcprack/templates/account_mfa.html:2
+#: mcprack/templates/account_mfa.html:7 mcprack/templates/base.html:63
+#: mcprack/templates/login_mfa.html:2 mcprack/templates/login_mfa.html:7
+msgid "Two-factor authentication"
 msgstr ""
 
 #: mcprack/templates/_override_editor.html:13
@@ -227,6 +420,7 @@ msgstr ""
 #: mcprack/templates/admin/install_wizard.html:103
 #: mcprack/templates/admin/install_wizard.html:137
 #: mcprack/templates/admin/server_form.html:178
+#: mcprack/templates/server_page.html:113
 msgid "required"
 msgstr ""
 
@@ -335,9 +529,9 @@ msgstr ""
 
 #: mcprack/templates/_proxy_auth_note.html:6
 msgid ""
-"MCP OAuth is enabled: relay URLs look like "
-"<code>/proxy/mcp/&lt;id&gt;</code> with no secret in the path. Your "
-"client will open a browser login the first time it connects."
+"MCP OAuth is enabled: the aggregate URL is "
+"<code>/proxy/mcp/aggregate</code> with no secret in the path. Your client"
+" will open a browser login the first time it connects."
 msgstr ""
 
 #: mcprack/templates/_proxy_auth_note.html:9
@@ -352,6 +546,134 @@ msgid ""
 "copied config like a password."
 msgstr ""
 
+#: mcprack/templates/account_mfa.html:12
+msgid "Two-factor authentication is now on."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:13
+msgid "Your recovery codes"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:14
+msgid ""
+"Each code works once, if you lose your phone. They are shown only now — "
+"store them somewhere safe (a password manager, a printout)."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:17
+msgid "I have saved them"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:22
+msgid "Set up your authenticator app"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:25
+msgid ""
+"In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) "
+"choose to add an account and scan this QR code."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:26 mcprack/templates/account_mfa.html:38
+msgid "Enter the code the app shows to confirm."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:30
+msgid "Cannot scan it? Enter the key by hand"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:31 mcprack/templates/account_mfa.html:37
+msgid "Key:"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:31 mcprack/templates/account_mfa.html:37
+msgid "time-based, 6 digits"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:32 mcprack/templates/account_mfa.html:40
+msgid "Or import this address into an app that accepts it:"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:36
+msgid ""
+"In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) add "
+"an account by entering a key manually."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:46
+msgid "Code from the app"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:49
+msgid "Turn on"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:55
+msgid "Two-factor authentication is on."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:56
+#, python-format
+msgid "%(num)d recovery code left."
+msgid_plural "%(num)d recovery codes left."
+msgstr[0] ""
+msgstr[1] ""
+
+#: mcprack/templates/account_mfa.html:57 mcprack/templates/error.html:10
+#: mcprack/templates/override.html:31 mcprack/templates/view_config.html:34
+msgid "Back to Catalog"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:59
+msgid "Generate new recovery codes"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:60
+msgid "The old ones stop working."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:65 mcprack/templates/account_mfa.html:84
+#: mcprack/templates/account_mfa.html:106
+#: mcprack/templates/account_password.html:14
+#: mcprack/templates/account_reauth.html:17
+msgid "Current password"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:69 mcprack/templates/account_mfa.html:88
+#: mcprack/templates/login_mfa.html:15
+msgid "Code"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:72
+msgid "Generate new codes"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:79
+msgid "Turn off"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:91
+msgid "Turn off two-factor authentication"
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:95
+msgid "Administrators cannot turn it off."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:100
+msgid ""
+"Two-factor authentication is off. With it on, signing in needs a code "
+"from an authenticator app in addition to your password."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:101
+msgid "As an administrator you must set it up before you can use the admin area."
+msgstr ""
+
+#: mcprack/templates/account_mfa.html:109
+msgid "Set up"
+msgstr ""
+
 #: mcprack/templates/account_password.html:2
 #: mcprack/templates/account_password.html:26
 msgid "Change password"
@@ -359,10 +681,6 @@ msgstr ""
 
 #: mcprack/templates/account_password.html:7
 msgid "Change your password"
-msgstr ""
-
-#: mcprack/templates/account_password.html:14
-msgid "Current password"
 msgstr ""
 
 #: mcprack/templates/account_password.html:18
@@ -375,169 +693,155 @@ msgstr ""
 msgid "Confirm new password"
 msgstr ""
 
-#: mcprack/templates/base.html:29
+#: mcprack/templates/account_reauth.html:2
+#: mcprack/templates/account_reauth.html:7
+msgid "Confirm your identity"
+msgstr ""
+
+#: mcprack/templates/account_reauth.html:8
+msgid ""
+"This action changes what the server runs or who can access it. Confirm "
+"your identity to continue."
+msgstr ""
+
+#: mcprack/templates/account_reauth.html:9
+msgid "Your password and a code are needed."
+msgstr ""
+
+#: mcprack/templates/account_reauth.html:9
+msgid "Your password is needed."
+msgstr ""
+
+#: mcprack/templates/account_reauth.html:22
+msgid "Code from your authenticator app (or a recovery code)"
+msgstr ""
+
+#: mcprack/templates/account_reauth.html:26
+msgid "Confirm"
+msgstr ""
+
+#: mcprack/templates/base.html:24
+msgid "Toggle menu"
+msgstr ""
+
+#: mcprack/templates/base.html:35
 msgid "View on GitHub"
 msgstr ""
 
-#: mcprack/templates/base.html:29
+#: mcprack/templates/base.html:35
 msgid "View mcprack on GitHub"
 msgstr ""
 
-#: mcprack/templates/base.html:51
-msgid "Catalog"
-msgstr ""
-
-#: mcprack/templates/base.html:54
-msgid "All Servers"
-msgstr ""
-
-#: mcprack/templates/base.html:55
-msgid "Install New Server"
-msgstr ""
-
-#: mcprack/templates/base.html:56
-msgid "All Users"
-msgstr ""
-
-#: mcprack/templates/base.html:57
-msgid "Config Templates"
-msgstr ""
-
-#: mcprack/templates/base.html:58
-msgid "Proxy Instances"
-msgstr ""
-
-#: mcprack/templates/admin/audit_log.html:2
-#: mcprack/templates/admin/audit_log.html:6
-#: mcprack/templates/admin/audit_log_detail.html:2
-#: mcprack/templates/base.html:59
-msgid "Audit Log"
-msgstr ""
-
-#: mcprack/templates/base.html:60
-msgid "Vaultwarden Setup"
-msgstr ""
-
-#: mcprack/templates/base.html:61
-msgid "OAuth Diagnostics"
-msgstr ""
-
-#: mcprack/templates/base.html:62
-msgid "OTEL Diagnostics"
-msgstr ""
-
-#: mcprack/templates/base.html:66
-msgid "Change Password"
-msgstr ""
-
-#: mcprack/templates/base.html:69
+#: mcprack/templates/base.html:67
 msgid "Log out"
 msgstr ""
 
-#: mcprack/templates/base.html:114
+#: mcprack/templates/base.html:121
 msgid "Loading..."
 msgstr ""
 
-#: mcprack/templates/catalog.html:2 mcprack/templates/catalog.html:6
-msgid "MCP Server Catalog"
+#: mcprack/templates/base.html:127
+msgid "Search:"
+msgstr ""
+
+#: mcprack/templates/base.html:128
+msgid "Show _MENU_ rows"
+msgstr ""
+
+#: mcprack/templates/base.html:129
+msgid "_START_–_END_ of _TOTAL_"
+msgstr ""
+
+#: mcprack/templates/base.html:130
+msgid "0 rows"
+msgstr ""
+
+#: mcprack/templates/base.html:131
+msgid "(filtered from _MAX_)"
+msgstr ""
+
+#: mcprack/templates/base.html:132
+msgid "No matching rows"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:38 mcprack/templates/base.html:133
+msgid "Previous"
+msgstr ""
+
+#: mcprack/templates/admin/server_form.html:39 mcprack/templates/base.html:134
+msgid "Next"
+msgstr ""
+
+#: mcprack/templates/catalog.html:6
+msgid "MCP overview"
 msgstr ""
 
 #: mcprack/templates/catalog.html:7
-msgid ""
-"Select servers, save, then download or copy a client config. You can "
-"change the selection anytime."
-msgstr ""
-
-#: mcprack/templates/catalog.html:11
-msgid "Download Your Config"
+msgid "Your connected MCP services and aggregate endpoint."
 msgstr ""
 
 #: mcprack/templates/catalog.html:12
-msgid "Download or copy the config for your AI client:"
+msgid "Aggregated MCP URL"
+msgstr ""
+
+#: mcprack/templates/catalog.html:16 mcprack/templates/server_page.html:39
+msgid "Copy URL"
 msgstr ""
 
 #: mcprack/templates/catalog.html:18
+msgid "Servers available through this URL"
+msgstr ""
+
+#: mcprack/templates/catalog.html:30
+msgid "Manage server subscriptions"
+msgstr ""
+
+#: mcprack/templates/catalog.html:34
+msgid "No MCP servers selected"
+msgstr ""
+
+#: mcprack/templates/catalog.html:35
+msgid "Choose servers to make them available through your aggregate endpoint."
+msgstr ""
+
+#: mcprack/templates/catalog.html:36
+msgid "Browse MCP servers"
+msgstr ""
+
+#: mcprack/templates/catalog.html:41
+msgid "Download Your Config"
+msgstr ""
+
+#: mcprack/templates/catalog.html:42
+msgid "Download or copy the config for your AI client:"
+msgstr ""
+
+#: mcprack/templates/catalog.html:46
 msgid "Works with Claude for Desktop application."
 msgstr ""
 
-#: mcprack/templates/catalog.html:21 mcprack/templates/catalog.html:36
-#: mcprack/templates/catalog.html:51
+#: mcprack/templates/catalog.html:49 mcprack/templates/catalog.html:64
+#: mcprack/templates/catalog.html:79 mcprack/templates/catalog.html:94
 msgid "Download Config"
 msgstr ""
 
-#: mcprack/templates/catalog.html:24 mcprack/templates/catalog.html:39
-#: mcprack/templates/catalog.html:54
+#: mcprack/templates/catalog.html:52 mcprack/templates/catalog.html:67
+#: mcprack/templates/catalog.html:82 mcprack/templates/catalog.html:97
 msgid "View & Copy"
 msgstr ""
 
-#: mcprack/templates/catalog.html:33
+#: mcprack/templates/catalog.html:61
+msgid ""
+"A .mcp.json without secrets, plus claude mcp add commands. Needs an API "
+"token in MCPRACK_TOKEN."
+msgstr ""
+
+#: mcprack/templates/catalog.html:76
 msgid "Works with VS Code Copilot and other GitHub Copilot clients."
 msgstr ""
 
-#: mcprack/templates/catalog.html:48
+#: mcprack/templates/catalog.html:91
 msgid "Works with the Cursor IDE MCP settings."
-msgstr ""
-
-#: mcprack/templates/catalog.html:65
-msgid "Add as Individual Connectors"
-msgstr ""
-
-#: mcprack/templates/catalog.html:66
-msgid "For Claude Desktop / claude.ai custom connectors — copy name + URL below."
-msgstr ""
-
-#: mcprack/templates/admin/servers_list.html:29
-#: mcprack/templates/admin/templates_list.html:14
-#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:80
-#: mcprack/templates/catalog.html:158
-msgid "Name"
-msgstr ""
-
-#: mcprack/templates/catalog.html:83 mcprack/templates/catalog.html:90
-#: mcprack/templates/catalog.html:161 mcprack/templates/catalog.html:168
-msgid "Copy"
-msgstr ""
-
-#: mcprack/templates/catalog.html:87 mcprack/templates/catalog.html:165
-msgid "URL"
-msgstr ""
-
-#: mcprack/templates/catalog.html:104
-msgid "Available Servers"
-msgstr ""
-
-#: mcprack/templates/catalog.html:113
-#, python-format
-msgid "Select %(label)s"
-msgstr ""
-
-#: mcprack/templates/catalog.html:128
-msgid "Connector"
-msgstr ""
-
-#: mcprack/templates/catalog.html:133
-msgid "Using Custom Credentials"
-msgstr ""
-
-#: mcprack/templates/catalog.html:135
-msgid "Use My Own Credentials"
-msgstr ""
-
-#: mcprack/templates/catalog.html:144
-msgid "No servers available yet. Ask an admin to register some."
-msgstr ""
-
-#: mcprack/templates/catalog.html:149
-msgid "Save Selection"
-msgstr ""
-
-#: mcprack/templates/catalog.html:172
-msgid "Close"
-msgstr ""
-
-#: mcprack/templates/error.html:10 mcprack/templates/override.html:31
-#: mcprack/templates/view_config.html:24
-msgid "Back to Catalog"
 msgstr ""
 
 #: mcprack/templates/forgot_password.html:2
@@ -584,12 +888,12 @@ msgstr ""
 msgid "MCP Self-Service Catalog & Config Generator"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:8
+#: mcprack/templates/admin/user_form.html:38
 #: mcprack/templates/admin/users_list.html:8 mcprack/templates/login.html:18
 msgid "Username"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:14 mcprack/templates/login.html:23
+#: mcprack/templates/admin/user_form.html:46 mcprack/templates/login.html:23
 msgid "Password"
 msgstr ""
 
@@ -603,6 +907,20 @@ msgstr ""
 
 #: mcprack/templates/login.html:40
 msgid "Use your local mcprack account."
+msgstr ""
+
+#: mcprack/templates/login_mfa.html:8
+msgid ""
+"Enter the 6-digit code from your authenticator app, or one of your "
+"recovery codes."
+msgstr ""
+
+#: mcprack/templates/login_mfa.html:18
+msgid "Verify"
+msgstr ""
+
+#: mcprack/templates/login_mfa.html:20
+msgid "Start over"
 msgstr ""
 
 #: mcprack/templates/oauth_consent.html:2
@@ -625,30 +943,42 @@ msgid "will connect as"
 msgstr ""
 
 #: mcprack/templates/oauth_consent.html:21
+msgid "After you allow this, the authorization code is sent to:"
+msgstr ""
+
+#: mcprack/templates/oauth_consent.html:27
+msgid ""
+"This address is on this computer. Only allow it if you just started this "
+"connection from an application running on this computer."
+msgstr ""
+
+#: mcprack/templates/oauth_consent.html:32
 msgid "Access is limited to MCP servers you have selected in the catalog."
 msgstr ""
 
-#: mcprack/templates/oauth_consent.html:22
+#: mcprack/templates/oauth_consent.html:33
 msgid ""
 "Backend credentials stay on the server — they are never sent to the "
 "client."
 msgstr ""
 
-#: mcprack/templates/oauth_consent.html:24
+#: mcprack/templates/oauth_consent.html:35
 msgid "Requested scopes:"
 msgstr ""
 
-#: mcprack/templates/oauth_consent.html:29
+#: mcprack/templates/oauth_consent.html:40
 msgid "Client id:"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:58
-#: mcprack/templates/oauth_consent.html:36
+#: mcprack/templates/admin/access_requests.html:23
+#: mcprack/templates/admin/user_form.html:97
+#: mcprack/templates/oauth_consent.html:47
 msgid "Allow"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:62
-#: mcprack/templates/oauth_consent.html:39
+#: mcprack/templates/admin/access_requests.html:27
+#: mcprack/templates/admin/user_form.html:101
+#: mcprack/templates/oauth_consent.html:50
 msgid "Deny"
 msgstr ""
 
@@ -686,6 +1016,217 @@ msgstr ""
 msgid "Choose a new password"
 msgstr ""
 
+#: mcprack/templates/admin/user_form.html:15
+#: mcprack/templates/server_page.html:17 mcprack/templates/servers.html:34
+msgid "Disabled"
+msgstr ""
+
+#: mcprack/templates/server_page.html:26
+msgid "Access and configuration"
+msgstr ""
+
+#: mcprack/templates/server_page.html:28
+msgid "Administrator allows access"
+msgstr ""
+
+#: mcprack/templates/server_page.html:29 mcprack/templates/server_page.html:31
+#: mcprack/templates/server_page.html:33
+msgid "Yes"
+msgstr ""
+
+#: mcprack/templates/server_page.html:29 mcprack/templates/server_page.html:31
+#: mcprack/templates/server_page.html:33
+msgid "No"
+msgstr ""
+
+#: mcprack/templates/server_page.html:30
+msgid "Configured"
+msgstr ""
+
+#: mcprack/templates/server_page.html:32
+msgid "In your subscriptions"
+msgstr ""
+
+#: mcprack/templates/server_page.html:37
+msgid "Individual MCP URL"
+msgstr ""
+
+#: mcprack/templates/server_page.html:42
+msgid "This server is disabled by an administrator."
+msgstr ""
+
+#: mcprack/templates/server_page.html:46
+msgid "Your access request is waiting for administrator review."
+msgstr ""
+
+#: mcprack/templates/server_page.html:48
+msgid "Your previous access request was declined."
+msgstr ""
+
+#: mcprack/templates/server_page.html:51
+msgid "Request access"
+msgstr ""
+
+#: mcprack/templates/server_page.html:55
+msgid "An administrator has not allowed access to this server."
+msgstr ""
+
+#: mcprack/templates/server_page.html:58
+msgid "Select this server on the MCP servers page to get its individual URL."
+msgstr ""
+
+#: mcprack/templates/server_page.html:63
+msgid "What it does"
+msgstr ""
+
+#: mcprack/templates/server_page.html:73
+msgid "This server has not published a description yet."
+msgstr ""
+
+#: mcprack/templates/server_page.html:78
+msgid "Project"
+msgstr ""
+
+#: mcprack/templates/server_page.html:80
+msgid "Author"
+msgstr ""
+
+#: mcprack/templates/server_page.html:89
+msgid "Homepage"
+msgstr ""
+
+#: mcprack/templates/server_page.html:93
+msgid "Bug tracker"
+msgstr ""
+
+#: mcprack/templates/server_page.html:97
+msgid "assigned by this mcprack — the project has not declared one"
+msgstr ""
+
+#: mcprack/templates/server_page.html:102
+msgid "Parameters"
+msgstr ""
+
+#: mcprack/templates/server_page.html:104
+msgid ""
+"Environment variables the server reads. Values are set by an "
+"administrator or in your own configuration; they are never shown here."
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:29
+#: mcprack/templates/admin/templates_list.html:14
+#: mcprack/templates/admin/users_list.html:8
+#: mcprack/templates/server_page.html:107
+msgid "Name"
+msgstr ""
+
+#: mcprack/templates/admin/template_form.html:17
+#: mcprack/templates/admin/templates_list.html:16
+#: mcprack/templates/server_page.html:107
+msgid "Description"
+msgstr ""
+
+#: mcprack/templates/server_page.html:107
+msgid "Required"
+msgstr ""
+
+#: mcprack/templates/server_page.html:107
+msgid "Secret"
+msgstr ""
+
+#: mcprack/templates/server_page.html:112
+msgid "one of"
+msgstr ""
+
+#: mcprack/templates/server_page.html:121
+msgid "No parameters are declared for this server."
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:92
+#: mcprack/templates/server_page.html:127
+#: mcprack/templates/server_page.html:128
+#: mcprack/templates/server_page.html:152
+msgid "Tools"
+msgstr ""
+
+#: mcprack/templates/server_page.html:128
+msgid "Prompts"
+msgstr ""
+
+#: mcprack/templates/server_page.html:128
+msgid "Resources"
+msgstr ""
+
+#: mcprack/templates/server_page.html:139
+msgid "Administration"
+msgstr ""
+
+#: mcprack/templates/server_page.html:141
+msgid "Command"
+msgstr ""
+
+#: mcprack/templates/server_page.html:143
+msgid "Metadata sources"
+msgstr ""
+
+#: mcprack/templates/server_page.html:145
+msgid "only lhm.plugin.json found — add server.json"
+msgstr ""
+
+#: mcprack/templates/server_page.html:147
+msgid "Missing information"
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:82
+#: mcprack/templates/admin/templates_list.html:29
+#: mcprack/templates/admin/users_list.html:18
+#: mcprack/templates/server_page.html:151
+msgid "Edit"
+msgstr ""
+
+#: mcprack/templates/servers.html:7
+msgid ""
+"Choose which permitted servers are available through your aggregate "
+"endpoint. Ask an administrator for access to other servers."
+msgstr ""
+
+#: mcprack/templates/servers.html:22
+#, python-format
+msgid "Select %(label)s"
+msgstr ""
+
+#: mcprack/templates/servers.html:23
+msgid "Server details"
+msgstr ""
+
+#: mcprack/templates/servers.html:36
+msgid "Access allowed"
+msgstr ""
+
+#: mcprack/templates/servers.html:38
+msgid "Access not allowed"
+msgstr ""
+
+#: mcprack/templates/servers.html:42
+msgid "Custom credentials"
+msgstr ""
+
+#: mcprack/templates/servers.html:42
+msgid "Set my credentials"
+msgstr ""
+
+#: mcprack/templates/servers.html:45
+msgid "Details"
+msgstr ""
+
+#: mcprack/templates/servers.html:51
+msgid "Save subscriptions"
+msgstr ""
+
+#: mcprack/templates/servers.html:54
+msgid "No MCP servers are registered yet."
+msgstr ""
+
 #: mcprack/templates/view_config.html:7
 msgid ""
 "Copy the configuration below into your client's config file, or download "
@@ -697,29 +1238,77 @@ msgstr ""
 msgid "Copy failed — select the text manually."
 msgstr ""
 
-#: mcprack/templates/admin/user_config_view.html:18
 #: mcprack/templates/view_config.html:18
+msgid "Or add the servers with the Claude Code CLI"
+msgstr ""
+
+#: mcprack/templates/view_config.html:20
+msgid ""
+"Create an API token with the scope proxy:access and export it as "
+"MCPRACK_TOKEN first. The commands use user scope (all your projects); the"
+" token stays in your environment, never in a file."
+msgstr ""
+
+#: mcprack/templates/admin/user_config_view.html:18
+#: mcprack/templates/view_config.html:28
 msgid "Copy to clipboard"
 msgstr ""
 
 #: mcprack/templates/admin/user_config_view.html:21
-#: mcprack/templates/view_config.html:21
+#: mcprack/templates/view_config.html:31
 msgid "Download File"
 msgstr ""
 
 #: mcprack/templates/admin/user_config_view.html:29
-#: mcprack/templates/view_config.html:29
+#: mcprack/templates/view_config.html:39
 msgid "Copied to clipboard!"
 msgstr ""
 
+#: mcprack/templates/admin/access_requests.html:2
+msgid "Access requests"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:2
 #: mcprack/templates/admin/audit_log.html:2
 #: mcprack/templates/admin/servers_list.html:2
 #: mcprack/templates/admin/template_form.html:2
 #: mcprack/templates/admin/templates_list.html:2
-#: mcprack/templates/admin/user_form.html:30
+#: mcprack/templates/admin/user_form.html:14
+#: mcprack/templates/admin/user_form.html:63
 #: mcprack/templates/admin/user_override_form.html:3
 #: mcprack/templates/admin/users_list.html:8
 msgid "Admin"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:6
+msgid "MCP server access requests"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:11
+#: mcprack/templates/admin/audit_log.html:23
+#: mcprack/templates/admin/audit_log.html:56
+#: mcprack/templates/admin/audit_log_detail.html:22
+#: mcprack/templates/admin/proxy_instances.html:13
+#: mcprack/templates/admin/proxy_instances.html:55
+msgid "User"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:11
+msgid "MCP server"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:11
+msgid "Requested"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:11
+#: mcprack/templates/admin/proxy_instances.html:62
+#: mcprack/templates/admin/servers_list.html:35
+msgid "Actions"
+msgstr ""
+
+#: mcprack/templates/admin/access_requests.html:37
+msgid "There are no pending server access requests."
 msgstr ""
 
 #: mcprack/templates/admin/audit_log.html:8
@@ -742,20 +1331,12 @@ msgstr ""
 #: mcprack/templates/admin/proxy_instances.html:56
 #: mcprack/templates/admin/proxy_instances.html:113
 #: mcprack/templates/admin/template_form.html:25
-#: mcprack/templates/admin/user_form.html:44
+#: mcprack/templates/admin/user_form.html:77
 msgid "Server"
 msgstr ""
 
 #: mcprack/templates/admin/audit_log.html:16
 msgid "All servers"
-msgstr ""
-
-#: mcprack/templates/admin/audit_log.html:23
-#: mcprack/templates/admin/audit_log.html:56
-#: mcprack/templates/admin/audit_log_detail.html:22
-#: mcprack/templates/admin/proxy_instances.html:13
-#: mcprack/templates/admin/proxy_instances.html:55
-msgid "User"
 msgstr ""
 
 #: mcprack/templates/admin/audit_log.html:25
@@ -1123,11 +1704,6 @@ msgstr ""
 msgid "Log"
 msgstr ""
 
-#: mcprack/templates/admin/proxy_instances.html:62
-#: mcprack/templates/admin/servers_list.html:35
-msgid "Actions"
-msgstr ""
-
 #: mcprack/templates/admin/proxy_instances.html:76
 msgid "stale"
 msgstr ""
@@ -1185,14 +1761,6 @@ msgstr ""
 msgid "Options"
 msgstr ""
 
-#: mcprack/templates/admin/server_form.html:38
-msgid "Previous"
-msgstr ""
-
-#: mcprack/templates/admin/server_form.html:39
-msgid "Next"
-msgstr ""
-
 #: mcprack/templates/admin/server_form.html:56
 msgid "This name is already used by another server."
 msgstr ""
@@ -1246,9 +1814,15 @@ msgid "Category"
 msgstr ""
 
 #: mcprack/templates/admin/servers_list.html:33
+#: mcprack/templates/admin/user_form.html:26
 #: mcprack/templates/admin/users_list.html:2
 #: mcprack/templates/admin/users_list.html:4
 msgid "Users"
+msgstr ""
+
+#: mcprack/templates/admin/servers_list.html:44
+#: mcprack/templates/admin/user_form.html:89
+msgid "About this server"
 msgstr ""
 
 #: mcprack/templates/admin/servers_list.html:57
@@ -1297,12 +1871,6 @@ msgstr ""
 msgid "ok"
 msgstr ""
 
-#: mcprack/templates/admin/servers_list.html:82
-#: mcprack/templates/admin/templates_list.html:29
-#: mcprack/templates/admin/users_list.html:18
-msgid "Edit"
-msgstr ""
-
 #: mcprack/templates/admin/servers_list.html:86
 msgid ""
 "Actually start the command briefly to catch runtime-broken registrations "
@@ -1312,10 +1880,6 @@ msgstr ""
 
 #: mcprack/templates/admin/servers_list.html:87
 msgid "Test"
-msgstr ""
-
-#: mcprack/templates/admin/servers_list.html:92
-msgid "Tools"
 msgstr ""
 
 #: mcprack/templates/admin/servers_list.html:95
@@ -1349,11 +1913,6 @@ msgstr ""
 msgid "Name (stable identifier, used by the CLI)"
 msgstr ""
 
-#: mcprack/templates/admin/template_form.html:17
-#: mcprack/templates/admin/templates_list.html:16
-msgid "Description"
-msgstr ""
-
 #: mcprack/templates/admin/template_form.html:20
 #: mcprack/templates/admin/templates_list.html:17
 msgid "Servers"
@@ -1375,17 +1934,18 @@ msgid "Pre-selected"
 msgstr ""
 
 #: mcprack/templates/admin/template_form.html:39
-#: mcprack/templates/admin/user_form.html:84
+#: mcprack/templates/admin/user_form.html:125
 msgid "No enabled servers available."
 msgstr ""
 
 #: mcprack/templates/admin/template_form.html:42
-#: mcprack/templates/admin/user_form.html:96
+#: mcprack/templates/admin/user_form.html:141
 #: mcprack/templates/admin/user_override_form.html:27
 msgid "Save"
 msgstr ""
 
 #: mcprack/templates/admin/template_form.html:43
+#: mcprack/templates/admin/user_form.html:142
 msgid "Cancel"
 msgstr ""
 
@@ -1437,7 +1997,6 @@ msgid "Back to %(username)s"
 msgstr ""
 
 #: mcprack/templates/admin/user_form.html:2
-#: mcprack/templates/admin/user_form.html:4
 msgid "Edit user"
 msgstr ""
 
@@ -1445,97 +2004,131 @@ msgstr ""
 msgid "New user"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:4
-msgid "Create local user"
-msgstr ""
-
-#: mcprack/templates/admin/user_form.html:11
-msgid "Email"
-msgstr ""
-
-#: mcprack/templates/admin/user_form.html:19
-msgid "New password (leave blank to keep current)"
-msgstr ""
-
-#: mcprack/templates/admin/user_form.html:24
+#: mcprack/templates/admin/user_form.html:15
+#: mcprack/templates/admin/user_form.html:59
 #: mcprack/templates/admin/users_list.html:8
 msgid "Active"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:35
+#: mcprack/templates/admin/user_form.html:16
+msgid "2FA"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:19
 #, python-format
 msgid "Last based on template: %(label)s"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:38
+#: mcprack/templates/admin/user_form.html:24
+msgid "Create local user"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:42
+msgid "Email"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:52
+msgid "New password (leave blank to keep current)"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:70
 msgid "Server access &amp; config selection"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:39
+#: mcprack/templates/admin/user_form.html:71
 msgid ""
 "Allow or deny each server for this user, and tick which allowed servers "
 "should actually be included in their generated config — the admin decides"
 " this on their behalf, no login required."
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:45
-msgid "Access"
-msgstr ""
-
-#: mcprack/templates/admin/user_form.html:46
+#: mcprack/templates/admin/user_form.html:79
 msgid "Included in config"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:47
+#: mcprack/templates/admin/user_form.html:80
 msgid "Individual credentials"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:68
+#: mcprack/templates/admin/user_form.html:108
 msgid "Included"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:73
+#: mcprack/templates/admin/user_form.html:113
 msgid "Edit values"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:73
+#: mcprack/templates/admin/user_form.html:113
 msgid "set"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:76
+#: mcprack/templates/admin/user_form.html:116
 msgid "self-service override disabled — admin only"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:87
+#: mcprack/templates/admin/user_form.html:130
 msgid "Client configs"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:88
+#: mcprack/templates/admin/user_form.html:131
 msgid ""
 "View or download this user's MCP client config directly — useful for "
 "users who never log in themselves."
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:100
+#: mcprack/templates/admin/user_form.html:149
 msgid "Apply a configuration template"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:101
+#: mcprack/templates/admin/user_form.html:150
 msgid ""
 "Replaces this user's access and selection with the template's. Individual"
 " credentials already set for this user are kept."
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:105
+#: mcprack/templates/admin/user_form.html:154
 msgid "Choose a template…"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:110
+#: mcprack/templates/admin/user_form.html:159
 msgid "Apply template"
 msgstr ""
 
-#: mcprack/templates/admin/user_form.html:112
+#: mcprack/templates/admin/user_form.html:160
 msgid "Manage templates"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:167
+msgid "Security"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:169
+msgid "Two-factor authentication is on for this user."
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:169
+msgid "Two-factor authentication is off for this user."
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:172
+msgid ""
+"Revoke all tokens of this user? They will have to download a new "
+"configuration."
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:174
+msgid "Revoke all tokens"
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:177
+msgid ""
+"Turn off two-factor authentication for this user? Use this when they have"
+" lost their device and recovery codes. They sign in with the password "
+"only until they set it up again."
+msgstr ""
+
+#: mcprack/templates/admin/user_form.html:179
+msgid "Reset two-factor authentication"
 msgstr ""
 
 #: mcprack/templates/admin/user_override_form.html:3

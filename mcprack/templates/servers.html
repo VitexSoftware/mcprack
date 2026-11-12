@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block title %}{{ _('MCP servers') }} — mcprack{% endblock %}
+{% block content %}
+
+<section class="section">
+  <h1>{{ _('MCP servers') }}</h1>
+  <p class="text-muted">{{ _('Choose which permitted servers are available through your aggregate endpoint. Ask an administrator for access to other servers.') }}</p>
+</section>
+
+<section class="section">
+  <form id="server-selection-form" method="post" action="{{ url_for('catalog.selection') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if servers %}
+    <div class="table-scroll">
+      <table class="datatable" id="server-selection-table" data-dt-page-length="25">
+        <thead>
+          <tr>
+            <th data-orderable="false" data-searchable="false">{{ _('Select') }}</th>
+            <th>{{ _('Server') }}</th>
+            <th>{{ _('Category') }}</th>
+            <th>{{ _('Transport') }}</th>
+            <th>{{ _('Access') }}</th>
+            <th data-orderable="false" data-searchable="false">{{ _('Actions') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for server in servers %}
+          {% set permitted = server.id in allowed_ids %}
+          {% set selectable = permitted and server.enabled %}
+          <tr>
+            <td>
+              <input type="checkbox" class="server-checkbox" name="server_id" value="{{ server.id }}"
+                     {{ "checked" if server.id in selected_ids else "" }} {{ "disabled" if not selectable else "" }}
+                     id="server-{{ server.id }}" aria-label="{{ _('Select %(label)s', label=server.label) }}">
+            </td>
+            <td>
+              <div class="flex-gap-sm flex-center">
+                <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}" class="icon-link" title="{{ _('Server details') }}">
+                  <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24">
+                </a>
+                <div>
+                  <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}">{{ server.label }}</a>
+                  <br><code>{{ server.name }}</code>
+                  {% if server.description %}<br><small class="text-muted">{{ server.description }}</small>{% endif %}
+                </div>
+              </div>
+            </td>
+            <td>{{ server.category or '—' }}</td>
+            <td>
+              <span class="badge {{ 'badge-stdio' if server.transport == 'stdio' else 'badge-http' }}">
+                {{ server.transport | upper }}
+              </span>
+            </td>
+            <td>
+              {% if not server.enabled %}
+              <span class="badge badge-warning">{{ _('Disabled') }}</span>
+              {% elif permitted %}
+              <span class="badge badge-success">{{ _('Access allowed') }}</span>
+              {% else %}
+              <span class="badge badge-warning">{{ _('Access not allowed') }}</span>
+              {% endif %}
+            </td>
+            <td class="nowrap">
+              {% if selectable and server.allow_user_override %}
+              <a href="{{ url_for('catalog.override', server_id=server.id) }}" class="btn btn-sm btn-secondary">
+                {{ _('Custom credentials') if server.id in override_ids else _('Set my credentials') }}
+              </a>
+              {% endif %}
+              <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}" class="btn btn-sm btn-secondary">{{ _('Details') }}</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div class="mt-lg">
+      <button type="submit" class="btn btn-primary">{{ _('Save subscriptions') }}</button>
+    </div>
+    {% else %}
+    <p class="text-muted">{{ _('No MCP servers are registered yet.') }}</p>
+    {% endif %}
+  </form>
+</section>
+
+<script src="{{ url_for('static', filename='catalog-selection.js') }}"></script>
+
+{% endblock %}

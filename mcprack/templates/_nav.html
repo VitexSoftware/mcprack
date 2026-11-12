@@ -11,7 +11,8 @@
 <nav class="sidebar" id="sidebar" aria-label="{{ _('Main navigation') }}">
   <div class="nav-group">
     <div class="nav-group-title">{{ _('Workspace') }}</div>
-    {{ nav_item('catalog.index', _('Catalog'), 'M4 5h7v7H4zM13 5h7v7h-7zM4 14h7v6H4zM13 14h7v6h-7z') }}
+    {{ nav_item('catalog.index', _('Overview'), 'M3 4h18v16H3zM7 8h10M7 12h6M7 16h10') }}
+    {{ nav_item('catalog.servers', _('MCP servers'), 'M4 5h16M4 12h16M4 19h16M8 5v14', 'catalog.server') }}
   </div>
   {% if current_user.is_admin %}
   <div class="nav-group">
@@ -23,6 +24,7 @@
   <div class="nav-group">
     <div class="nav-group-title">{{ _('Access') }}</div>
     {{ nav_item('admin.users_list', _('All Users'), 'M16 20v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM20 20v-1a4 4 0 0 0-3-3.9', 'admin.user') }}
+    {{ nav_item('admin.access_requests', _('Access Requests'), 'M12 5v14M5 12h14') }}
     {{ nav_item('admin.proxy_instances', _('Proxy Instances'), 'M5 12h14M12 5l7 7-7 7') }}
   </div>
   <div class="nav-group">
@@ -33,6 +35,7 @@
     <div class="nav-group-title">{{ _('System') }}</div>
     {{ nav_item('admin.vaultwarden_wizard', _('Vaultwarden Setup'), 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4') }}
     {{ nav_item('admin.oauth_wizard', _('OAuth Diagnostics'), 'M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z') }}
+    {{ nav_item('admin.ldap_diagnostics', _('LDAP Diagnostics'), 'M4 5h16v14H4zM8 9h8M8 13h8M8 17h4') }}
     {{ nav_item('admin.otel_wizard', _('OTEL Diagnostics'), 'M3 12h4l3-8 4 16 3-8h4') }}
   </div>
   {% endif %}

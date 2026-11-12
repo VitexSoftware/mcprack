@@ -18,10 +18,58 @@
         </div>
       </div>
     </div>
-    <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">← {{ _('Catalog') }}</a>
+    <a href="{{ url_for('catalog.servers') }}" class="btn btn-secondary">← {{ _('MCP servers') }}</a>
   </div>
 
   <div class="form-container">
+    <div class="form-card">
+      <h2 class="form-card-title">{{ _('Access and configuration') }}</h2>
+      <dl class="info-list">
+        <dt>{{ _('Administrator allows access') }}</dt>
+        <dd><span class="badge {{ 'badge-success' if permission_allowed else 'badge-warning' }}">{{ _('Yes') if permission_allowed else _('No') }}</span></dd>
+        <dt>{{ _('Configured') }}</dt>
+        <dd><span class="badge {{ 'badge-success' if configured else 'badge-warning' }}">{{ _('Yes') if configured else _('No') }}</span></dd>
+        <dt>{{ _('In your subscriptions') }}</dt>
+        <dd><span class="badge {{ 'badge-success' if selected else 'badge-warning' }}">{{ _('Yes') if selected else _('No') }}</span></dd>
+      </dl>
+      {% if relay_url %}
+      <div class="connector-field mt-md">
+        <span class="connector-field-label">{{ _('Individual MCP URL') }}</span>
+        <code class="connector-value connector-url">{{ relay_url }}</code>
+        <button type="button" class="btn btn-secondary copy-btn" data-copy-value="{{ relay_url }}">{{ _('Copy URL') }}</button>
+      </div>
+      {% endif %}
+      {% if selected %}
+      <form method="post" action="{{ url_for('catalog.server_subscription', server_uuid=server.uuid) }}" class="mt-md">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="unsubscribe">
+        <button type="submit" class="btn btn-secondary">{{ _('Unsubscribe') }}</button>
+      </form>
+      {% elif server.enabled and permission_allowed %}
+      <form method="post" action="{{ url_for('catalog.server_subscription', server_uuid=server.uuid) }}" class="mt-md">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="action" value="subscribe">
+        <button type="submit" class="btn btn-primary">{{ _('Subscribe') }}</button>
+      </form>
+      {% elif not server.enabled %}
+      <p class="text-muted">{{ _('This server is disabled by an administrator.') }}</p>
+      {% elif not permission_allowed %}
+      {% if can_request_access %}
+        {% if access_request_status == 'pending' %}
+        <p class="text-muted">{{ _('Your access request is waiting for administrator review.') }}</p>
+        {% else %}
+          {% if access_request_status == 'denied' %}<p class="text-muted">{{ _('Your previous access request was declined.') }}</p>{% endif %}
+          <form method="post" action="{{ url_for('catalog.request_server_access', server_id=server.id) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-primary">{{ _('Request access') }}</button>
+          </form>
+        {% endif %}
+      {% else %}
+      <p class="text-muted">{{ _('An administrator has not allowed access to this server.') }}</p>
+      {% endif %}
+      {% endif %}
+    </div>
+
     <div class="form-card">
       <h2 class="form-card-title">ℹ️ {{ _('What it does') }}</h2>
       {% if info.summary %}<p class="lead">{{ info.summary }}</p>{% endif %}
@@ -103,6 +151,18 @@
       <dl class="info-list">
         {% if server.command %}<dt>{{ _('Command') }}</dt><dd><code>{{ server.command }}{% for a in server.args %} {{ a }}{% endfor %}</code></dd>{% endif %}
         {% if server.url %}<dt>URL</dt><dd><code>{{ server.url }}</code></dd>{% endif %}
+        <dt>{{ _('Subscribed users') }} ({{ subscribers | length }})</dt>
+        <dd>
+          {% if subscribers %}
+          <ul>
+            {% for subscriber in subscribers %}
+            <li><a href="{{ url_for('admin.user_edit', user_id=subscriber.id) }}">{{ subscriber.username }}</a></li>
+            {% endfor %}
+          </ul>
+          {% else %}
+          <span class="text-muted">{{ _('No users have subscribed to this server.') }}</span>
+          {% endif %}
+        </dd>
         <dt>{{ _('Metadata sources') }}</dt>
         <dd>
           manifest: {% if info.manifest_format == 'server.json' %}server.json ✓{% elif info.manifest_format %}{{ info.manifest_format }} ({{ _('only lhm.plugin.json found — add server.json') }}){% else %}✗{% endif %} ·
@@ -111,7 +171,8 @@
         </dd>
       </dl>
       <div class="flex-gap-wrap">
-        <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-secondary">{{ _('Edit') }}</a>
+        <a href="{{ url_for('admin.user_override', user_id=current_user.id, server_id=server.id) }}" class="btn btn-secondary">{{ _('User configuration') }} — {{ current_user.username }}</a>
+        <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-secondary">{{ _('Global server configuration') }}</a>
         <button type="button" class="btn btn-secondary" data-capabilities-btn data-server-id="{{ server.id }}" data-server-name="{{ server.name }}">🔍 {{ _('Tools') }}</button>
       </div>
     </div>
@@ -129,4 +190,5 @@
 </dialog>
 <script src="{{ url_for('static', filename='servers-capabilities-modal.js') }}"></script>
 {% endif %}
+{% if relay_url %}<script src="{{ url_for('static', filename='copy-connector.js') }}"></script>{% endif %}
 {% endblock %}

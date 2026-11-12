@@ -44,6 +44,8 @@ SENSITIVE_ENDPOINTS = frozenset(
         "admin.user_new",
         "admin.user_edit",
         "admin.user_mfa_reset",
+        # granting access to a denied MCP server changes a user's privileges
+        "admin.access_request_resolve",
         # the secret store
         "admin.vaultwarden_migrate_to_vaultwarden",
         "admin.vaultwarden_snapshot_to_local",

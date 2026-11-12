@@ -2,41 +2,48 @@
 
 ## Architecture (current)
 
-Every selected MCP server is exposed to AI clients as an HTTP relay URL
-under `/proxy/mcp/<token>/<server_id>` (default) or `/proxy/mcp/<server_id>`
-when optional MCP OAuth is enabled (`OAUTH_ENABLED=true`). Clients never
-spawn stdio binaries themselves and never receive raw backend URLs or
-credentials.
+Each selected MCP server has an individual HTTP relay URL shown only on its
+server card. Generated client configs use one per-user FastMCP composition URL:
+`/proxy/mcp/aggregate/<token>` by default or `/proxy/mcp/aggregate` when
+Bearer/OAuth authentication is used. The aggregate exposes only the user's
+currently selected, enabled, and permitted servers, namespaced by server name.
+Clients never spawn stdio binaries themselves and never receive raw backend
+URLs or credentials.
 
-```
+```text
 AI client (Claude / Copilot / …)
         │
         ▼
-  /proxy/mcp/<token>/<id>     ← signed bearer in the path (default)
-  /proxy/mcp/<id>             ← Authorization: Bearer when OAUTH_ENABLED
-        │                         (OAuth access token or ApiToken proxy:access)
-        ├─ server.command set  → spawn per-user process via user_proxy
-        │                         (fastmcp streamable-HTTP on a local port)
-        │                         then relay the request
-        │
-        └─ only server.url set → relay to that network backend
-                                 (inject auth header from secret_store)
+  /proxy/mcp/aggregate/<token>  ← signed user token in path (default)
+  /proxy/mcp/aggregate          ← Authorization: Bearer (API token or OAuth)
+    │
+    ▼
+  per-user FastMCP composition process
+    │  mounts signed per-server relay URLs under stable namespaces
+    ├─ server.command set  → per-user process via user_proxy
+    └─ only server.url set → relay to network backend
+             (inject auth header from secret_store)
 ```
 
 With `OAUTH_ENABLED`, mcprack also serves MCP Authorization Spec discovery
 (`/.well-known/oauth-protected-resource`, `/.well-known/oauth-authorization-server`)
 plus `/oauth/authorize`, `/oauth/token`, `/oauth/register`, `/oauth/revoke`
-(see `mcprack/oauth.py`). Path-token URLs remain valid either way.
+(see `mcprack/oauth.py`), including aggregate resource metadata. Path-token
+URLs remain valid either way. Users can request permission for a denied server
+from its card; administrator approval changes the ACL but does not subscribe it.
 
 | Env | Default | Role |
 |---|---|---|
-| `OAUTH_ENABLED` | `false` | Turn on AS + tokenless `/proxy/mcp/<id>` |
+| `OAUTH_ENABLED` | `false` | Turn on AS + tokenless `/proxy/mcp/aggregate` |
 | `PUBLIC_BASE_URL` | empty | Issuer / absolute URLs (required for OAuth metadata + CLI configs) |
 | `OAUTH_ACCESS_TOKEN_EXPIRES` | `3600` | Access-token lifetime (seconds) |
 | `OAUTH_ALLOW_INSECURE_TRANSPORT` | `false` | Allow http:// authorize/token (lab only) |
 
-Config download (`/download/<client>`, `/view/<client>`) always fills
-`url` with the per-user relay (tokenless when OAuth is on).
+Config download (`/download/<client>`, `/view/<client>`) emits one aggregate
+`url` (tokenless when OAuth is on). Individual relay URLs are only rendered on
+the corresponding server card after permission, enabled state, and selection
+checks. The server discovery page lists all registrations, with subscription
+controls only for servers the user may use.
 `config_formats.py` still has a stdio fallback for unit tests / direct
 calls with no url — production catalog paths never exercise it.
 

@@ -1,17 +1,49 @@
 {% extends "base.html" %}
-{% block title %}{{ _('MCP Server Catalog') }} — mcprack{% endblock %}
+{% block title %}{{ _('Overview') }} — mcprack{% endblock %}
 {% block content %}
 
 <section class="section">
-  <h1>{{ _('MCP Server Catalog') }}</h1>
-  <p class="text-muted mb-0">{{ _('Select servers, save, then download or copy a client config. You can change the selection anytime.') }}</p>
+  <h1>{{ _('MCP overview') }}</h1>
+  <p class="text-muted mb-0">{{ _('Your connected MCP services and aggregate endpoint.') }}</p>
 </section>
+
+{% if aggregate_url %}
+<section class="section">
+  <h2>{{ _('Aggregated MCP URL') }}</h2>
+  {% include "_proxy_auth_note.html" %}
+  <div class="connector-field">
+    <code class="connector-value connector-url aggregate-url">{{ aggregate_url }}</code>
+    <button type="button" class="btn btn-secondary copy-btn" data-copy-value="{{ aggregate_url }}">{{ _('Copy URL') }}</button>
+  </div>
+  <h3 class="mt-lg">{{ _('Servers available through this URL') }}</h3>
+  <div class="connector-list">
+    {% for server in servers %}
+    <div class="connector-row">
+      <div class="connector-content">
+        <div class="connector-icon-wrap">
+          <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="connector-icon" loading="lazy" width="40" height="40">
+        </div>
+        <div class="connector-fields">
+          <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}">{{ server.label }}</a>
+          <small class="text-muted"><code>{{ server.name }}</code></small>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  <a href="{{ url_for('catalog.servers') }}" class="btn btn-secondary mt-md">{{ _('Manage server subscriptions') }}</a>
+</section>
+{% else %}
+<section class="section">
+  <h2>{{ _('No MCP servers selected') }}</h2>
+  <p class="text-muted">{{ _('Choose servers to make them available through your aggregate endpoint.') }}</p>
+  <a href="{{ url_for('catalog.servers') }}" class="btn btn-primary">{{ _('Browse MCP servers') }}</a>
+</section>
+{% endif %}
 
 <section class="section">
   <h2>{{ _('Download Your Config') }}</h2>
   <p class="text-muted">{{ _('Download or copy the config for your AI client:') }}</p>
-  {% include "_proxy_auth_note.html" %}
-
   <div class="action-links">
     <div class="client-card">
       <h4>Claude Desktop</h4>
@@ -74,119 +106,6 @@
     </div>
   </div>
 </section>
-
-{% if connectors %}
-<section class="section">
-  <h2>{{ _('Add as Individual Connectors') }}</h2>
-  <p class="text-muted">{{ _('For Claude Desktop / claude.ai custom connectors — copy name + URL below.') }}</p>
-
-  <div class="connector-list">
-    {% for connector in connectors %}
-    <div class="connector-row">
-      <div class="connector-label">{{ connector.label }}</div>
-      <div class="connector-content">
-        <div class="connector-icon-wrap">
-          <img src="{{ url_for('catalog.server_icon', server_id=connector.id) }}"
-               alt="" class="connector-icon" loading="lazy"
-               width="48" height="48">
-        </div>
-        <div class="connector-fields">
-          <div class="connector-field">
-            <span class="connector-field-label">{{ _('Name') }}</span>
-            <code class="connector-value">{{ connector.name }}</code>
-            <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.name }}">
-              📋 {{ _('Copy') }}
-            </button>
-          </div>
-          <div class="connector-field">
-            <span class="connector-field-label">{{ _('URL') }}</span>
-            <code class="connector-value connector-url">{{ connector.url }}</code>
-            <button type="button" class="btn btn-sm btn-secondary copy-btn" data-copy-value="{{ connector.url }}">
-              📋 {{ _('Copy') }}
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
-
-<section class="section">
-  <form method="post" action="{{ url_for('catalog.selection') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <h2>{{ _('Available Servers') }}</h2>
-
-    {% if servers %}
-      <div class="server-grid">
-        {% for server in servers %}
-        <div class="server-row">
-          <div class="server-row-header">
-            <input type="checkbox" class="server-checkbox" name="server_id" value="{{ server.id }}"
-                   {{ "checked" if server.id in selected_ids else "" }}
-                   id="server-{{ server.id }}" aria-label="{{ _('Select %(label)s', label=server.label) }}">
-            <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}" class="icon-link" title="{{ _('About this server') }}"><img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24"></a>
-            <label class="server-info" for="server-{{ server.id }}">
-              <div class="label">{{ server.label }}</div>
-              {% if server.description %}<div class="desc">{{ server.description }}</div>{% endif %}
-            </label>
-          </div>
-          <div class="server-row-footer">
-            <span class="server-transport {% if server.transport == 'stdio' %}stdio{% else %}http{% endif %}">
-              {{ server.transport | upper }}
-            </span>
-            {% set conn = server_connectors[server.id] %}
-            <button type="button" class="btn btn-sm btn-secondary connector-popup-btn"
-                    data-connector-name="{{ conn.name }}" data-connector-url="{{ conn.url }}"
-                    data-connector-label="{{ server.label }}">
-              🔗 {{ _('Connector') }}
-            </button>
-            {% if server.allow_user_override %}
-              <a href="{{ url_for('catalog.override', server_id=server.id) }}" class="btn btn-sm btn-secondary">
-                {% if server.id in override_ids %}
-                  🔐 {{ _('Using Custom Credentials') }}
-                {% else %}
-                  🔓 {{ _('Use My Own Credentials') }}
-                {% endif %}
-              </a>
-            {% endif %}
-          </div>
-        </div>
-        {% endfor %}
-      </div>
-    {% else %}
-      <p class="text-muted">{{ _('No servers available yet. Ask an admin to register some.') }}</p>
-    {% endif %}
-
-    <div class="mt-lg">
-      <button type="submit" class="btn btn-primary">
-        💾 {{ _('Save Selection') }}
-      </button>
-    </div>
-  </form>
-</section>
-
-<dialog id="connector-popup" class="connector-popup">
-  <h3 id="connector-popup-title" class="connector-popup-title"></h3>
-  <div class="connector-field">
-    <span class="connector-field-label">{{ _('Name') }}</span>
-    <code id="connector-popup-name" class="connector-value"></code>
-    <button type="button" class="btn btn-sm btn-secondary copy-btn" id="connector-popup-copy-name">
-      📋 {{ _('Copy') }}
-    </button>
-  </div>
-  <div class="connector-field">
-    <span class="connector-field-label">{{ _('URL') }}</span>
-    <code id="connector-popup-url" class="connector-value connector-url"></code>
-    <button type="button" class="btn btn-sm btn-secondary copy-btn" id="connector-popup-copy-url">
-      📋 {{ _('Copy') }}
-    </button>
-  </div>
-  <div class="connector-popup-actions">
-    <button type="button" class="btn btn-secondary" id="connector-popup-close">{{ _('Close') }}</button>
-  </div>
-</dialog>
 
 <script src="{{ url_for('static', filename='copy-connector.js') }}"></script>
 

@@ -1,6 +1,7 @@
 import json
 import http.client
 import logging
+import re
 import socket
 import time
 from urllib.parse import urlsplit
@@ -22,9 +23,10 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required
+from flask_babel import gettext as _
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-from . import appstream_icons, server_info
+from . import appstream_icons, composition_proxy, server_info
 from . import audit
 from . import endpoint_policy
 from . import env_detection
@@ -46,6 +48,7 @@ from .models import (
     ApiToken,
     McpServer,
     User,
+    UserServerAccessRequest,
     UserServerOverride,
     UserServerPermission,
     UserServerSelection,
@@ -68,6 +71,7 @@ RENDERERS = {
 }
 
 PROXY_TOKEN_SALT = "mcprack-user-proxy"
+COMPOSITION_TOKEN_SALT = "mcprack-user-composition"
 
 
 def _signing_keys():
@@ -99,6 +103,22 @@ def _parse_proxy_token(token):
     max_age = current_app.config["PROXY_TOKEN_MAX_AGE"]
     try:
         return _proxy_serializer().loads(token, max_age=max_age)
+    except (BadSignature, SignatureExpired):
+        return None
+
+
+def _make_composition_token(user):
+    if not hasattr(user, "id"):
+        user = db.session.get(User, user)
+    serializer = URLSafeTimedSerializer(_signing_keys(), salt=COMPOSITION_TOKEN_SALT)
+    return serializer.dumps({"u": user.id, "v": user.token_version or 0})
+
+
+def _parse_composition_token(token):
+    max_age = current_app.config["PROXY_TOKEN_MAX_AGE"]
+    serializer = URLSafeTimedSerializer(_signing_keys(), salt=COMPOSITION_TOKEN_SALT)
+    try:
+        return serializer.loads(token, max_age=max_age)
     except (BadSignature, SignatureExpired):
         return None
 
@@ -341,37 +361,71 @@ def _allowed_enabled_server_ids(user_id):
     return enabled_ids & allowed
 
 
+def _server_permission_allowed(user_id, server_id):
+    permission = UserServerPermission.query.filter_by(user_id=user_id, server_id=server_id).first()
+    if permission is not None:
+        return bool(permission.is_allowed)
+    return not current_app.config["STRICT_SERVER_PERMISSIONS"]
+
+
 @bp.route("/")
 @login_required
 def index():
-    allowed_ids = _allowed_enabled_server_ids(current_user.id)
-    servers = (
-        McpServer.query.filter(McpServer.id.in_(allowed_ids))
-        .order_by(McpServer.category, McpServer.name)
-        .all()
-        if allowed_ids
-        else []
-    )
-    selected_ids = {
-        row.server_id
-        for row in UserServerSelection.query.filter_by(user_id=current_user.id).all()
-    }
-    override_ids = {
-        row.server_id
-        for row in UserServerOverride.query.filter_by(user_id=current_user.id).all()
-    }
-    connectors = _selected_server_connectors(current_user)
-    server_connectors = {
-        server.id: _server_connector(current_user, server) for server in servers
-    }
+    servers = _selected_enabled_allowed_servers(current_user)
     return render_template(
         "catalog.html",
         servers=servers,
+        aggregate_url=_aggregate_relay_url(current_user) if servers else None,
+    )
+
+
+@bp.route("/servers")
+@login_required
+def servers():
+    available_servers = McpServer.query.order_by(McpServer.category, McpServer.name).all()
+    allowed_ids = _allowed_enabled_server_ids(current_user.id)
+    selected_ids = {
+        row.server_id for row in UserServerSelection.query.filter_by(user_id=current_user.id).all()
+    } & allowed_ids
+    override_ids = {
+        row.server_id for row in UserServerOverride.query.filter_by(user_id=current_user.id).all()
+    }
+    requests = UserServerAccessRequest.query.filter_by(user_id=current_user.id).all()
+    request_statuses = {item.server_id: item.status for item in requests}
+    return render_template(
+        "servers.html",
+        servers=available_servers,
+        allowed_ids=allowed_ids,
         selected_ids=selected_ids,
         override_ids=override_ids,
-        connectors=connectors,
-        server_connectors=server_connectors,
+        request_statuses=request_statuses,
     )
+
+
+@bp.route("/server/<uuid:server_uuid>/subscription", methods=["POST"])
+@login_required
+def server_subscription(server_uuid):
+    server = McpServer.query.filter_by(uuid=str(server_uuid)).first_or_404()
+    selection = UserServerSelection.query.filter_by(
+        user_id=current_user.id, server_id=server.id
+    ).first()
+    action = request.form.get("action")
+
+    if action == "subscribe":
+        if not server.enabled or not _server_permission_allowed(current_user.id, server.id):
+            abort(403)
+        if selection is None:
+            db.session.add(UserServerSelection(user_id=current_user.id, server_id=server.id))
+        flash(_("Subscribed to %(server)s.", server=server.label), "success")
+    elif action == "unsubscribe":
+        if selection is not None:
+            db.session.delete(selection)
+        flash(_("Unsubscribed from %(server)s.", server=server.label), "success")
+    else:
+        abort(400)
+
+    db.session.commit()
+    return redirect(url_for("catalog.server_page", server_uuid=server.uuid))
 
 
 @bp.route("/server/<uuid:server_uuid>")
@@ -379,9 +433,8 @@ def index():
 def server_page(server_uuid):
     """Public page of one kind of MCP server: what it does, who wrote it,
     where the project lives and which parameters it takes. Addressed by the
-    server's UUID, which survives renaming. Ordinary users only see servers
-    they may use (anything else is a 404, not a 403, so existence is not
-    revealed); admins see every server plus the operational details."""
+    server's UUID, which survives renaming. Every logged-in user can see its
+    public metadata and access state; only admins see operational details."""
     server = McpServer.query.filter_by(uuid=str(server_uuid)).first()
     if server is None:
         # The UUID may be the one a project declares, not yet adopted by this
@@ -392,10 +445,71 @@ def server_page(server_uuid):
                 break
     if server is None:
         abort(404)
-    if not current_user.is_admin and server.id not in _allowed_enabled_server_ids(current_user.id):
-        abort(404)
+
+    permission_allowed = _server_permission_allowed(current_user.id, server.id)
+    selected = server.id in {
+        row.server_id for row in UserServerSelection.query.filter_by(user_id=current_user.id).all()
+    }
+    request_row = UserServerAccessRequest.query.filter_by(
+        user_id=current_user.id, server_id=server.id
+    ).first()
+    configured = bool(server.command or server.url)
+    if configured:
+        try:
+            effective_user = current_user if permission_allowed else None
+            env = secret_store.resolve_server_env(server, user=effective_user)
+            configured = all(env.get(key) for key in server.required_env_keys)
+        except Exception:
+            configured = False
+            logger.warning("Could not determine configuration readiness for server %s", server.name)
+
+    relay_url = None
+    if server.enabled and permission_allowed and selected:
+        relay_url = _proxy_relay_url(current_user, server)
+
     server_info.sync_uuid(server)
-    return render_template("server_page.html", server=server, info=server_info.describe(server))
+    subscribers = []
+    if current_user.is_admin:
+        subscribers = (
+            User.query.join(UserServerSelection, User.id == UserServerSelection.user_id)
+            .filter(UserServerSelection.server_id == server.id)
+            .order_by(User.username.asc())
+            .all()
+        )
+    return render_template(
+        "server_page.html",
+        server=server,
+        info=server_info.describe(server),
+        permission_allowed=permission_allowed,
+        selected=selected,
+        configured=configured,
+        relay_url=relay_url,
+        access_request_status=request_row.status if request_row else None,
+        can_request_access=(not current_user.is_admin and server.enabled and not permission_allowed),
+        subscribers=subscribers,
+    )
+
+
+@bp.route("/servers/<int:server_id>/request-access", methods=["POST"])
+@login_required
+def request_server_access(server_id):
+    server = db.get_or_404(McpServer, server_id)
+    if current_user.is_admin or not server.enabled or _server_permission_allowed(current_user.id, server.id):
+        abort(404)
+
+    access_request = db.session.get(UserServerAccessRequest, (current_user.id, server.id))
+    if access_request is None:
+        access_request = UserServerAccessRequest(user_id=current_user.id, server_id=server.id)
+        db.session.add(access_request)
+    elif access_request.status != "pending":
+        access_request.status = "pending"
+        access_request.requested_at = datetime.now(timezone.utc)
+        access_request.resolved_at = None
+        access_request.resolved_by_id = None
+
+    db.session.commit()
+    flash(_("Your access request was sent to the administrators."), "success")
+    return redirect(url_for("catalog.server_page", server_uuid=server.uuid))
 
 
 @bp.route("/icon/server/<int:server_id>")
@@ -433,6 +547,11 @@ def _proxy_relay_url(user, server):
         token=token,
         server_id=server.id,
     )
+
+
+def _signed_proxy_relay_url(user, server):
+    token = _make_proxy_token(user, server.id)
+    return _external_proxy_url("catalog.user_proxy_mcp", token=token, server_id=server.id)
 
 
 def _resolve_bearer_proxy_user():
@@ -645,6 +764,92 @@ def user_proxy_mcp_oauth(server_id):
     return _serve_user_proxy_mcp(user, server_id)
 
 
+def _composition_fingerprint(user, servers):
+    max_age = current_app.config.get("PROXY_TOKEN_MAX_AGE")
+    payload = {
+        "user_id": user.id,
+        "token_version": user.token_version or 0,
+        "servers": [(server.id, server.name) for server in servers],
+        "signing_keys": [hashlib.sha256(key.encode()).hexdigest() for key in _signing_keys()],
+        "token_window": int(time.time() // max_age) if max_age and max_age > 0 else None,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
+def _serve_user_composition(user):
+    try:
+        composition_proxy.cleanup_idle_compositions()
+    except Exception:
+        logger.exception("Idle composition cleanup failed; continuing with the request")
+
+    servers = _selected_enabled_allowed_servers(user)
+    if not servers:
+        abort(403)
+
+    connectors = []
+    for server in servers:
+        namespace = re.sub(r"[^A-Za-z0-9_]+", "_", server.name).strip("_") or "server"
+        connectors.append(
+            {
+                "namespace": f"{namespace}_{server.id}",
+                "url": _signed_proxy_relay_url(user, server),
+            }
+        )
+
+    try:
+        port = composition_proxy.ensure_user_composition_proxy(
+            user.id,
+            connectors,
+            _composition_fingerprint(user, servers),
+        )
+    except composition_proxy.CompositionProxyError as exc:
+        logger.error("Composition proxy failed for user %s", user.id)
+        return _jsonrpc_error_response(_jsonrpc_request_id(request.get_data()), exc.public_message)
+
+    if request.method == "GET":
+        return _forward_to_user_proxy(port, server_name="aggregate")
+    with composition_proxy.relay_guard(user.id):
+        return _forward_to_user_proxy(port, server_name="aggregate")
+
+
+@bp.route("/proxy/mcp/aggregate/<token>", methods=["GET", "POST", "DELETE", "OPTIONS"])
+def user_proxy_mcp_aggregate(token):
+    if request.method == "OPTIONS":
+        return Response(status=204)
+
+    data = _parse_composition_token(token)
+    if not data:
+        abort(403)
+    user = db.get_or_404(User, data.get("u"))
+    if not user.is_active or data.get("v", 0) != (user.token_version or 0):
+        abort(403)
+    return _serve_user_composition(user)
+
+
+@bp.route("/proxy/mcp/aggregate", methods=["GET", "POST", "DELETE", "OPTIONS"])
+def user_proxy_mcp_aggregate_bearer():
+    if request.method == "OPTIONS":
+        return Response(status=204)
+
+    oauth_on = bool(current_app.config.get("OAUTH_ENABLED"))
+    if not oauth_on and not current_app.config.get("PROXY_BEARER_ENABLED", True):
+        abort(404)
+
+    user = _resolve_bearer_proxy_user()
+    if user is None:
+        if oauth_on:
+            from . import oauth
+
+            return oauth.oauth_unauthorized_response(resource_path="/proxy/mcp/aggregate")
+        response = jsonify({"error": "invalid_token", "error_description": "Bearer token required"})
+        response.status_code = 401
+        response.headers["WWW-Authenticate"] = 'Bearer realm="mcprack"'
+        return response
+
+    return _serve_user_composition(user)
+
+
 # Bearer-token authenticated (signed path token, or Authorization header
 # when OAuth is on), not session-cookie authenticated — CSRF protection
 # has nothing to add here since there's no ambient credential for a
@@ -652,6 +857,8 @@ def user_proxy_mcp_oauth(server_id):
 # reconnecting to this URL never send one.
 csrf.exempt(user_proxy_mcp)
 csrf.exempt(user_proxy_mcp_oauth)
+csrf.exempt(user_proxy_mcp_aggregate)
+csrf.exempt(user_proxy_mcp_aggregate_bearer)
 
 
 def set_user_selection(user_id, submitted_ids):
@@ -685,7 +892,7 @@ def selection():
     set_user_selection(current_user.id, submitted_ids)
     db.session.commit()
     flash("Selection saved.", "success")
-    return redirect(url_for("catalog.index"))
+    return redirect(url_for("catalog.servers"))
 
 
 def get_server_known_keys(server):
@@ -995,7 +1202,7 @@ def override(server_id):
 
         db.session.commit()
         flash(f"Saved your personal credentials for '{server.label}'.", "success")
-        return redirect(url_for("catalog.index"))
+        return redirect(url_for("catalog.servers"))
 
     env_rows, known_keys, has_override = get_user_override_context(server, current_user)
 
@@ -1062,6 +1269,13 @@ def _bearer_relay_url(server):
     return _external_proxy_url("catalog.user_proxy_mcp_oauth", server_id=server.id)
 
 
+def _aggregate_relay_url(user, bearer=False):
+    if bearer or current_app.config.get("OAUTH_ENABLED"):
+        return _external_proxy_url("catalog.user_proxy_mcp_aggregate_bearer")
+    token = _make_composition_token(user)
+    return _external_proxy_url("catalog.user_proxy_mcp_aggregate", token=token)
+
+
 def _claude_code_uses_header(auth=None):
     """Whether a Claude Code file carries the `Authorization: Bearer
     ${MCPRACK_TOKEN}` header. With OAuth on, Claude Code does the login itself
@@ -1100,30 +1314,17 @@ def _build_client_config_json(client, user=None, auth=None):
         abort(404)
     render_fn, filename = RENDERERS[client]
 
-    selected = _selected_enabled_allowed_servers(user)
-
-    if not selected:
+    if not _selected_enabled_allowed_servers(user):
         return None, filename, "You haven't selected any MCP servers yet."
 
-    entries = []
-    for server in selected:
-        # Never log this URL when it embeds a path token: that signed
-        # string is a bearer credential for user_proxy_mcp — writing it
-        # to a log file or stderr would leak a usable access credential
-        # outside the config the user actually asked for.
-        relay_url = _bearer_relay_url(server) if client in BEARER_CLIENTS else _proxy_relay_url(user, server)
-        entries.append(
-            {
-                "name": server.name,
-                "transport": "http",
-                "command": server.command,
-                "args": server.args,
-                "url": relay_url,
-                "auth_header_name": server.auth_header_name,
-                "auth_env_key": server.auth_env_key,
-                "env": {},
-            }
-        )
+    entries = [
+        {
+            "name": "mcprack",
+            "transport": "http",
+            "url": _aggregate_relay_url(user, bearer=client in BEARER_CLIENTS),
+            "env": {},
+        }
+    ]
 
     if client == "claude-code":
         payload = render_fn(entries, header=_claude_code_uses_header(auth))
@@ -1145,7 +1346,7 @@ def download(client):
             user=current_user,
             error_message=f"no config produced for client '{client}'",
         )
-        return redirect(url_for("catalog.index"))
+        return redirect(url_for("catalog.servers"))
 
     audit.log_audit_event("config_download", "success", user=current_user)
     telemetry.record_config_download(client)

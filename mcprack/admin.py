@@ -1,7 +1,15 @@
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for, Response
+from flask_babel import gettext as _
 from datetime import datetime, timezone
 import logging
+import shlex
+import ssl
 import time
+from urllib.parse import urlsplit
+
+import ldap3
+from ldap3.core.exceptions import LDAPException
+from ldap3.utils.conv import escape_filter_chars
 
 from sqlalchemy import func
 
@@ -31,6 +39,7 @@ from .models import (
     ConfigTemplateServer,
     McpServer,
     User,
+    UserServerAccessRequest,
     UserServerOverride,
     UserServerPermission,
     UserServerSelection,
@@ -185,6 +194,58 @@ def servers_list():
     )
 
 
+@bp.route("/access-requests")
+@admin_required
+def access_requests():
+    requests = (
+        UserServerAccessRequest.query.filter_by(status="pending")
+        .order_by(UserServerAccessRequest.requested_at.asc())
+        .all()
+    )
+    return render_template("admin/access_requests.html", requests=requests)
+
+
+@bp.route("/access-requests/<int:user_id>/<int:server_id>/<decision>", methods=["POST"])
+@admin_required
+def access_request_resolve(user_id, server_id, decision):
+    if decision not in ("approve", "deny"):
+        abort(404)
+
+    access_request = db.session.get(UserServerAccessRequest, (user_id, server_id))
+    if access_request is None:
+        abort(404)
+    if access_request.status != "pending":
+        flash(_("This access request has already been resolved."), "warning")
+        return redirect(url_for("admin.access_requests"))
+
+    if decision == "approve":
+        if not access_request.user.is_active or not access_request.server.enabled:
+            flash(_("Enable the account and server before granting access."), "error")
+            return redirect(url_for("admin.access_requests"))
+        permission = db.session.get(UserServerPermission, (user_id, server_id))
+        if permission is None:
+            permission = UserServerPermission(user_id=user_id, server_id=server_id, is_allowed=True)
+            db.session.add(permission)
+        else:
+            permission.is_allowed = True
+        access_request.status = "approved"
+    else:
+        access_request.status = "denied"
+
+    access_request.resolved_at = datetime.now(timezone.utc)
+    access_request.resolved_by_id = current_user.id
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server=access_request.server,
+        error_message=f"{decision} server access request for user '{access_request.user.username}'",
+    )
+    flash(_("Access request updated."), "success")
+    return redirect(url_for("admin.access_requests"))
+
+
 def _flash_endpoint_validation(form):
     """Run validate_server_endpoint on a Werkzeug form; flash messages.
     Returns True when save must be blocked."""
@@ -231,7 +292,7 @@ def server_new():
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
-                active_step=1,
+                active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         if McpServer.query.filter_by(name=name).first() is not None:
@@ -241,7 +302,7 @@ def server_new():
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
-                active_step=1,
+                active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         if _flash_endpoint_validation(request.form):
@@ -250,7 +311,7 @@ def server_new():
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
-                active_step=2,
+                active_step=3,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         server = McpServer(name=request.form["name"])
@@ -301,7 +362,7 @@ def server_edit(server_id):
                 server=server,
                 env_rows=_env_rows_from_form(request.form),
                 icon_url=None,
-                active_step=2,
+                active_step=3,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         before = server_changes.snapshot(server)
@@ -1084,6 +1145,121 @@ def oauth_wizard():
         "prm_url": f"{issuer}/.well-known/oauth-protected-resource",
     }
     return render_template("admin/oauth_wizard.html", state=state)
+
+
+def _run_ldap_diagnostic(values):
+    server_url = values["LDAP_SERVER"]
+    parsed = urlsplit(server_url)
+    if (
+        parsed.scheme not in {"ldap", "ldaps"}
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.path
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("LDAP_SERVER must be an ldap:// or ldaps:// URL without credentials or a path.")
+    parsed.port
+
+    starttls = bool(current_app.config.get("LDAP_STARTTLS")) and parsed.scheme == "ldap"
+    tls = None
+    if parsed.scheme == "ldaps" or starttls:
+        tls = ldap3.Tls(
+            validate=ssl.CERT_REQUIRED if current_app.config.get("LDAP_TLS_VALIDATE", True) else ssl.CERT_NONE,
+            ca_certs_file=current_app.config.get("LDAP_CA_FILE") or None,
+        )
+    server = ldap3.Server(server_url, get_info=None, connect_timeout=5, tls=tls)
+    auto_bind = ldap3.AUTO_BIND_TLS_BEFORE_BIND if starttls else True
+    try:
+        user_filter = values["LDAP_USER_FILTER"] % {
+            "user": escape_filter_chars("mcprack-diagnostic-nonexistent")
+        }
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("LDAP_USER_FILTER has an invalid user placeholder or format.") from exc
+
+    with ldap3.Connection(
+        server,
+        user=values["LDAP_BIND_DN"] or None,
+        password=values["LDAP_BIND_PASSWORD"] or None,
+        auto_bind=auto_bind,
+        receive_timeout=5,
+    ) as connection:
+        for label, base_dn in (
+            ("LDAP_BASE_DN", values["LDAP_BASE_DN"]),
+            ("LDAP_USER_OU", values["LDAP_USER_OU"]),
+        ):
+            connection.search(
+                search_base=base_dn,
+                search_filter="(objectClass=*)",
+                search_scope=ldap3.BASE,
+                attributes=["objectClass"],
+                time_limit=5,
+            )
+            result = connection.result or {}
+            if result.get("result") != 0 or not connection.entries:
+                message = result.get("message") or "distinguished name was not found"
+                raise ValueError(f"{label} check failed: {message}")
+
+        connection.search(
+            search_base=values["LDAP_USER_OU"],
+            search_filter=user_filter,
+            search_scope=ldap3.SUBTREE,
+            attributes=[],
+            size_limit=1,
+            time_limit=5,
+        )
+        result = connection.result or {}
+        if result.get("result") not in (0, 4):
+            message = result.get("message") or f"LDAP result code {result.get('result')}"
+            raise ValueError(f"LDAP_USER_FILTER check failed: {message}")
+
+
+@bp.route("/ldap/diagnostics", methods=["GET", "POST"])
+@admin_required
+def ldap_diagnostics():
+    field_names = (
+        "LDAP_SERVER",
+        "LDAP_BASE_DN",
+        "LDAP_USER_OU",
+        "LDAP_USER_FILTER",
+        "LDAP_BIND_DN",
+        "LDAP_BIND_PASSWORD",
+    )
+    values = {name: current_app.config.get(name, "") or "" for name in field_names}
+    error = None
+    config_fragment = None
+
+    if request.method == "POST":
+        values = {name: request.form.get(name, "") for name in field_names}
+        values.update({name: value.strip() for name, value in values.items() if name != "LDAP_BIND_PASSWORD"})
+        if any("\n" in value or "\r" in value for value in values.values()):
+            error = "LDAP settings must each be a single line."
+        elif any(not values[name] for name in field_names[:4]):
+            error = "LDAP_SERVER, LDAP_BASE_DN, LDAP_USER_OU and LDAP_USER_FILTER are required."
+        else:
+            try:
+                _run_ldap_diagnostic(values)
+            except (LDAPException, OSError, TypeError, ValueError) as exc:
+                error = str(exc) or exc.__class__.__name__
+            else:
+                fragment_values = {"LDAP_ENABLED": "true", **values}
+                if current_app.config.get("LDAP_STARTTLS"):
+                    fragment_values["LDAP_STARTTLS"] = "true"
+                if not current_app.config.get("LDAP_TLS_VALIDATE", True):
+                    fragment_values["LDAP_TLS_VALIDATE"] = "false"
+                if current_app.config.get("LDAP_CA_FILE"):
+                    fragment_values["LDAP_CA_FILE"] = current_app.config["LDAP_CA_FILE"]
+                config_fragment = "\n".join(
+                    f"{name}={shlex.quote(str(value))}" for name, value in fragment_values.items()
+                )
+
+    return render_template(
+        "admin/ldap_diagnostics.html",
+        values=values,
+        error=error,
+        config_fragment=config_fragment,
+    )
 
 
 @bp.route("/otel/wizard/test", methods=["POST"])

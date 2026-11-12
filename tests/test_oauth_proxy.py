@@ -122,6 +122,17 @@ def test_discovery_metadata(oauth_client):
     prm_s = oauth_client.get("/.well-known/oauth-protected-resource/proxy/mcp/7").get_json()
     assert prm_s["resource"] == "https://mcprack.test/proxy/mcp/7"
 
+    prm_aggregate = oauth_client.get(
+        "/.well-known/oauth-protected-resource/proxy/mcp/aggregate"
+    ).get_json()
+    assert prm_aggregate["resource"] == "https://mcprack.test/proxy/mcp/aggregate"
+
+    challenge = oauth_client.post("/proxy/mcp/aggregate")
+    assert challenge.status_code == 401
+    assert "/.well-known/oauth-protected-resource/proxy/mcp/aggregate" in challenge.headers[
+        "WWW-Authenticate"
+    ]
+
 
 def test_tokenless_proxy_challenges_without_bearer(oauth_app, oauth_client):
     with oauth_app.app_context():
@@ -153,6 +164,28 @@ def test_tokenless_proxy_accepts_api_token_with_proxy_scope(oauth_app, oauth_cli
             f"/proxy/mcp/{server_id}",
             headers={"Authorization": f"Bearer {raw}"},
         )
+    assert resp.status_code == 200
+
+
+def test_aggregate_proxy_accepts_api_token_with_proxy_scope(oauth_app, oauth_client):
+    from mcprack import composition_proxy
+
+    with oauth_app.app_context():
+        user = _make_user()
+        _make_server(user)
+        raw, token = ApiToken.generate("aggregate-proxy", user.id, scopes=["proxy:access"])
+        db.session.add(token)
+        db.session.commit()
+
+    with patch.object(composition_proxy, "ensure_user_composition_proxy", return_value=32123), patch(
+        "mcprack.catalog._forward_to_user_proxy",
+        return_value=oauth_app.response_class(b"ok", status=200),
+    ):
+        resp = oauth_client.post(
+            "/proxy/mcp/aggregate",
+            headers={"Authorization": f"Bearer {raw}"},
+        )
+
     assert resp.status_code == 200
 
 
@@ -273,6 +306,5 @@ def test_config_download_omits_path_token_when_oauth_enabled(oauth_app, oauth_cl
     import json
 
     payload = json.loads(body)
-    url = payload["mcpServers"]["svc"]["url"]
-    assert url.rstrip("/").rsplit("/", 1)[-1].isdigit()
-    assert url.count("/") >= 4  # scheme://host/proxy/mcp/<id>
+    url = payload["mcpServers"]["mcprack"]["url"]
+    assert url == "https://mcprack.test/proxy/mcp/aggregate"

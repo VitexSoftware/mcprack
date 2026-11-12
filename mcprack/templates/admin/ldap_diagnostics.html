@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ _('LDAP diagnostics') }} — mcprack{% endblock %}
+{% block content %}
+<h1>{{ _('LDAP connection diagnostics') }}</h1>
+<p>{{ _('Test directory connectivity and search settings even while LDAP sign-in is disabled.') }}</p>
+
+<section class="section">
+  <form method="post" action="{{ url_for('admin.ldap_diagnostics') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="ldap-server">LDAP_SERVER</label>
+        <input id="ldap-server" name="LDAP_SERVER" class="form-control" value="{{ values.LDAP_SERVER }}" required>
+      </div>
+      <div class="form-group">
+        <label for="ldap-base-dn">LDAP_BASE_DN</label>
+        <input id="ldap-base-dn" name="LDAP_BASE_DN" class="form-control" value="{{ values.LDAP_BASE_DN }}" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="ldap-user-ou">LDAP_USER_OU</label>
+        <input id="ldap-user-ou" name="LDAP_USER_OU" class="form-control" value="{{ values.LDAP_USER_OU }}" required>
+      </div>
+      <div class="form-group">
+        <label for="ldap-user-filter">LDAP_USER_FILTER</label>
+        <input id="ldap-user-filter" name="LDAP_USER_FILTER" class="form-control" value="{{ values.LDAP_USER_FILTER }}" required>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label for="ldap-bind-dn">LDAP_BIND_DN</label>
+        <input id="ldap-bind-dn" name="LDAP_BIND_DN" class="form-control" value="{{ values.LDAP_BIND_DN }}">
+      </div>
+      <div class="form-group">
+        <label for="ldap-bind-password">LDAP_BIND_PASSWORD</label>
+        <input id="ldap-bind-password" name="LDAP_BIND_PASSWORD" type="password" class="form-control" value="{{ values.LDAP_BIND_PASSWORD }}" autocomplete="off">
+      </div>
+    </div>
+    <button type="submit" class="btn btn-primary">{{ _('Test LDAP connection') }}</button>
+  </form>
+</section>
+
+{% if error %}
+<p class="flash-error" role="alert">{{ error }}</p>
+{% endif %}
+
+{% if config_fragment %}
+<section class="section">
+  <h2>{{ _('Connection confirmed') }}</h2>
+  <p>{{ _('The bind and directory searches succeeded. Copy this confirmed configuration fragment into /etc/mcprack/env, then restart mcprack. It enables LDAP sign-in.') }}</p>
+  <p class="text-muted">{{ _('The fragment contains the bind password. Treat it as a secret.') }}</p>
+  <pre><code>{{ config_fragment }}</code></pre>
+</section>
+{% endif %}
+{% endblock %}
