@@ -436,7 +436,18 @@ def user_config_verify(username, client, base_url, only, timeout, insecure):
     document = json.loads(config_json)
     servers = next((document[key] for key in ("mcpServers", "servers") if isinstance(document.get(key), dict)), {})
     if only:
-        servers = {name: entry for name, entry in servers.items() if name in only}
+        aggregate_entries = {name: entry for name, entry in servers.items() if name in only}
+        requested_backends = set(only) - set(aggregate_entries)
+        selected = catalog._selected_enabled_allowed_servers(user)
+        selected_by_name = {server.name: server for server in selected}
+        unknown = requested_backends - set(selected_by_name)
+        if unknown:
+            servers = {}
+        else:
+            servers = aggregate_entries
+            for name in sorted(requested_backends):
+                server = selected_by_name[name]
+                servers[name] = {"url": catalog._signed_proxy_relay_url(user, server)}
     if not servers:
         raise click.ClickException("Nothing to verify: no server in that configuration" + (" matches --server." if only else "."))
 

@@ -53,6 +53,12 @@ def stop_processes(user):
     (credentials included). Never raises: ending access must not fail halfway
     because one process refused to die."""
     try:
+        from . import composition_proxy
+
+        composition_proxy.stop_user_composition(user.id)
+    except Exception:
+        logger.exception("could not stop the MCP composition of user %s", user.id)
+    try:
         user_proxy.stop_user_proxies(user.id)
     except Exception:
         logger.exception("could not stop the MCP proxies of user %s", user.id)

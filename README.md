@@ -35,27 +35,31 @@ You have multiple MCP servers (tools that connect AI clients to your services: d
 mcprack provides:
 
 1. **Admin UI** — Register MCP servers once, define environment variables and defaults, store secrets in Vaultwarden
-2. **User Catalog** — Browse available servers, select which ones you need, choose your target client (Claude, Copilot, etc.)
-3. **Config Generator** — Automatically builds a `.json` or `.env` config file tailored to each user with their chosen servers
+2. **User Catalog** — See one aggregate MCP URL and its available servers, browse the server registry, subscribe to permitted servers, or request access from an administrator
+3. **Config Generator** — Automatically builds a `.json` or `.env` config file with one aggregate MCP endpoint for each user
 4. **Credential Management** — Credentials never stored in mcprack's DB; every secret lives in Vaultwarden (optional override per user)
 5. **HTTP Proxy** — Every stdio-based MCP server is exposed over HTTP by default, so remote clients can reach it; there's no local-spawn mode and no separate proxy service to deploy
 
 ### Typical Workflow
 
-1. **Admin** registers a new server (e.g., `mastodon-mcp`):
-   - Command: `/usr/bin/mastodon-mcp`
-   - Environment variables: `MASTODON_INSTANCE`, `MASTODON_ACCESS_TOKEN`
-   - Saves defaults in Vaultwarden secure note: `MCP-mastodon-mcp`
+1. **Admin** registers a new server (e.g., `mastodon-mcp`) with its command,
+  required environment variables, and defaults in a Vaultwarden secure note.
+2. **User** logs into mcprack (local account or Active Directory) and sees the
+  aggregate MCP URL with the servers currently available through it.
+3. The user opens **MCP servers** to browse the registry and subscribe to
+  permitted servers. A user can request administrator approval for a server
+  that is not permitted.
+4. The user downloads a client configuration containing one aggregate MCP
+  endpoint.
+5. **AI Client** (Claude) connects to that endpoint and can call namespaced
+  tools, resources, and prompts from every subscribed server.
 
-2. **User** logs into mcprack (local account or Active Directory):
-   - Sees available servers in the catalog
-   - Selects which ones they need: ✓ mastodon-mcp, ✓ postgres-mcp
-   - Chooses target: "Claude Desktop"
-   - Downloads `claude_desktop_config.json` with only those servers
-
-3. **AI Client** (Claude) loads the config:
-   - Starts each selected MCP server as a subprocess
-   - Can now call functions and access tools from all those backends
+Each server card shows whether its endpoint and required configuration are ready,
+whether the administrator permits access, and whether it is in the user's
+subscriptions. Individual server URLs are shown only on permitted, enabled,
+subscribed cards. A user access request is reviewed by an administrator under
+**Admin → Access Requests**; approval grants permission but does not subscribe
+the server automatically.
 
 Credentials are never exposed to the user or stored insecurely — they come from Vaultwarden at runtime.
 
@@ -978,17 +982,18 @@ skip the path token:
 |---|---|
 | `GET /.well-known/oauth-protected-resource` | RFC9728 Protected Resource Metadata |
 | `GET /.well-known/oauth-protected-resource/proxy/mcp/<id>` | Per-server resource metadata |
+| `GET /.well-known/oauth-protected-resource/proxy/mcp/aggregate` | Aggregate resource metadata |
 | `GET /.well-known/oauth-authorization-server` | RFC8414 AS metadata |
 | `POST /oauth/register` | RFC7591 Dynamic Client Registration (open) |
 | `GET/POST /oauth/authorize` | Authorization-code + PKCE (S256); user logs in and consents |
 | `POST /oauth/token` | Access + refresh tokens (`scope=mcp`) |
 | `POST /oauth/revoke` | Token revocation |
-| `GET/POST/DELETE /proxy/mcp/<server_id>` | Tokenless MCP relay (Bearer required) |
+| `GET/POST/DELETE /proxy/mcp/<server_id>` | Tokenless individual MCP relay (Bearer required) |
+| `GET/POST/DELETE /proxy/mcp/aggregate` | Tokenless aggregate MCP endpoint (Bearer required) |
 
 Flow:
 
-1. Config download / connector copy emit `/proxy/mcp/<server_id>` (no signed
-   segment).
+1. Config downloads emit `/proxy/mcp/aggregate` (no signed segment).
 2. An unauthenticated call gets `401` with
    `WWW-Authenticate: Bearer … resource_metadata="…/.well-known/oauth-protected-resource/…"`.
 3. The client discovers the AS, optionally registers via `/oauth/register`,
@@ -1023,9 +1028,9 @@ client (`/download/claude-code`, `/view/claude-code`,
 ```json
 {
   "mcpServers": {
-    "zabbix": {
+    "mcprack": {
       "type": "http",
-      "url": "https://mcprack.example.com/proxy/mcp/8",
+      "url": "https://mcprack.example.com/proxy/mcp/aggregate",
       "headers": { "Authorization": "Bearer ${MCPRACK_TOKEN}" }
     }
   }
@@ -1047,9 +1052,11 @@ such as `ANTHROPIC_API_KEY`, `NPM_TOKEN` or `HTTPS_PROXY` as empty inside the
 2. `export MCPRACK_TOKEN=<token>` (shell profile, direnv, a secret manager —
    not the repository).
 3. Either save the download as `.mcp.json`, or use the copyable commands on the
-   *View & Copy* page, which add the servers for all your projects:
+  *View & Copy* page, which adds the aggregate MCP server for all your projects:
 
-       claude mcp add --transport http --scope user zabbix https://mcprack.example.com/proxy/mcp/8 --header "Authorization: Bearer $MCPRACK_TOKEN"
+  ```sh
+  claude mcp add --transport http --scope user mcprack https://mcprack.example.com/proxy/mcp/aggregate --header "Authorization: Bearer $MCPRACK_TOKEN"
+  ```
 
    (`--scope local` is the default of `claude mcp add` and keeps it to the
    current project in `~/.claude.json`; `--scope project` writes `.mcp.json`.)
@@ -1058,11 +1065,11 @@ such as `ANTHROPIC_API_KEY`, `NPM_TOKEN` or `HTTPS_PROXY` as empty inside the
 
        mcprack user config verify USERNAME claude-code
 
-   It does what the client will do — `initialize`, then `tools/list` — against
-   every URL in the generated configuration (through the reverse proxy and TLS,
-   the relay and the MCP server behind it), prints one line per server with the
-   number of tools and the negotiated protocol version, and exits non-zero if any
-   fails. For this format it creates a 15-minute token for the check and removes
+  It does what the client will do — `initialize`, then `tools/list` — against
+  the aggregate endpoint (through the reverse proxy and TLS, the relay, and the
+  selected MCP servers behind it), prints the number of tools and negotiated
+  protocol version, and exits non-zero if the probe fails. For this format it
+  creates a 15-minute token for the check and removes
    it again. `--base-url http://127.0.0.1:8912` probes mcprack itself without the
    reverse proxy in front (to tell which hop is broken). A server that is `failed`
    in Claude Code can also be diagnosed with `mcprack-mcp-probe --bearer` (below).

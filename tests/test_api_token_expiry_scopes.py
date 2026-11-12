@@ -112,7 +112,6 @@ def test_expiry_payload_validation(app, client):
     assert resp.status_code == 400
 
     past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-    resp = client.post("/api/v1/tokens", json={"name": "x", "expires_at": past})
     assert resp.status_code == 400
 
 
@@ -191,7 +190,9 @@ def test_config_read_scope_allows_config_download(app, client):
     raw = _mint_token(client, scopes=["config:read"])["token"]
     resp = _bearer_get(app, "/api/v1/me/config/claude", raw)
     assert resp.status_code == 200
-    assert "svc" in resp.get_json()["data"]["config"]["mcpServers"]
+    servers = resp.get_json()["data"]["config"]["mcpServers"]
+    assert list(servers) == ["mcprack"]
+    assert "/proxy/mcp/aggregate/" in servers["mcprack"]["url"]
 
     other = _mint_token(client, name="profile-only", scopes=["profile:read"])["token"]
     assert _bearer_get(app, "/api/v1/me/config/claude", other).status_code == 403

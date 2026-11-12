@@ -140,15 +140,24 @@ def test_declared_uuid_not_stolen_from_another_row(app, manifest):
         assert second.uuid == other
 
 
-def test_user_cannot_open_disabled_or_forbidden_server(client, app):
+def test_user_can_open_info_cards_for_disabled_or_forbidden_servers(client, app):
     user_id = _login(client)
     _, disabled = _server(app, "off", enabled=False, command=None)
-    sid, forbidden = _server(app, "nope", command=None)
+    sid, forbidden = _server(app, "nope", command="/bin/true")
     with app.app_context():
         db.session.add(UserServerPermission(user_id=user_id, server_id=sid, is_allowed=False))
         db.session.commit()
-    assert client.get(f"/server/{disabled}").status_code == 404
-    assert client.get(f"/server/{forbidden}").status_code == 404
+
+    disabled_resp = client.get(f"/server/{disabled}")
+    forbidden_resp = client.get(f"/server/{forbidden}")
+
+    assert disabled_resp.status_code == 200
+    assert "disabled by an administrator" in disabled_resp.get_data(as_text=True)
+    assert forbidden_resp.status_code == 200
+    body = forbidden_resp.get_data(as_text=True)
+    assert "Administrator allows access" in body
+    assert "Request access" in body
+    assert "/proxy/mcp/" not in body
 
 
 def test_admin_sees_operational_details(client, app, manifest):
@@ -217,7 +226,7 @@ def test_malformed_plugin_file_is_ignored(app, tmp_path, monkeypatch):
 def test_icons_link_to_server_page(client, app):
     _login(client)
     _, u = _server(app, "linked", command=None)
-    body = client.get("/").get_data(as_text=True)
+    body = client.get("/servers").get_data(as_text=True)
     assert f"/server/{u}" in body
 
 

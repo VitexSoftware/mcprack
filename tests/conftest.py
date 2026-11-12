@@ -45,6 +45,9 @@ def _isolate_user_proxy_state(tmp_path, monkeypatch):
     /var/lib/mcprack/user-proxies — which may hold live state from an
     actually-installed instance on the machine running the tests."""
     monkeypatch.setattr(user_proxy, "STATE_DIR", tmp_path / "user-proxies")
+    from mcprack import composition_proxy
+
+    monkeypatch.setattr(composition_proxy, "STATE_DIR", user_proxy.STATE_DIR / "compositions")
     monkeypatch.setattr(installer, "STATE_DIR", tmp_path / "installs")
 
 

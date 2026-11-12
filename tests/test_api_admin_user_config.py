@@ -134,7 +134,8 @@ def test_admin_config_get(app, client):
     assert resp.status_code == 200
     data = resp.get_json()["data"]
     assert data["filename"] == "mcp.json"
-    assert "httpsvc" in data["config"]["servers"]
+    assert list(data["config"]["servers"]) == ["mcprack"]
+    assert "/proxy/mcp/aggregate/" in data["config"]["servers"]["mcprack"]["url"]
 
 
 def test_admin_config_returns_404_when_nothing_selected(app, client):

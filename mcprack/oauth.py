@@ -357,11 +357,13 @@ def _make_room_for_a_client(cfg):
         raise TemporarilyUnavailableError(description="too many registered clients; try again later")
 
 
-def oauth_unauthorized_response(server_id=None):
+def oauth_unauthorized_response(server_id=None, resource_path=None):
     """401 + WWW-Authenticate pointing at Protected Resource Metadata, as
     required by MCP Authorization / RFC9728 §5.1."""
     base = _public_base_url()
-    if server_id is not None:
+    if resource_path is not None:
+        metadata_url = f"{base}/.well-known/oauth-protected-resource{resource_path}"
+    elif server_id is not None:
         metadata_url = f"{base}/.well-known/oauth-protected-resource/proxy/mcp/{server_id}"
     else:
         metadata_url = f"{base}/.well-known/oauth-protected-resource"
@@ -436,6 +438,12 @@ def protected_resource_metadata_root():
 @bp.route("/.well-known/oauth-protected-resource/proxy/mcp/<int:server_id>")
 def protected_resource_metadata_server(server_id):
     resource = f"{_issuer_url()}/proxy/mcp/{server_id}"
+    return _protected_resource_metadata(resource)
+
+
+@bp.route("/.well-known/oauth-protected-resource/proxy/mcp/aggregate")
+def protected_resource_metadata_aggregate():
+    resource = f"{_issuer_url()}/proxy/mcp/aggregate"
     return _protected_resource_metadata(resource)
 
 

@@ -1,4 +1,5 @@
 from flask import Blueprint, current_app, flash, jsonify, redirect, render_template, request, url_for, Response
+from flask_babel import gettext as _
 from datetime import datetime, timezone
 import logging
 import time
@@ -31,6 +32,7 @@ from .models import (
     ConfigTemplateServer,
     McpServer,
     User,
+    UserServerAccessRequest,
     UserServerOverride,
     UserServerPermission,
     UserServerSelection,
@@ -183,6 +185,58 @@ def servers_list():
         server_health=server_health,
         usage_counts=usage_counts,
     )
+
+
+@bp.route("/access-requests")
+@admin_required
+def access_requests():
+    requests = (
+        UserServerAccessRequest.query.filter_by(status="pending")
+        .order_by(UserServerAccessRequest.requested_at.asc())
+        .all()
+    )
+    return render_template("admin/access_requests.html", requests=requests)
+
+
+@bp.route("/access-requests/<int:user_id>/<int:server_id>/<decision>", methods=["POST"])
+@admin_required
+def access_request_resolve(user_id, server_id, decision):
+    if decision not in ("approve", "deny"):
+        abort(404)
+
+    access_request = db.session.get(UserServerAccessRequest, (user_id, server_id))
+    if access_request is None:
+        abort(404)
+    if access_request.status != "pending":
+        flash(_("This access request has already been resolved."), "warning")
+        return redirect(url_for("admin.access_requests"))
+
+    if decision == "approve":
+        if not access_request.user.is_active or not access_request.server.enabled:
+            flash(_("Enable the account and server before granting access."), "error")
+            return redirect(url_for("admin.access_requests"))
+        permission = db.session.get(UserServerPermission, (user_id, server_id))
+        if permission is None:
+            permission = UserServerPermission(user_id=user_id, server_id=server_id, is_allowed=True)
+            db.session.add(permission)
+        else:
+            permission.is_allowed = True
+        access_request.status = "approved"
+    else:
+        access_request.status = "denied"
+
+    access_request.resolved_at = datetime.now(timezone.utc)
+    access_request.resolved_by_id = current_user.id
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server=access_request.server,
+        error_message=f"{decision} server access request for user '{access_request.user.username}'",
+    )
+    flash(_("Access request updated."), "success")
+    return redirect(url_for("admin.access_requests"))
 
 
 def _flash_endpoint_validation(form):

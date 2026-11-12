@@ -34,7 +34,7 @@ def _download_proxy_url(client, headers=None):
     resp = client.get("/download/copilot", headers=headers or {})
     assert resp.status_code == 200
     data = json.loads(resp.data)
-    return data["servers"]["testserver"]["url"]
+    return data["servers"]["mcprack"]["url"]
 
 
 def test_copilot_proxy_url_stays_http_without_forwarded_proto(app, client):

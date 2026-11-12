@@ -117,12 +117,8 @@ def test_user_override_set_list_reset(app):
         assert "No individual credentials set" in result.output
 
 
-def test_user_config_show_for_network_server(app):
-    """A server with its own network `url` (e.g. a genuinely network-native
-    MCP server, or one of mcp_rack's shared fastmcp proxies) is still handed
-    to the user as a /proxy/mcp/ relay URL, never its raw backend address —
-    the backend may be unreachable from the user's own machine (a private
-    IP, a different host mcprack itself can reach but the user cannot)."""
+def test_user_config_show_for_network_server_uses_aggregate(app):
+    """CLI preview also emits the same aggregate URL as the web UI."""
     with app.app_context():
         user = _make_user("alice")
         server = McpServer(
@@ -141,7 +137,7 @@ def test_user_config_show_for_network_server(app):
         result = runner.invoke(args=["user", "config", "show", "alice", "copilot"])
         assert result.exit_code == 0, result.output
         payload = json.loads(result.output)
-        assert "/proxy/mcp/" in payload["servers"]["httpsvc"]["url"]
+        assert "/proxy/mcp/aggregate/" in payload["servers"]["mcprack"]["url"]
 
 
 def test_user_config_show_uses_public_base_url_for_stdio_server(app):
@@ -160,7 +156,7 @@ def test_user_config_show_uses_public_base_url_for_stdio_server(app):
             result = runner.invoke(args=["user", "config", "show", "alice", "copilot"])
             assert result.exit_code == 0, result.output
             payload = json.loads(result.output)
-            assert payload["servers"]["jenkins"]["url"].startswith("https://mcprack.example.test/")
+            assert payload["servers"]["mcprack"]["url"].startswith("https://mcprack.example.test/")
         finally:
             app.config["PUBLIC_BASE_URL"] = ""
 
@@ -205,7 +201,7 @@ def test_user_config_download_writes_file(app, tmp_path):
         assert result.exit_code == 0, result.output
         assert out_file.exists()
         payload = json.loads(out_file.read_text())
-        assert "httpsvc" in payload["servers"]
+        assert list(payload["servers"]) == ["mcprack"]
 
 
 def test_template_create_set_servers_show_apply_delete(app):

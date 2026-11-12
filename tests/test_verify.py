@@ -251,7 +251,7 @@ def test_verify_uses_a_temporary_token_and_removes_it(app, carol, fake):
     result = _verify(app, "claude-code", "--base-url", backend.url)
 
     assert result.exit_code == 0, result.output
-    assert "OK    zabbix: 3 tool(s), protocol 2025-06-18" in result.output and "All 1 server(s) verified." in result.output
+    assert "OK    mcprack: 3 tool(s), protocol 2025-06-18" in result.output and "All 1 server(s) verified." in result.output
     auth = {call["auth"] for call in backend.seen}
     assert len(auth) == 1
     sent = auth.pop()
@@ -268,7 +268,7 @@ def test_the_path_is_kept_when_the_origin_is_replaced(app, carol, fake):
 
     _verify(app, "claude-code", "--base-url", backend.url)
 
-    assert {call["path"] for call in backend.seen} == {f"/proxy/mcp/{carol['server']}"}
+    assert {call["path"] for call in backend.seen} == {"/proxy/mcp/aggregate"}
 
 
 def test_a_failing_server_fails_the_command_with_the_reason(app, carol, fake):
@@ -277,7 +277,7 @@ def test_a_failing_server_fails_the_command_with_the_reason(app, carol, fake):
     result = _verify(app, "claude-code", "--base-url", backend.url)
 
     assert result.exit_code == 1
-    assert "FAIL  zabbix: initialize: Upstream MCP server exited" in result.output and "1 of 1 server(s) failed." in result.output
+    assert "FAIL  mcprack: initialize: Upstream MCP server exited" in result.output and "1 of 1 server(s) failed." in result.output
     assert _live_tokens(app) == 0  # cleaned up on failure too
 
 

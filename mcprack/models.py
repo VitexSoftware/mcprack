@@ -91,6 +91,17 @@ class User(UserMixin, db.Model):
     permissions = db.relationship(
         "UserServerPermission", back_populates="user", cascade="all, delete-orphan"
     )
+    access_requests = db.relationship(
+        "UserServerAccessRequest",
+        back_populates="user",
+        foreign_keys="UserServerAccessRequest.user_id",
+        cascade="all, delete-orphan",
+    )
+    resolved_access_requests = db.relationship(
+        "UserServerAccessRequest",
+        back_populates="resolved_by",
+        foreign_keys="UserServerAccessRequest.resolved_by_id",
+    )
     config_template = db.relationship("ConfigTemplate", back_populates="users")
 
     @property
@@ -396,6 +407,12 @@ class McpServer(db.Model):
     permissions = db.relationship(
         "UserServerPermission", back_populates="server", cascade="all, delete-orphan"
     )
+    access_requests = db.relationship(
+        "UserServerAccessRequest",
+        back_populates="server",
+        foreign_keys="UserServerAccessRequest.server_id",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def args(self):
@@ -593,6 +610,32 @@ class UserServerPermission(db.Model):
 
     user = db.relationship("User", back_populates="permissions")
     server = db.relationship("McpServer", back_populates="permissions")
+
+
+class UserServerAccessRequest(db.Model):
+    __tablename__ = "user_server_access_requests"
+
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), primary_key=True)
+    server_id = db.Column(db.Integer, db.ForeignKey("mcp_servers.id"), primary_key=True)
+    status = db.Column(db.String(20), nullable=False, default="pending", server_default="pending")
+    requested_at = db.Column(db.DateTime(timezone=True), nullable=False, default=_utcnow)
+    resolved_at = db.Column(db.DateTime(timezone=True), nullable=True)
+    resolved_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    __table_args__ = (
+        db.CheckConstraint("status IN ('pending', 'approved', 'denied')", name="ck_access_request_status"),
+        db.Index("ix_access_requests_status_requested", "status", "requested_at"),
+    )
+
+    user = db.relationship(
+        "User", back_populates="access_requests", foreign_keys=[user_id]
+    )
+    resolved_by = db.relationship(
+        "User", back_populates="resolved_access_requests", foreign_keys=[resolved_by_id]
+    )
+    server = db.relationship(
+        "McpServer", back_populates="access_requests", foreign_keys=[server_id]
+    )
 
 
 class ConfigTemplate(db.Model):

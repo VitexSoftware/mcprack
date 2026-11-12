@@ -152,4 +152,5 @@ def test_config_returns_json_for_selected_server(app, client):
     assert resp.status_code == 200
     data = resp.get_json()["data"]
     assert data["filename"] == "claude_desktop_config.json"
-    assert "svc" in data["config"]["mcpServers"]
+    assert list(data["config"]["mcpServers"]) == ["mcprack"]
+    assert "/proxy/mcp/aggregate/" in data["config"]["mcpServers"]["mcprack"]["url"]
