@@ -7,7 +7,7 @@
   <p class="text-muted">{{ _('Which users have selected which MCP servers, and whether a live per-user proxy instance is currently running for that pair.') }}</p>
 
   <div class="table-scroll">
-    <table>
+    <table class="datatable">
       <thead>
         <tr>
           <th>{{ _('User') }}</th>
@@ -49,7 +49,7 @@
   <p class="text-muted">{{ _('Only stdio servers without a fixed network URL are started here, on demand, one isolated instance per (user, server) pair.') }}</p>
 
   <div class="table-scroll">
-    <table>
+    <table class="datatable">
       <thead>
         <tr>
           <th>{{ _('User') }}</th>
@@ -58,8 +58,8 @@
           <th>{{ _('Port') }}</th>
           <th>{{ _('Status') }}</th>
           <th>{{ _('Idle') }}</th>
-          <th>{{ _('Log') }}</th>
-          <th>{{ _('Actions') }}</th>
+          <th data-orderable="false">{{ _('Log') }}</th>
+          <th data-orderable="false" data-searchable="false">{{ _('Actions') }}</th>
         </tr>
       </thead>
       <tbody>

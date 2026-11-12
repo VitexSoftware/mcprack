@@ -14,11 +14,17 @@
   <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
   <link rel="shortcut icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <script src="{{ url_for('static', filename='theme.js') }}"></script>
+  <script src="{{ url_for('static', filename='shell.js') }}"></script>
 </head>
 <body>
   <header>
     <div class="header-content">
       <div class="header-left">
+        {% if current_user.is_authenticated %}
+        <button type="button" class="sidebar-toggle" aria-label="{{ _('Toggle menu') }}" aria-controls="sidebar" aria-expanded="true">
+          <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </button>
+        {% endif %}
         <a href="{{ url_for('catalog.index') }}" class="header-brand">
           <picture class="header-brand-logo">
             <source srcset="{{ url_for('static', filename='mcprack-app-icon.svg') }}" type="image/svg+xml">
@@ -48,19 +54,6 @@
               <span>{{ current_user.display_name }}</span>
             </button>
             <div class="header-user-menu-dropdown" id="userMenuDropdown">
-              <a href="{{ url_for('catalog.index') }}" class="header-user-menu-item">{{ _('Catalog') }}</a>
-              {% if current_user.is_admin %}
-                <div class="header-user-menu-divider"></div>
-                <a href="{{ url_for('admin.servers_list') }}" class="header-user-menu-item">{{ _('All Servers') }}</a>
-                <a href="{{ url_for('admin.install_wizard') }}" class="header-user-menu-item">{{ _('Install New Server') }}</a>
-                <a href="{{ url_for('admin.users_list') }}" class="header-user-menu-item">{{ _('All Users') }}</a>
-                <a href="{{ url_for('admin.templates_list') }}" class="header-user-menu-item">{{ _('Config Templates') }}</a>
-                <a href="{{ url_for('admin.proxy_instances') }}" class="header-user-menu-item">{{ _('Proxy Instances') }}</a>
-                <a href="{{ url_for('admin.audit_log') }}" class="header-user-menu-item">{{ _('Audit Log') }}</a>
-                <a href="{{ url_for('admin.vaultwarden_wizard') }}" class="header-user-menu-item">{{ _('Vaultwarden Setup') }}</a>
-                <a href="{{ url_for('admin.oauth_wizard') }}" class="header-user-menu-item">{{ _('OAuth Diagnostics') }}</a>
-                <a href="{{ url_for('admin.otel_wizard') }}" class="header-user-menu-item">{{ _('OTEL Diagnostics') }}</a>
-              {% endif %}
               {% if current_user.auth_type == 'local' %}
                 <div class="header-user-menu-divider"></div>
                 <a href="{{ url_for('auth.account_password') }}" class="header-user-menu-item">{{ _('Change Password') }}</a>
@@ -92,6 +85,12 @@
     </div>
   </header>
 
+  <div class="app-shell">
+    {% if current_user.is_authenticated %}
+    {% include '_nav.html' %}
+    <div class="sidebar-scrim"></div>
+    {% endif %}
+    <div class="app-body">
   <main>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
@@ -112,6 +111,8 @@
       <a href="https://github.com/VitexSoftware/mcprack" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
   </footer>
+    </div>
+  </div>
 
   <!-- Loading spinner overlay -->
   <div id="loadingOverlay" class="loading-overlay">
@@ -121,6 +122,20 @@
     </div>
   </div>
 
+  {% if current_user.is_authenticated and current_user.is_admin %}
+  <div id="dt-i18n" hidden
+       data-search="{{ _('Search:') }}"
+       data-length-menu="{{ _('Show _MENU_ rows') }}"
+       data-info="{{ _('_START_–_END_ of _TOTAL_') }}"
+       data-info-empty="{{ _('0 rows') }}"
+       data-info-filtered="{{ _('(filtered from _MAX_)') }}"
+       data-zero-records="{{ _('No matching rows') }}"
+       data-previous="{{ _('Previous') }}"
+       data-next="{{ _('Next') }}"></div>
+  <script src="{{ url_for('static', filename='vendor/jquery.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='vendor/jquery.dataTables.min.js') }}"></script>
+  <script src="{{ url_for('static', filename='datatables-init.js') }}"></script>
+  {% endif %}
   <script src="{{ url_for('static', filename='confirm-submit.js') }}"></script>
   <script src="{{ url_for('static', filename='loading-spinner.js') }}"></script>
 </body>

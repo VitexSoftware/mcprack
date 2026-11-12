@@ -10,3 +10,11 @@ override_dh_auto_build:
 override_dh_auto_clean:
 	rm -f mcprack/translations/*/LC_MESSAGES/*.mo
 	dh_auto_clean
+
+# The vendored jQuery/DataTables in mcprack/static/vendor/ must not ship in the
+# .deb: libjs-jquery and libjs-jquery-datatables provide them, and
+# debian/mcprack.links (dh_link) symlinks the system files into place.
+override_dh_install:
+	dh_install
+	rm -f debian/mcprack/usr/lib/mcprack/mcprack/static/vendor/jquery.min.js \
+	      debian/mcprack/usr/lib/mcprack/mcprack/static/vendor/jquery.dataTables.min.js

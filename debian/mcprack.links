@@ -1,0 +1,5 @@
+# Use the system JavaScript libraries instead of the copies vendored in
+# mcprack/static/vendor/ (those serve source checkouts and pip installs only).
+# Flask serves static/ files through these symlinks unchanged.
+usr/share/javascript/jquery/jquery.min.js usr/lib/mcprack/mcprack/static/vendor/jquery.min.js
+usr/share/javascript/jquery-datatables/jquery.dataTables.min.js usr/lib/mcprack/mcprack/static/vendor/jquery.dataTables.min.js

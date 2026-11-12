@@ -2,6 +2,7 @@ mcprack/*.py /usr/lib/mcprack/mcprack/
 mcprack/templates/* /usr/lib/mcprack/mcprack/templates/
 mcprack/static/* /usr/lib/mcprack/mcprack/static/
 mcprack/openapi/* /usr/lib/mcprack/mcprack/openapi/
+mcprack/schemas/* /usr/lib/mcprack/mcprack/schemas/
 mcprack/migrations/* /usr/lib/mcprack/mcprack/migrations/
 wsgi.py /usr/lib/mcprack/
 debian/mcprack.service /usr/lib/mcprack/

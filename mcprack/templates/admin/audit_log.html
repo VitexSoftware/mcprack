@@ -49,7 +49,7 @@
   </form>
 
   <div class="table-scroll">
-    <table>
+    <table class="datatable" data-dt-order="none" data-dt-page-length="50">
       <thead>
         <tr>
           <th>{{ _('Timestamp (UTC)') }}</th>
@@ -60,7 +60,7 @@
           <th>{{ _('Detail') }}</th>
           <th>{{ _('Source') }}</th>
           <th>{{ _('Duration') }}</th>
-          <th>{{ _('Request') }}</th>
+          <th data-orderable="false" data-searchable="false">{{ _('Request') }}</th>
         </tr>
       </thead>
       <tbody>
