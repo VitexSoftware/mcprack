@@ -12,7 +12,7 @@ Canonical references — copy from these, do not rewrite from memory:
 - Annotation constants: `~/Projects/Multi/multiflexi-mcp-server/src/multiflexi_mcp_server/server.py` (`READ_ONLY_ANNOTATIONS` … `MUTATE_ANNOTATIONS`)
 - Annotation rationale + test: `~/Projects/Packaging/mcp-server-nextcloud/docs/ADR-017-mcp-tool-annotations.md`, `tests/server/test_annotations.py`
 - Companion package: `~/Projects/VitexSoftware/mcprack/doc/PACKAGING-MCP-SERVERS.md` and `~/Projects/Multi/multiflexi-mcp-server/debian/`
-- Extras: `SKILL.md`, `lhm.plugin.json` in `multiflexi-mcp-server`
+- Extras: `SKILL.md`, `lhm.plugin.json` and `server.json` in `multiflexi-mcp-server`
 
 ---
 
@@ -64,7 +64,7 @@ A tool must never be `read_only_hint=True` and `destructive_hint=True` at once.
 - **stdio transport is mandatory** (mcprack proxies stdio servers). If the server defaults to HTTP, add an env-selected stdio path (see `mcp-server-redmine` main.py); reject OAuth-only auth on the stdio path.
 - Use the current `mcp`/`fastmcp` generation; upgrade the server code rather than pinning or downgrading the library. The dependency floor stays `fastmcp>=4.1.4` / `python3-fastmcp (>= 4.1.4)` in `debian/control`; do not pin old pre-releases (`4.0.0a2`, `4.0.0b1`, `4.0.0b3`). Our library packages track upstream per §9 and currently ship: `python3-fastmcp` = PrefectHQ/fastmcp main @ 4.2.0~a3-2 (upstream stable line is v4.1.6; all fastmcp GHSAs are patched ≤ 4.1.1) and `python3-mcp` = modelcontextprotocol/python-sdk v2.3.0 + main, packaged as `1:2.3.0-1` (all python-sdk GHSAs patched ≤ 2.2.0). Beware: **mcp SDK 2.x renamed `mcp.server.fastmcp.FastMCP` to `mcp.server.mcpserver.MCPServer`** — servers on the `mcp` package must use the 2.x API or depend on the `fastmcp` package instead.
 - Console-script entry point installed as `/usr/bin/mcp-server-<name>` (see §3a), supports `--version` and `--help`.
-- Implement resources/prompts only when useful; if present, list them in `lhm.plugin.json`.
+- Implement resources/prompts only when useful; if present, list them in `server.json` (`cz.vitexsoftware.mcp.prompts` / `.resources`).
 
 ## 3a. Naming: package = binary = catalog entry (`mcp-server-<name>`)
 
@@ -223,10 +223,30 @@ mcprack server probe /usr/bin/mcp-server-<name> --set-env <PREFIX>_READ_ONLY=tru
 
 - `README.md`: install (`apt install mcp-server-<name>` / `mcprack-mcp-server-<name>`), env variables (secret vs non-secret), read-only mode, table of tools with their annotation class.
 - `SKILL.md`: when/how an agent should use the server (front matter `name`, `description`).
-- `lhm.plugin.json`: `identifier`, `name`, `description`, `category`, `prompts`, homepage/author.
-- `server.json` (MCP Registry shape) — **the configuration manifest mcprack reads to pre-fill the server's config form**. Declares every env variable the server reads, so admins pick a name instead of typing it from memory:
-  `{"environmentVariables": [{"name": "<PREFIX>_HOST", "description": "...", "isRequired": true, "isSecret": false, "default": "...", "choices": ["a","b"]}]}`.
-  `name` is exact (case included); `isRequired` only for values without which the server cannot start; `isSecret` for credentials (a `default` is never pre-filled for a secret); `default` only when a sensible one exists (always a string). Include `<PREFIX>_READ_ONLY`/`_TRANSPORT` where supported. Installed by the server package at `/usr/share/<binary>/server.json` (e.g. `/usr/share/mcp-server-email/server.json`); a companion package may instead ship `/usr/share/mcprack/manifests/<binary>.json` for a server whose upstream package it does not control. Keep it in sync with the README env table.
+- **`server.json` — the ONE metadata file of the server** (the source of truth mcprack reads; an existing `lhm.plugin.json` is **kept, never deleted** - it may be used by other consumers such as marketplace listings - and is no longer read by mcprack once `server.json` exists. Keep the facts they share - title/name, description, version, author, homepage - identical in both). It is a valid [MCP Registry `server.json`](https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json) (so it can be published with `mcp-publisher`) that additionally satisfies our stricter schema, **`mcprack/schemas/mcp-server.schema.json`** (in the mcprack repository; the Registry schema allows extra keys, ours requires some). Validate with `python3 -m mcprack.manifest validate server.json` (exit 1 on any violation; needs no mcprack configuration - on an installed host `PYTHONPATH=/usr/lib/mcprack`; the same is `mcprack server manifest-validate` on a configured instance). Convert a legacy file with `python3 -m mcprack.manifest convert lhm.plugin.json --package mcp-server-<name> --new-uuid -o server.json`, then fix what it reports as `TODO`.
+  Required content:
+  - `name` (`io.github.vitexsoftware/mcp-server-<name>` - reverse-DNS, one slash), `title`, `description` (**one sentence, max 100 characters**), `version` (exact), `websiteUrl`, `repository` `{"url": "<GitHub project>", "source": "github"}`.
+  - `packages[]` (at least one: `registryType`, `identifier`, `transport` `{"type": "stdio"}`) and in it **`environmentVariables`**: every variable the server reads - `name` (exact), `description`, `isRequired` only for values without which the server cannot start, `isSecret` for credentials (a secret never has a `default`), `default`/`choices` where sensible. mcprack pre-fills its config form from this list and shows it as the server's "Parameters". Keep it in sync with the README env table.
+  - `_meta` → `io.modelcontextprotocol.registry/publisher-provided` → **`cz.vitexsoftware.mcp`** (our extension, the only place for our own fields): `uuid`, `author` `{name, url}`, `tools` (every registered tool: `name`, `description`, optionally `title`, `annotations`, `inputSchema`), and optionally `longDescription` (paragraphs for the page), `category`, `tags`, `prompts`, `resources`.
+  ```json
+  {"$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+   "name": "io.github.vitexsoftware/mcp-server-example", "title": "Example MCP Server",
+   "description": "Manage Example from an AI assistant.", "version": "1.0.0",
+   "websiteUrl": "https://github.com/VitexSoftware/mcp-server-example",
+   "repository": {"url": "https://github.com/VitexSoftware/mcp-server-example", "source": "github"},
+   "packages": [{"registryType": "pypi", "identifier": "mcp-server-example", "version": "1.0.0",
+     "transport": {"type": "stdio"},
+     "environmentVariables": [{"name": "EXAMPLE_URL", "description": "Base URL", "isRequired": true},
+                              {"name": "EXAMPLE_TOKEN", "description": "API token", "isSecret": true}]}],
+   "_meta": {"io.modelcontextprotocol.registry/publisher-provided": {"cz.vitexsoftware.mcp": {
+     "uuid": "<uuid4>", "author": {"name": "Vítězslav Dvořák", "url": "https://github.com/VitexSoftware"},
+     "tools": [{"name": "list_things", "description": "List things"}]}}}}
+  ```
+  - **`uuid` is the identity of the server kind.** Generate it once when the server is created (`python3 -c 'import uuid; print(uuid.uuid4())'`, or `--new-uuid` of the converter), commit it, and **never change or reuse it** - not when the server is renamed (§3a; `name`, `identifier` and the package name may change, the uuid may not), re-packaged, forked-and-continued or moved to another repository. mcprack adopts it, so the same server has the same UUID on every installation and its page `/server/<uuid>` survives renames. A new, unrelated server gets a new UUID.
+  - **Install it** in the server package at `/usr/share/<binary>/server.json` (`debian/<package>.install`: `server.json usr/share/<binary>/`). A companion package may instead ship `/usr/share/mcprack/manifests/<binary>.json` for a server whose package it does not control. Until it is installed mcprack cannot see it. Maximum size 1 MiB (it lists every tool).
+  - Do not repeat the same facts elsewhere by hand: author/description/homepage live here, the AppStream metainfo is kept consistent with it.
+  - AppStream metainfo (distribution catalogues, and the fallback for the page): `<name>`, `<summary>`, `<description>`, `<project_license>`, `<developer><name>`, `<url type="homepage">`, `<url type="vcs-browser">` (many existing files lack it), `<url type="bugtracker">`, `<provides><binary>mcp-server-<name></binary></provides>` (how mcprack matches the metainfo to the server), `<icon>`.
+  - Existing servers without a UUID: assign one in the next release; until then mcprack generates a per-instance UUID and says so on the page. A server that has only `lhm.plugin.json` is still read by mcprack as a fallback and flagged on its page until its `server.json` exists.
 - `CHANGELOG.md` + `debian/changelog` kept in sync; `debian/copyright` present.
 
 ## 7. Tests
@@ -234,6 +254,7 @@ mcprack server probe /usr/bin/mcp-server-<name> --set-env <PREFIX>_READ_ONLY=tru
 - Unit test (no live backend) that iterates the registered tools (`list_tools()` in-memory) and asserts for **every** tool: title present and ≠ name, annotations present with all four hints not `None`, and no `read_only ∧ destructive`.
 - Name-consistency test: names starting `get_/list_/search_` ⇒ `read_only_hint=True`; names with `delete/remove` ⇒ `destructive_hint=True`.
 - Read-only mode test: with `<PREFIX>_READ_ONLY=true` no non-read-only tool is registered.
+- Manifest test: `python3 -m mcprack.manifest validate server.json` passes (run it in pytest or in the autopkgtest), the tool names in `server.json` equal the registered tools, every env variable the code reads is in `environmentVariables`, and the `uuid` equals the one in the previous release (identity must not drift).
 - Test that secrets do not appear in error output.
 - Pattern: `~/Projects/Packaging/mcp-server-nextcloud/tests/server/test_annotations.py` (adapt away from the integration fixture).
 
@@ -276,8 +297,9 @@ with an `upstream` remote, or packaged from a third-party repo), it must not be 
 - [ ] Companion sets `--set-env <PREFIX>_READ_ONLY=true` if destructive tools exist
 - [ ] `debian/tests/control` has a `smoke` test running `mcprack server probe /usr/bin/mcp-server-<name> --set-env <PREFIX>_READ_ONLY=true` (`Depends: @, mcprack (>= 1.6.0)`); it passes and prints the server's tools/resources in the autopkgtest log
 - [ ] Jenkinsfile + Jenkinsfile.release with buildBlocker; no forky / `--ipc=host`
-- [ ] `server.json` lists every env variable (name, required, secret, default, choices) and is installed to `/usr/share/<binary>/server.json`; a test asserts each name appears in the README env table
-- [ ] README, SKILL.md, lhm.plugin.json, metainfo, changelogs, mcprack README list updated
+- [ ] ONE `server.json`, valid per `mcprack/schemas/mcp-server.schema.json` (`python3 -m mcprack.manifest validate server.json` passes): Registry fields, `packages[].environmentVariables` listing every env variable (name, required, secret, default, choices), and `cz.vitexsoftware.mcp` with `uuid` (fixed forever), `author` and every tool; installed to `/usr/share/<binary>/server.json`; a test asserts each variable name appears in the README env table
+- [ ] AppStream metainfo has summary, description, license, developer, homepage, `vcs-browser`, bugtracker and `<provides><binary>`
+- [ ] README, SKILL.md, server.json, metainfo, changelogs, mcprack README list updated
 - [ ] Annotation, name-consistency and read-only tests pass (`pytest`)
 - [ ] Fork only: upstream checked for new releases / security fixes, all backported (or skip reason documented), upstream base version recorded (§9)
 

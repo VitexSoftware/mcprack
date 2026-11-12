@@ -41,4 +41,6 @@ def test_build_index_survives_a_directory_match(tmp_path, monkeypatch):
     bogus = tmp_path / "bogus.xml"
     bogus.mkdir()
     monkeypatch.setattr(ai, "glob", lambda pattern: [str(bogus)])
-    assert ai._build_index() == {"by_binary": {}, "by_package": {}}
+    assert ai._build_index() == {
+        "by_binary": {}, "by_package": {}, "meta_by_binary": {}, "meta_by_package": {},
+    }

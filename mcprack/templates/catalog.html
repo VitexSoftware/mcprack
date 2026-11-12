@@ -126,7 +126,7 @@
             <input type="checkbox" class="server-checkbox" name="server_id" value="{{ server.id }}"
                    {{ "checked" if server.id in selected_ids else "" }}
                    id="server-{{ server.id }}" aria-label="{{ _('Select %(label)s', label=server.label) }}">
-            <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24">
+            <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}" class="icon-link" title="{{ _('About this server') }}"><img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24"></a>
             <label class="server-info" for="server-{{ server.id }}">
               <div class="label">{{ server.label }}</div>
               {% if server.description %}<div class="desc">{{ server.description }}</div>{% endif %}

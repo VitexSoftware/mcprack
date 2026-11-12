@@ -1276,3 +1276,46 @@ def register_management_cli(app):
     app.cli.add_command(secret_cli)
     app.cli.add_command(template_cli)
     app.cli.add_command(init_config)
+
+
+@server_cli.command("manifest-validate")
+@click.argument("files", nargs=-1, required=True, type=click.Path(exists=True, dir_okay=False))
+def server_manifest_validate(files):
+    """Validate server.json file(s) against the MCP server manifest schema
+    (mcprack/schemas/mcp-server.schema.json). Exit status 1 if any fails.
+    Projects without an mcprack configuration use
+    `python3 -m mcprack.manifest validate FILE` instead."""
+    from . import manifest
+
+    failed = False
+    for path in files:
+        problems = manifest.validate_file(path)
+        click.echo(("FAIL  " if problems else "OK    ") + path)
+        for problem in problems:
+            click.echo("      " + problem)
+        failed = failed or bool(problems)
+    if failed:
+        raise click.exceptions.Exit(1)
+
+
+@server_cli.command("manifest-convert")
+@click.argument("plugin_file", type=click.Path(exists=True, dir_okay=False))
+@click.option("--package", "package_name", help="Package / binary name, e.g. mcp-server-netbox.")
+@click.option("--new-uuid", is_flag=True, help="Assign a uuid when there is none. Only for a server that never had one - it is the identity of the server kind and must never change afterwards.")
+@click.option("--output", "-o", type=click.Path(dir_okay=False), help="Write to this file instead of stdout.")
+def server_manifest_convert(plugin_file, package_name, new_uuid, output):
+    """Convert a legacy lhm.plugin.json to the unified server.json (also
+    available as `python3 -m mcprack.manifest convert`)."""
+    import json as _json
+
+    from . import manifest
+
+    data, todo = manifest.convert_file(plugin_file, package_name, new_uuid)
+    text = _json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+    if output:
+        with open(output, "w", encoding="utf-8") as fh:
+            fh.write(text)
+    else:
+        click.echo(text, nl=False)
+    for problem in todo:
+        click.echo(f"TODO  {problem}", err=True)

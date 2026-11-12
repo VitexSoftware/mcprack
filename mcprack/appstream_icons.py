@@ -3,6 +3,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from glob import glob
+from urllib.parse import urlsplit
 
 
 INDEX_TTL = 300
@@ -112,9 +113,80 @@ def _resolve_icon_file(icon_name):
     return None
 
 
+def _children(component, tag):
+    return [c for c in component if _tag_name(c) == tag]
+
+
+def _paragraphs(description):
+    """Plain-text paragraphs and list items of an AppStream <description>."""
+    out = []
+    if description is None:
+        return out
+    for child in description:
+        name = _tag_name(child)
+        if name == "p":
+            text = " ".join("".join(child.itertext()).split())
+            if text:
+                out.append(text)
+        elif name in ("ul", "ol"):
+            items = [" ".join("".join(li.itertext()).split()) for li in child if _tag_name(li) == "li"]
+            items = [i for i in items if i]
+            if items:
+                out.append(items)
+    return out
+
+
+def _component_meta(component):
+    """What the server's own AppStream metainfo says about it - shown on the
+    server page. All values are plain text (never markup) and urls are kept
+    only when they are http(s)."""
+    urls = {}
+    for u in _children(component, "url"):
+        kind = u.get("type")
+        text = (u.text or "").strip()
+        try:
+            parsed = urlsplit(text)
+        except ValueError:
+            continue
+        if kind and parsed.scheme in ("http", "https") and parsed.hostname:
+            urls.setdefault(kind, text)
+
+    developer = None
+    for dev in _children(component, "developer"):
+        developer = _first_text(dev, "name")
+    if developer is None:
+        developer = _first_text(component, "developer_name")
+
+    descriptions = _children(component, "description")
+    releases = []
+    for rels in _children(component, "releases"):
+        for rel in _children(rels, "release"):
+            if rel.get("version"):
+                releases.append({"version": rel.get("version"), "date": rel.get("date")})
+
+    return {
+        "id": _first_text(component, "id"),
+        "name": _first_text(component, "name"),
+        "summary": _first_text(component, "summary"),
+        "description": _paragraphs(descriptions[0]) if descriptions else [],
+        "license": _first_text(component, "project_license"),
+        "developer": developer,
+        "urls": urls,
+        "categories": [
+            (c.text or "").strip()
+            for cats in _children(component, "categories")
+            for c in _children(cats, "category")
+            if (c.text or "").strip()
+        ],
+        "latest_release": releases[0] if releases else None,
+    }
+
+
 def _build_index():
     by_binary = {}
     by_package = {}
+    meta_by_binary = {}
+    meta_by_package = {}
     for path in _iter_metainfo_files():
         try:
             root = ET.parse(path).getroot()
@@ -129,6 +201,13 @@ def _build_index():
             if _tag_name(component) != "component":
                 continue
 
+            meta = _component_meta(component)
+            pkgname = _component_pkgname(component)
+            if pkgname:
+                meta_by_package.setdefault(pkgname, meta)
+            for binary in _component_binaries(component):
+                meta_by_binary.setdefault(binary, meta)
+
             icon_path = None
             for icon_name in _candidate_icon_names(component):
                 icon_path = _resolve_icon_file(icon_name)
@@ -138,14 +217,18 @@ def _build_index():
             if not icon_path:
                 continue
 
-            pkgname = _component_pkgname(component)
             if pkgname and pkgname not in by_package:
                 by_package[pkgname] = icon_path
 
             for binary in _component_binaries(component):
                 by_binary.setdefault(binary, icon_path)
 
-    return {"by_binary": by_binary, "by_package": by_package}
+    return {
+        "by_binary": by_binary,
+        "by_package": by_package,
+        "meta_by_binary": meta_by_binary,
+        "meta_by_package": meta_by_package,
+    }
 
 
 def _get_index():
@@ -220,6 +303,24 @@ def resolve_server_icon_path(server):
             icon_path = index["by_package"].get(pkg)
             if icon_path and os.path.isfile(icon_path):
                 return icon_path
+
+    return None
+
+
+def resolve_server_metadata(server):
+    """AppStream metadata (summary, description, developer, urls, license...)
+    of the component that provides this server's binary, or None."""
+    index = _get_index()
+
+    for binary in _binary_candidates(server):
+        meta = index["meta_by_binary"].get(binary)
+        if meta:
+            return meta
+
+    if server.command and os.path.isabs(server.command) and os.path.exists(server.command):
+        pkg = _owning_package(server.command)
+        if pkg:
+            return index["meta_by_package"].get(pkg)
 
     return None
 

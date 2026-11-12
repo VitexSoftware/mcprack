@@ -1,131 +1,186 @@
 {% extends "base.html" %}
 {% block title %}{{ _('Edit user') if user else _('New user') }} — mcprack{% endblock %}
 {% block content %}
-<h1>{{ _('Edit user') if user else _('Create local user') }}</h1>
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  {% if not user %}
-  <label for="username">{{ _('Username') }}</label>
-  <input type="text" id="username" name="username" required autofocus>
+<section class="section user-edit">
+  <div class="form-header">
+    {% if user %}
+    <div class="user-hero">
+      <div class="user-hero-avatar" aria-hidden="true">{{ user.display_name[0].upper() }}</div>
+      <div>
+        <h1>{{ user.display_name }}</h1>
+        <div class="user-hero-meta">
+          <code>{{ user.username }}</code>
+          <span class="badge {{ 'badge-http' if user.auth_type == 'ldap' else 'badge-stdio' }}">{{ user.auth_type | upper }}</span>
+          {% if user.is_admin %}<span class="badge badge-admin">{{ _('Admin') }}</span>{% endif %}
+          {% if user.is_active %}<span class="badge badge-success">✓ {{ _('Active') }}</span>{% else %}<span class="badge badge-error">{{ _('Disabled') }}</span>{% endif %}
+          {% if user.totp_enabled %}<span class="badge badge-success">🔐 {{ _('2FA') }}</span>{% endif %}
+        </div>
+        {% if user.config_template %}
+        <p class="text-muted m-0">{{ _('Last based on template: %(label)s', label=user.config_template.label) }}</p>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <h1>👤 {{ _('Create local user') }}</h1>
+    {% endif %}
+    <a href="{{ url_for('admin.users_list') }}" class="btn btn-secondary">← {{ _('Users') }}</a>
+  </div>
 
-  <label for="email">{{ _('Email') }}</label>
-  <input type="email" id="email" name="email">
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="form-container">
 
-  <label for="password">{{ _('Password') }}</label>
-  <input type="password" id="password" name="password" required>
-  {% else %}
-  <p><strong>{{ user.username }}</strong> ({{ user.auth_type }})</p>
-  {% if user.auth_type == "local" %}
-  <label for="password">{{ _('New password (leave blank to keep current)') }}</label>
-  <input type="password" id="password" name="password">
+      <div class="form-card">
+        <h2 class="form-card-title">📋 {{ _('Account') }}</h2>
+        {% if not user %}
+        <div class="form-row">
+          <div class="form-group">
+            <label for="username">{{ _('Username') }}</label>
+            <input type="text" id="username" name="username" class="form-control" required autofocus>
+          </div>
+          <div class="form-group">
+            <label for="email">{{ _('Email') }}</label>
+            <input type="email" id="email" name="email" class="form-control">
+          </div>
+          <div class="form-group">
+            <label for="password">{{ _('Password') }}</label>
+            <input type="password" id="password" name="password" class="form-control" required>
+          </div>
+        </div>
+        {% elif user.auth_type == "local" %}
+        <div class="form-group">
+          <label for="password">{{ _('New password (leave blank to keep current)') }}</label>
+          <input type="password" id="password" name="password" class="form-control" autocomplete="new-password">
+        </div>
+        {% endif %}
+        <div class="form-row">
+          {% if user %}
+          <div class="checkbox-group">
+            <label><input type="checkbox" name="is_active" {{ "checked" if user.is_active else "" }}> {{ _('Active') }}</label>
+          </div>
+          {% endif %}
+          <div class="checkbox-group">
+            <label><input type="checkbox" name="is_admin" {{ "checked" if user and user.is_admin else "" }}> {{ _('Admin') }}</label>
+          </div>
+        </div>
+      </div>
+
+      {% if user %}
+      <div class="form-card">
+        <h2 class="form-card-title">🔧 {{ _('Server access &amp; config selection') }}</h2>
+        <p class="form-card-description">{{ _('Allow or deny each server for this user, and tick which allowed servers should actually be included in their generated config — the admin decides this on their behalf, no login required.') }}</p>
+        {% if available_servers %}
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>{{ _('Server') }}</th>
+                <th>{{ _('Access') }}</th>
+                <th>{{ _('Included in config') }}</th>
+                <th>{{ _('Individual credentials') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for server in available_servers %}
+              {% set allowed = permission_map.get(server.id, True) %}
+              <tr>
+                <td>
+                  <div class="flex-gap-sm flex-center">
+                    <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}" class="icon-link" title="{{ _('About this server') }}"><img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24"></a>
+                    <div>{{ server.label }}<br><small class="text-muted"><code>{{ server.name }}</code></small></div>
+                  </div>
+                </td>
+                <td>
+                  <div class="segmented" role="radiogroup" aria-label="{{ server.label }}">
+                    <label class="segmented-option segmented-allow">
+                      <input type="radio" name="server_access_{{ server.id }}" value="allow" {{ "checked" if allowed else "" }}>
+                      <span>{{ _('Allow') }}</span>
+                    </label>
+                    <label class="segmented-option segmented-deny">
+                      <input type="radio" name="server_access_{{ server.id }}" value="deny" {{ "checked" if not allowed else "" }}>
+                      <span>{{ _('Deny') }}</span>
+                    </label>
+                  </div>
+                </td>
+                <td>
+                  <label class="switch-label">
+                    <input type="checkbox" name="selected_server_id" value="{{ server.id }}" {{ "checked" if server.id in selected_ids else "" }}>
+                    {{ _('Included') }}
+                  </label>
+                </td>
+                <td>
+                  <a href="{{ url_for('admin.user_override', user_id=user.id, server_id=server.id) }}" class="btn btn-sm btn-secondary">
+                    ✏️ {{ _('Edit values') }}{% if server.id in override_ids %} ({{ _('set') }}){% endif %}
+                  </a>
+                  {% if not server.allow_user_override %}
+                  <br><small class="text-muted">{{ _('self-service override disabled — admin only') }}</small>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% else %}
+        <p class="text-muted">{{ _('No enabled servers available.') }}</p>
+        {% endif %}
+      </div>
+
+      <div class="form-card">
+        <h2 class="form-card-title">📥 {{ _('Client configs') }}</h2>
+        <p class="form-card-description">{{ _("View or download this user's MCP client config directly — useful for users who never log in themselves.") }}</p>
+        <div class="flex-gap-wrap">
+          {% for client in clients %}
+          <a href="{{ url_for('admin.user_config_view', user_id=user.id, client=client) }}" class="btn btn-secondary">{{ client }}</a>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary btn-lg">💾 {{ _('Save') }}</button>
+        <a href="{{ url_for('admin.users_list') }}" class="btn btn-secondary btn-lg">{{ _('Cancel') }}</a>
+      </div>
+    </div>
+  </form>
+
+  {% if user and templates %}
+  <div class="form-card mt-lg">
+    <h2 class="form-card-title">🧩 {{ _('Apply a configuration template') }}</h2>
+    <p class="form-card-description">{{ _('Replaces this user\'s access and selection with the template\'s. Individual credentials already set for this user are kept.') }}</p>
+    <form method="post" action="{{ url_for('admin.user_apply_template', user_id=user.id) }}" class="flex-gap-wrap items-end">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <select name="template_id" class="form-control form-control-inline" required>
+        <option value="" disabled selected>{{ _('Choose a template…') }}</option>
+        {% for template in templates %}
+        <option value="{{ template.id }}">{{ template.label }} ({{ template.name }})</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="btn btn-primary">{{ _('Apply template') }}</button>
+      <a href="{{ url_for('admin.templates_list') }}" class="btn btn-secondary">{{ _('Manage templates') }}</a>
+    </form>
+  </div>
   {% endif %}
-  <label>
-    <input type="checkbox" name="is_active" {{ "checked" if user.is_active else "" }}>
-    {{ _('Active') }}
-  </label>
-  {% endif %}
-
-  <label>
-    <input type="checkbox" name="is_admin" {{ "checked" if user and user.is_admin else "" }}>
-    {{ _('Admin') }}
-  </label>
 
   {% if user %}
-  {% if user.config_template %}
-  <p class="text-muted">{{ _('Last based on template: %(label)s', label=user.config_template.label) }}</p>
+  <div class="form-card mt-lg">
+    <h2 class="form-card-title">🛡️ {{ _('Security') }}</h2>
+    <p class="form-card-description">
+      {% if user.totp_enabled %}{{ _('Two-factor authentication is on for this user.') }}{% else %}{{ _('Two-factor authentication is off for this user.') }}{% endif %}
+    </p>
+    <div class="flex-gap-wrap">
+      <form method="post" action="{{ url_for('admin.user_revoke_tokens', user_id=user.id) }}" data-confirm="{{ _('Revoke all tokens of this user? They will have to download a new configuration.') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">{{ _('Revoke all tokens') }}</button>
+      </form>
+      {% if user.totp_enabled or user.totp_secret %}
+      <form method="post" action="{{ url_for('admin.user_mfa_reset', user_id=user.id) }}" data-confirm="{{ _('Turn off two-factor authentication for this user? Use this when they have lost their device and recovery codes. They sign in with the password only until they set it up again.') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn btn-danger">{{ _('Reset two-factor authentication') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
   {% endif %}
-
-  <h2>{{ _('Server access &amp; config selection') }}</h2>
-  <p>{{ _('Allow or deny each server for this user, and tick which allowed servers should actually be included in their generated config — the admin decides this on their behalf, no login required.') }}</p>
-  {% if available_servers %}
-  <table>
-    <thead>
-      <tr>
-        <th>{{ _('Server') }}</th>
-        <th>{{ _('Access') }}</th>
-        <th>{{ _('Included in config') }}</th>
-        <th>{{ _('Individual credentials') }}</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for server in available_servers %}
-      {% set allowed = permission_map.get(server.id, True) %}
-      <tr>
-        <td>{{ server.label }} <small>({{ server.name }})</small></td>
-        <td>
-          <label>
-            <input type="radio" name="server_access_{{ server.id }}" value="allow" {{ "checked" if allowed else "" }}>
-            {{ _('Allow') }}
-          </label>
-          <label>
-            <input type="radio" name="server_access_{{ server.id }}" value="deny" {{ "checked" if not allowed else "" }}>
-            {{ _('Deny') }}
-          </label>
-        </td>
-        <td>
-          <label>
-            <input type="checkbox" name="selected_server_id" value="{{ server.id }}" {{ "checked" if server.id in selected_ids else "" }}>
-            {{ _('Included') }}
-          </label>
-        </td>
-        <td>
-          <a href="{{ url_for('admin.user_override', user_id=user.id, server_id=server.id) }}">
-            {{ _('Edit values') }}{% if server.id in override_ids %} ({{ _('set') }}){% endif %}
-          </a>
-          {% if not server.allow_user_override %}
-          <br><small class="text-muted">{{ _('self-service override disabled — admin only') }}</small>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p>{{ _('No enabled servers available.') }}</p>
-  {% endif %}
-
-  <h2>{{ _('Client configs') }}</h2>
-  <p>{{ _("View or download this user's MCP client config directly — useful for users who never log in themselves.") }}</p>
-  <ul>
-    {% for client in clients %}
-    <li><a href="{{ url_for('admin.user_config_view', user_id=user.id, client=client) }}">{{ client }}</a></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-
-  <button type="submit">{{ _('Save') }}</button>
-</form>
-
-{% if user and templates %}
-<h2>{{ _('Apply a configuration template') }}</h2>
-<p class="text-muted">{{ _('Replaces this user\'s access and selection with the template\'s. Individual credentials already set for this user are kept.') }}</p>
-<form method="post" action="{{ url_for('admin.user_apply_template', user_id=user.id) }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <select name="template_id" required>
-    <option value="" disabled selected>{{ _('Choose a template…') }}</option>
-    {% for template in templates %}
-    <option value="{{ template.id }}">{{ template.label }} ({{ template.name }})</option>
-    {% endfor %}
-  </select>
-  <button type="submit">{{ _('Apply template') }}</button>
-</form>
-<p><a href="{{ url_for('admin.templates_list') }}">{{ _('Manage templates') }}</a></p>
-{% endif %}
-
-{% if user %}
-<h2>{{ _('Security') }}</h2>
-<p class="text-muted">
-  {% if user.totp_enabled %}{{ _('Two-factor authentication is on for this user.') }}{% else %}{{ _('Two-factor authentication is off for this user.') }}{% endif %}
-</p>
-<form method="post" action="{{ url_for('admin.user_revoke_tokens', user_id=user.id) }}" data-confirm="{{ _('Revoke all tokens of this user? They will have to download a new configuration.') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit">{{ _('Revoke all tokens') }}</button>
-</form>
-{% if user.totp_enabled or user.totp_secret %}
-<form method="post" action="{{ url_for('admin.user_mfa_reset', user_id=user.id) }}" data-confirm="{{ _('Turn off two-factor authentication for this user? Use this when they have lost their device and recovery codes. They sign in with the password only until they set it up again.') }}">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit">{{ _('Reset two-factor authentication') }}</button>
-</form>
-{% endif %}
-{% endif %}
+</section>
 {% endblock %}

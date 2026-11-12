@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}{{ info.title }} — mcprack{% endblock %}
+{% block content %}
+<section class="section server-page">
+  <div class="form-header">
+    <div class="user-hero">
+      <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-hero-icon" width="64" height="64">
+      <div>
+        <h1>{{ info.title }}</h1>
+        <div class="user-hero-meta">
+          <code>{{ info.name }}</code>
+          <span class="badge {{ 'badge-stdio' if info.transport == 'stdio' else 'badge-http' }}">{{ info.transport | upper }}</span>
+          {% if info.version %}<span class="badge">v{{ info.version }}</span>{% endif %}
+          {% if info.license %}<span class="badge">{{ info.license }}</span>{% endif %}
+          {% for c in info.categories %}<span class="badge badge-users">{{ c }}</span>{% endfor %}
+          {% for tag in info.tags %}<span class="badge">#{{ tag }}</span>{% endfor %}
+          {% if not server.enabled %}<span class="badge badge-warning">{{ _('Disabled') }}</span>{% endif %}
+        </div>
+      </div>
+    </div>
+    <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">← {{ _('Catalog') }}</a>
+  </div>
+
+  <div class="form-container">
+    <div class="form-card">
+      <h2 class="form-card-title">ℹ️ {{ _('What it does') }}</h2>
+      {% if info.summary %}<p class="lead">{{ info.summary }}</p>{% endif %}
+      {% for block in info.description %}
+        {% if block is string %}
+          <p>{{ block }}</p>
+        {% else %}
+          <ul>{% for item in block %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% endif %}
+      {% endfor %}
+      {% if not info.summary and not info.description %}
+        <p class="text-muted">{{ _('This server has not published a description yet.') }}</p>
+      {% endif %}
+    </div>
+
+    <div class="form-card">
+      <h2 class="form-card-title">🧑‍💻 {{ _('Project') }}</h2>
+      <dl class="info-list">
+        <dt>{{ _('Author') }}</dt>
+        <dd>
+          {% if info.author.name %}
+            {% if info.author.url %}<a href="{{ info.author.url }}" target="_blank" rel="noopener noreferrer">{{ info.author.name }}</a>{% else %}{{ info.author.name }}{% endif %}
+          {% else %}<span class="text-muted">—</span>{% endif %}
+        </dd>
+        <dt>GitHub</dt>
+        <dd>{% if info.repository %}<a href="{{ info.repository }}" target="_blank" rel="noopener noreferrer">{{ info.repository }}</a>{% else %}<span class="text-muted">—</span>{% endif %}</dd>
+        {% if info.homepage and info.homepage != info.repository %}
+        <dt>{{ _('Homepage') }}</dt>
+        <dd><a href="{{ info.homepage }}" target="_blank" rel="noopener noreferrer">{{ info.homepage }}</a></dd>
+        {% endif %}
+        {% if info.bugtracker %}
+        <dt>{{ _('Bug tracker') }}</dt>
+        <dd><a href="{{ info.bugtracker }}" target="_blank" rel="noopener noreferrer">{{ info.bugtracker }}</a></dd>
+        {% endif %}
+        <dt>UUID</dt>
+        <dd><code>{{ info.uuid }}</code>{% if not info.uuid_declared %} <small class="text-muted">({{ _('assigned by this mcprack — the project has not declared one') }})</small>{% endif %}</dd>
+      </dl>
+    </div>
+
+    <div class="form-card">
+      <h2 class="form-card-title">⚙️ {{ _('Parameters') }}</h2>
+      {% if info.parameters %}
+      <p class="form-card-description">{{ _('Environment variables the server reads. Values are set by an administrator or in your own configuration; they are never shown here.') }}</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>{{ _('Name') }}</th><th>{{ _('Description') }}</th><th>{{ _('Required') }}</th><th>{{ _('Secret') }}</th></tr></thead>
+          <tbody>
+            {% for p in info.parameters %}
+            <tr>
+              <td><code>{{ p.name }}</code></td>
+              <td>{{ p.description or '—' }}{% if p.choices %}<br><small class="text-muted">{{ _('one of') }}: {{ p.choices | join(', ') }}</small>{% endif %}</td>
+              <td>{% if p.required %}<span class="badge badge-warning">{{ _('required') }}</span>{% else %}—{% endif %}</td>
+              <td>{% if p.secret %}🔒{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted">{{ _('No parameters are declared for this server.') }}</p>
+      {% endif %}
+    </div>
+
+    {% if info.tools or info.prompts or info.resources %}
+    <div class="form-card">
+      <h2 class="form-card-title">🧰 {{ _('Tools') }}{% if info.tools %} <small class="text-muted">({{ info.tools | length }})</small>{% endif %}</h2>
+      {% for title, items in ((_('Tools'), info.tools), (_('Prompts'), info.prompts), (_('Resources'), info.resources)) if items %}
+      {% if not loop.first %}<h3>{{ title }}</h3>{% endif %}
+      <dl class="info-list">
+        {% for item in items %}<dt><code>{{ item.name }}</code></dt><dd>{{ item.description or '—' }}</dd>{% endfor %}
+      </dl>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if current_user.is_admin %}
+    <div class="form-card">
+      <h2 class="form-card-title">🛠️ {{ _('Administration') }}</h2>
+      <dl class="info-list">
+        {% if server.command %}<dt>{{ _('Command') }}</dt><dd><code>{{ server.command }}{% for a in server.args %} {{ a }}{% endfor %}</code></dd>{% endif %}
+        {% if server.url %}<dt>URL</dt><dd><code>{{ server.url }}</code></dd>{% endif %}
+        <dt>{{ _('Metadata sources') }}</dt>
+        <dd>
+          manifest: {% if info.manifest_format == 'server.json' %}server.json ✓{% elif info.manifest_format %}{{ info.manifest_format }} ({{ _('only lhm.plugin.json found — add server.json') }}){% else %}✗{% endif %} ·
+          AppStream: {{ '✓' if info.has_appstream else '✗' }}
+          {% if info.missing %}<br><small class="text-muted">{{ _('Missing information') }}: {{ info.missing | join(', ') }}</small>{% endif %}
+        </dd>
+      </dl>
+      <div class="flex-gap-wrap">
+        <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-secondary">{{ _('Edit') }}</a>
+        <button type="button" class="btn btn-secondary" data-capabilities-btn data-server-id="{{ server.id }}" data-server-name="{{ server.name }}">🔍 {{ _('Tools') }}</button>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</section>
+
+{% if current_user.is_admin %}
+<dialog id="capabilities-modal" class="dialog-card">
+  <h2 id="modal-title">🔍 Tools &amp; Resources</h2>
+  <div id="modal-content" class="modal-scroll"></div>
+  <div class="mt-lg flex-end">
+    <button type="button" data-capabilities-close class="btn btn-secondary">Close</button>
+  </div>
+</dialog>
+<script src="{{ url_for('static', filename='servers-capabilities-modal.js') }}"></script>
+{% endif %}
+{% endblock %}

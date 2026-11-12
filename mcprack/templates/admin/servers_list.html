@@ -23,7 +23,7 @@
   </div>
 
   <div class="table-scroll">
-    <table>
+    <table class="datatable">
       <thead>
         <tr>
           <th>{{ _('Name') }}</th>
@@ -32,7 +32,7 @@
           <th>{{ _('Category') }}</th>
           <th>{{ _('Users') }}</th>
           <th>{{ _('Status') }}</th>
-          <th>{{ _('Actions') }}</th>
+          <th data-orderable="false" data-searchable="false">{{ _('Actions') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -41,7 +41,7 @@
         <tr class="{% if h.get('missing_credentials') or h.get('missing_required') or not h.get('reachable', True) %}row-warn{% endif %}">
           <td>
             <div class="flex-gap-sm flex-center">
-              <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24">
+              <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}" class="icon-link" title="{{ _('About this server') }}"><img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="server-icon" loading="lazy" width="24" height="24"></a>
               <code>{{ server.name }}</code>
             </div>
           </td>

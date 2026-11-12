@@ -1,6 +1,7 @@
 import hashlib
 import json
 import secrets
+import uuid as uuid_module
 from datetime import datetime, timezone
 
 from authlib.integrations.sqla_oauth2 import (
@@ -310,6 +311,13 @@ class McpServer(db.Model):
     __tablename__ = "mcp_servers"
 
     id = db.Column(db.Integer, primary_key=True)
+    # Identity of this KIND of MCP server. Unlike `name` (which an admin or a
+    # package rename may change) it never changes, and it is the same on every
+    # mcprack instance: the server project declares it in its server.json
+    # (_meta -> cz.vitexsoftware.mcp -> uuid, see server_info.py and
+    # MCP-SERVER-STANDARDS.md section 6). Servers without a manifest get a
+    # random one here. Public pages are addressed by it (/servers/<uuid>).
+    uuid = db.Column(db.String(36), unique=True, nullable=False, index=True, default=lambda: str(uuid_module.uuid4()))
     name = db.Column(db.String(150), unique=True, nullable=False, index=True)
     label = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)

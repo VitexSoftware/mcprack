@@ -24,7 +24,7 @@ from flask import (
 from flask_login import current_user, login_required
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-from . import appstream_icons
+from . import appstream_icons, server_info
 from . import audit
 from . import endpoint_policy
 from . import env_detection
@@ -372,6 +372,30 @@ def index():
         connectors=connectors,
         server_connectors=server_connectors,
     )
+
+
+@bp.route("/server/<uuid:server_uuid>")
+@login_required
+def server_page(server_uuid):
+    """Public page of one kind of MCP server: what it does, who wrote it,
+    where the project lives and which parameters it takes. Addressed by the
+    server's UUID, which survives renaming. Ordinary users only see servers
+    they may use (anything else is a 404, not a 403, so existence is not
+    revealed); admins see every server plus the operational details."""
+    server = McpServer.query.filter_by(uuid=str(server_uuid)).first()
+    if server is None:
+        # The UUID may be the one a project declares, not yet adopted by this
+        # instance: try adopting it for servers that have a manifest.
+        for candidate in McpServer.query.all():
+            if server_info.sync_uuid(candidate) and candidate.uuid == str(server_uuid):
+                server = candidate
+                break
+    if server is None:
+        abort(404)
+    if not current_user.is_admin and server.id not in _allowed_enabled_server_ids(current_user.id):
+        abort(404)
+    server_info.sync_uuid(server)
+    return render_template("server_page.html", server=server, info=server_info.describe(server))
 
 
 @bp.route("/icon/server/<int:server_id>")
