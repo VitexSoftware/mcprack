@@ -56,6 +56,10 @@
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
+      <p class="text-sm mt-sm">
+        <a href="{{ url_for('catalog.download', client='claude', mode='servers') }}" download>⬇️ {{ _('Config with one URL per server') }}</a>
+        · <a href="{{ url_for('catalog.view', client='claude', mode='servers') }}">{{ _('view') }}</a>
+      </p>
       {% set client = 'claude' %}
       {% include "_config_paths.html" %}
     </div>
@@ -71,6 +75,10 @@
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
+      <p class="text-sm mt-sm">
+        <a href="{{ url_for('catalog.download', client='claude-code', mode='servers') }}" download>⬇️ {{ _('Config with one URL per server') }}</a>
+        · <a href="{{ url_for('catalog.view', client='claude-code', mode='servers') }}">{{ _('view') }}</a>
+      </p>
       {% set client = 'claude-code' %}
       {% include "_config_paths.html" %}
     </div>
@@ -86,6 +94,10 @@
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
+      <p class="text-sm mt-sm">
+        <a href="{{ url_for('catalog.download', client='vscode', mode='servers') }}" download>⬇️ {{ _('Config with one URL per server') }}</a>
+        · <a href="{{ url_for('catalog.view', client='vscode', mode='servers') }}">{{ _('view') }}</a>
+      </p>
       {% set client = 'vscode' %}
       {% include "_config_paths.html" %}
     </div>
@@ -101,6 +113,10 @@
           👁️ {{ _('View & Copy') }}
         </a>
       </div>
+      <p class="text-sm mt-sm">
+        <a href="{{ url_for('catalog.download', client='cursor', mode='servers') }}" download>⬇️ {{ _('Config with one URL per server') }}</a>
+        · <a href="{{ url_for('catalog.view', client='cursor', mode='servers') }}">{{ _('view') }}</a>
+      </p>
       {% set client = 'cursor' %}
       {% include "_config_paths.html" %}
     </div>

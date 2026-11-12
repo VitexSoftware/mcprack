@@ -1827,7 +1827,7 @@ def template_delete(template_id):
 @admin_required
 def user_config_view(user_id, client):
     target_user = db.get_or_404(User, user_id)
-    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user)
+    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user, mode=request.args.get("mode"))
     if config_json is None:
         flash(error_message, "error")
         return redirect(url_for("admin.user_edit", user_id=user_id))
@@ -1845,7 +1845,7 @@ def user_config_view(user_id, client):
 @admin_required
 def user_config_download(user_id, client):
     target_user = db.get_or_404(User, user_id)
-    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user)
+    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user, mode=request.args.get("mode"))
     if config_json is None:
         flash(error_message, "error")
         audit.log_audit_event(

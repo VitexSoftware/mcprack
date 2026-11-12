@@ -81,7 +81,7 @@ def _get_template_or_fail(name):
     return template
 
 
-def _build_user_config_or_fail(user, client):
+def _build_user_config_or_fail(user, client, mode="aggregate"):
     """catalog._build_client_config_json needs an active request context to
     build absolute proxy URLs for stdio-implemented servers with no url of
     their own (see catalog.py) — which a CLI invocation never has. If
@@ -92,8 +92,8 @@ def _build_user_config_or_fail(user, client):
     try:
         if base_url:
             with current_app.test_request_context(base_url=base_url):
-                return catalog._build_client_config_json(client, user=user)
-        return catalog._build_client_config_json(client, user=user)
+                return catalog._build_client_config_json(client, user=user, mode=mode)
+        return catalog._build_client_config_json(client, user=user, mode=mode)
     except RuntimeError as exc:
         raise click.ClickException(
             f"Could not build a config URL outside a web request ({exc}). Set "
@@ -389,10 +389,11 @@ def user_override_reset(username, server_name):
 @user_config_cli.command("show")
 @click.argument("username")
 @click.argument("client")
-def user_config_show(username, client):
+@click.option("--per-server", is_flag=True, help="One URL per selected server instead of the single aggregate URL.")
+def user_config_show(username, client, per_server):
     """Print a user's generated MCP client config (claude/copilot) to stdout."""
     user = _get_user_or_fail(username)
-    config_json, _filename, error_message = _build_user_config_or_fail(user, client)
+    config_json, _filename, error_message = _build_user_config_or_fail(user, client, "servers" if per_server else "aggregate")
     if config_json is None:
         raise click.ClickException(error_message)
     click.echo(config_json)
@@ -505,10 +506,11 @@ def user_config_verify(username, client, base_url, only, timeout, insecure):
     type=click.Path(dir_okay=False),
     help="Write to this path instead of the client's default filename in the current directory.",
 )
-def user_config_download(username, client, out_path):
+@click.option("--per-server", is_flag=True, help="One URL per selected server instead of the single aggregate URL.")
+def user_config_download(username, client, out_path, per_server):
     """Write a user's generated MCP client config (claude/copilot) to a file."""
     user = _get_user_or_fail(username)
-    config_json, filename, error_message = _build_user_config_or_fail(user, client)
+    config_json, filename, error_message = _build_user_config_or_fail(user, client, "servers" if per_server else "aggregate")
     if config_json is None:
         raise click.ClickException(error_message)
     target = Path(out_path) if out_path else Path(filename)

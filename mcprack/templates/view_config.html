@@ -5,6 +5,15 @@
 <section>
   <h1>{{ filename }}</h1>
   <p class="text-muted">{{ _("Copy the configuration below into your client's config file, or download it directly.") }}</p>
+  <p class="text-sm">
+    {% if mode == 'servers' %}
+      {{ _('One URL per selected server.') }}
+      <a href="{{ url_for('catalog.view', client=client) }}">{{ _('Show the single aggregate URL instead') }}</a>
+    {% else %}
+      {{ _('One aggregate URL for all selected servers.') }}
+      <a href="{{ url_for('catalog.view', client=client, mode='servers') }}">{{ _('Show one URL per server instead') }}</a>
+    {% endif %}
+  </p>
 
   {% include "_proxy_auth_note.html" %}
   {% include "_config_paths.html" %}
@@ -27,7 +36,7 @@
     <button type="button" id="copy-button" class="btn btn-primary">
       📋 {{ _('Copy to clipboard') }}
     </button>
-    <a href="{{ url_for('catalog.download', client=client) }}" class="btn btn-secondary" download>
+    <a href="{{ url_for('catalog.download', client=client, mode=(mode if mode == 'servers' else none)) }}" class="btn btn-secondary" download>
       ⬇️ {{ _('Download File') }}
     </a>
     <a href="{{ url_for('catalog.index') }}" class="btn btn-secondary">

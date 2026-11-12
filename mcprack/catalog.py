@@ -1287,7 +1287,16 @@ def _claude_code_uses_header(auth=None):
     return not current_app.config.get("OAUTH_ENABLED")
 
 
-def _build_client_config_json(client, user=None, auth=None):
+CONFIG_MODES = ("aggregate", "servers")
+
+
+def _config_mode(value):
+    """`aggregate` (one URL for everything, the default) or `servers` (one URL
+    per selected server). Anything else means the default."""
+    return value if value in CONFIG_MODES else "aggregate"
+
+
+def _build_client_config_json(client, user=None, auth=None, mode="aggregate"):
     """Resolve `user`'s (default: the current user) selected+enabled servers
     into a rendered client config, as a pretty-printed JSON string. Returns
     (config_json, filename, error_message) — config_json is None and
@@ -1314,17 +1323,37 @@ def _build_client_config_json(client, user=None, auth=None):
         abort(404)
     render_fn, filename = RENDERERS[client]
 
-    if not _selected_enabled_allowed_servers(user):
+    selected = _selected_enabled_allowed_servers(user)
+    if not selected:
         return None, filename, "You haven't selected any MCP servers yet."
 
-    entries = [
-        {
-            "name": "mcprack",
-            "transport": "http",
-            "url": _aggregate_relay_url(user, bearer=client in BEARER_CLIENTS),
-            "env": {},
-        }
-    ]
+    if _config_mode(mode) == "servers":
+        # One entry - one relay URL - per selected server: the file lists every
+        # server by name, so a client (or a person) can see and add them one by
+        # one, and one slow backend cannot hold up the others. Never log these
+        # URLs: with a path token each one is a bearer credential.
+        entries = [
+            {
+                "name": server.name,
+                "transport": "http",
+                "command": server.command,
+                "args": server.args,
+                "url": _bearer_relay_url(server) if client in BEARER_CLIENTS else _proxy_relay_url(user, server),
+                "auth_header_name": server.auth_header_name,
+                "auth_env_key": server.auth_env_key,
+                "env": {},
+            }
+            for server in selected
+        ]
+    else:
+        entries = [
+            {
+                "name": "mcprack",
+                "transport": "http",
+                "url": _aggregate_relay_url(user, bearer=client in BEARER_CLIENTS),
+                "env": {},
+            }
+        ]
 
     if client == "claude-code":
         payload = render_fn(entries, header=_claude_code_uses_header(auth))
@@ -1337,7 +1366,9 @@ def _build_client_config_json(client, user=None, auth=None):
 @login_required
 def download(client):
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename, error_message = _build_client_config_json(client, auth=request.args.get("auth"))
+        config_json, filename, error_message = _build_client_config_json(
+            client, auth=request.args.get("auth"), mode=request.args.get("mode")
+        )
     if config_json is None:
         flash(error_message, "error")
         audit.log_audit_event(
@@ -1360,8 +1391,11 @@ def download(client):
 @bp.route("/view/<client>")
 @login_required
 def view(client):
+    mode = _config_mode(request.args.get("mode"))
     with telemetry.span("catalog.generate_config", {"client_type": client}):
-        config_json, filename, error_message = _build_client_config_json(client, auth=request.args.get("auth"))
+        config_json, filename, error_message = _build_client_config_json(
+            client, auth=request.args.get("auth"), mode=mode
+        )
     if config_json is None:
         flash(error_message, "error")
         return redirect(url_for("catalog.index"))
@@ -1374,5 +1408,5 @@ def view(client):
             header=any("headers" in entry for entry in servers.values()),
         )
     return render_template(
-        "view_config.html", client=client, filename=filename, config_json=config_json, commands=commands
+        "view_config.html", client=client, filename=filename, config_json=config_json, commands=commands, mode=mode
     )

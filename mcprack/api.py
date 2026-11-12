@@ -911,7 +911,7 @@ def admin_user_override_delete(user_id, server_id):
 @api_scope_required("config:read")
 def me_config(client):
     config_json, filename, error_message = catalog._build_client_config_json(
-        client, user=current_user, auth=request.args.get("auth")
+        client, user=current_user, auth=request.args.get("auth"), mode=request.args.get("mode")
     )
     if config_json is None:
         audit.log_audit_event(
@@ -932,7 +932,9 @@ def me_config(client):
 @api_admin_required
 def admin_user_config(user_id, client):
     target_user = db.get_or_404(User, user_id)
-    config_json, filename, error_message = catalog._build_client_config_json(client, user=target_user)
+    config_json, filename, error_message = catalog._build_client_config_json(
+        client, user=target_user, mode=request.args.get("mode")
+    )
     if config_json is None:
         audit.log_audit_event(
             "config_download",
