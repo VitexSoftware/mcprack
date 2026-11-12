@@ -46,6 +46,9 @@ BLOCKED_ENDPOINTS = frozenset(
         "admin.vaultwarden_snapshot_to_local",
         "admin.user_revoke_tokens",
         "admin.access_request_resolve",
+        # connects to an arbitrary host with a bind password and echoes the
+        # configuration back: not for a public, shared demo
+        "admin.ldap_diagnostics",
         "api.admin_users",
         "api.admin_user_update",
         "api.admin_user_delete",
@@ -71,6 +74,7 @@ REVIEWED_SAFE = {
     "catalog.selection": "chooses among already registered servers",
     "catalog.override": "per-user env values, validated by env_policy",
     "catalog.request_server_access": "records an access request for administrator review",
+    "catalog.server_subscription": "adds or removes the caller's own selection of a permitted server",
     "catalog.user_proxy_mcp": "MCP relay (path token)",
     "catalog.user_proxy_mcp_oauth": "MCP relay (bearer)",
     "catalog.user_proxy_mcp_aggregate": "MCP composition relay (path token)",

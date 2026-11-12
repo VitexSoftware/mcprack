@@ -46,6 +46,9 @@ SENSITIVE_ENDPOINTS = frozenset(
         "admin.user_mfa_reset",
         # granting access to a denied MCP server changes a user's privileges
         "admin.access_request_resolve",
+        # opens a connection to an administrator-chosen directory host with a
+        # bind password, and prints the resulting configuration including it
+        "admin.ldap_diagnostics",
         # the secret store
         "admin.vaultwarden_migrate_to_vaultwarden",
         "admin.vaultwarden_snapshot_to_local",

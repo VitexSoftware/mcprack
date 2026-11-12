@@ -77,6 +77,8 @@ def test_server_page_shows_subscribers_only_to_admin(app):
         admin.set_password("pw")
         subscriber = User(username="subscribed-user", auth_type="local")
         subscriber.set_password("pw")
+        other = User(username="other-subscriber", auth_type="local")
+        other.set_password("pw")
         server = McpServer(
             name="subscriber-test",
             label="Subscriber test",
@@ -84,11 +86,12 @@ def test_server_page_shows_subscribers_only_to_admin(app):
             command="/bin/true",
             enabled=True,
         )
-        db.session.add_all([admin, subscriber, server])
+        db.session.add_all([admin, subscriber, other, server])
         db.session.commit()
         admin_id = admin.id
         server_id = server.id
         db.session.add(UserServerSelection(user_id=subscriber.id, server_id=server.id))
+        db.session.add(UserServerSelection(user_id=other.id, server_id=server.id))
         db.session.commit()
         server_uuid = server.uuid
 
@@ -96,8 +99,9 @@ def test_server_page_shows_subscribers_only_to_admin(app):
     admin_client.post("/login", data={"username": "catalog-admin", "password": "pw"})
     admin_response = admin_client.get(f"/server/{server_uuid}")
     assert admin_response.status_code == 200
-    assert b"Subscribed users (1)" in admin_response.data
+    assert b"Subscribed users (2)" in admin_response.data
     assert b"subscribed-user" in admin_response.data
+    assert b"other-subscriber" in admin_response.data
     admin_body = admin_response.data.decode()
     assert f"/admin/users/{admin_id}/override/{server_id}" in admin_body
     assert f"/admin/servers/{server_id}/edit" in admin_body
@@ -108,7 +112,8 @@ def test_server_page_shows_subscribers_only_to_admin(app):
     user_response = user_client.get(f"/server/{server_uuid}")
     assert user_response.status_code == 200
     assert b"Subscribed users" not in user_response.data
-    assert b"subscribed-user" not in user_response.data
+    # The viewer's own name is in the top bar; the OTHER subscriber must not appear.
+    assert b"other-subscriber" not in user_response.data
 
 
 def test_server_page_allows_subscribe_and_unsubscribe(app, client):
