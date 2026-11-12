@@ -292,7 +292,7 @@ def server_new():
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
-                active_step=1,
+                active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         if McpServer.query.filter_by(name=name).first() is not None:
@@ -302,7 +302,7 @@ def server_new():
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
-                active_step=1,
+                active_step=2,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         if _flash_endpoint_validation(request.form):
@@ -311,7 +311,7 @@ def server_new():
                 server=None,
                 env_rows=_env_rows_from_form(request.form),
                 form_values=request.form,
-                active_step=2,
+                active_step=3,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         server = McpServer(name=request.form["name"])
@@ -362,7 +362,7 @@ def server_edit(server_id):
                 server=server,
                 env_rows=_env_rows_from_form(request.form),
                 icon_url=None,
-                active_step=2,
+                active_step=3,
                 demo_mode=current_app.config.get("DEMO_MODE", False),
             )
         before = server_changes.snapshot(server)

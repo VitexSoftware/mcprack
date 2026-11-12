@@ -86,6 +86,8 @@ def test_server_page_shows_subscribers_only_to_admin(app):
         )
         db.session.add_all([admin, subscriber, server])
         db.session.commit()
+        admin_id = admin.id
+        server_id = server.id
         db.session.add(UserServerSelection(user_id=subscriber.id, server_id=server.id))
         db.session.commit()
         server_uuid = server.uuid
@@ -96,6 +98,10 @@ def test_server_page_shows_subscribers_only_to_admin(app):
     assert admin_response.status_code == 200
     assert b"Subscribed users (1)" in admin_response.data
     assert b"subscribed-user" in admin_response.data
+    admin_body = admin_response.data.decode()
+    assert f"/admin/users/{admin_id}/override/{server_id}" in admin_body
+    assert f"/admin/servers/{server_id}/edit" in admin_body
+    assert "Global server configuration" in admin_body
 
     user_client = app.test_client()
     user_client.post("/login", data={"username": "subscribed-user", "password": "pw"})

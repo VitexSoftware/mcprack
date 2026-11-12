@@ -83,7 +83,7 @@ def test_server_new_rejects_duplicate_name(app, client):
     body = resp.get_data(as_text=True)
     assert "already registered" in body
     # Re-rendered on the step that owns the name field.
-    assert 'data-active-step="1"' in body
+    assert 'data-active-step="2"' in body
     with app.app_context():
         assert McpServer.query.filter_by(name="taken").count() == 1
 
@@ -101,7 +101,7 @@ def test_server_new_endpoint_error_returns_to_transport_step(app, client):
     _login_admin(client)
     resp = client.post("/admin/servers/new", data=_new_server_form(transport="http", url=""))
     assert resp.status_code == 200
-    assert 'data-active-step="2"' in resp.get_data(as_text=True)
+    assert 'data-active-step="3"' in resp.get_data(as_text=True)
 
 
 def test_server_form_renders_stepper_and_live_checks(client):
@@ -115,6 +115,8 @@ def test_server_form_renders_stepper_and_live_checks(client):
     assert 'data-active-step="1"' in body
     for step in (1, 2, 3, 4):
         assert f'class="form-card" data-step="{step}"' in body
+    assert body.index('class="form-card" data-step="1"') < body.index('class="form-card" data-step="2"')
+    assert body.index('data-step="1">\n        <h2 class="form-card-title">🔐 Environment Variables') < body.index('data-step="2">\n        <h2 class="form-card-title">📋 Basic Information')
 
     # …live name-uniqueness probe wired on the name field…
     assert 'data-check-name-url="/admin/servers/check-name"' in body

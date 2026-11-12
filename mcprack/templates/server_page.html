@@ -171,7 +171,8 @@
         </dd>
       </dl>
       <div class="flex-gap-wrap">
-        <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-secondary">{{ _('Edit') }}</a>
+        <a href="{{ url_for('admin.user_override', user_id=current_user.id, server_id=server.id) }}" class="btn btn-secondary">{{ _('User configuration') }} — {{ current_user.username }}</a>
+        <a href="{{ url_for('admin.server_edit', server_id=server.id) }}" class="btn btn-secondary">{{ _('Global server configuration') }}</a>
         <button type="button" class="btn btn-secondary" data-capabilities-btn data-server-id="{{ server.id }}" data-server-name="{{ server.name }}">🔍 {{ _('Tools') }}</button>
       </div>
     </div>
