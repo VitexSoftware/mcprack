@@ -1226,6 +1226,7 @@ def ldap_diagnostics():
         "LDAP_BIND_DN",
         "LDAP_BIND_PASSWORD",
     )
+    configured_password = current_app.config.get("LDAP_BIND_PASSWORD", "") or ""
     values = {name: current_app.config.get(name, "") or "" for name in field_names}
     error = None
     config_fragment = None
@@ -1233,6 +1234,11 @@ def ldap_diagnostics():
     if request.method == "POST":
         values = {name: request.form.get(name, "") for name in field_names}
         values.update({name: value.strip() for name, value in values.items() if name != "LDAP_BIND_PASSWORD"})
+        # A blank password field means "the configured one" - the page never
+        # shows that password, so an administrator who does not retype it
+        # still tests (and gets the fragment for) the real configuration.
+        if not values["LDAP_BIND_PASSWORD"]:
+            values["LDAP_BIND_PASSWORD"] = configured_password
         if any("\n" in value or "\r" in value for value in values.values()):
             error = "LDAP settings must each be a single line."
         elif any(not values[name] for name in field_names[:4]):
@@ -1254,11 +1260,20 @@ def ldap_diagnostics():
                     f"{name}={shlex.quote(str(value))}" for name, value in fragment_values.items()
                 )
 
+    # Never put a password into the page: not the configured one (a GET must
+    # not reveal a secret to a session that has not just re-authenticated, nor
+    # on the public demo), and not an echo of what was typed. Only the
+    # confirmed fragment of a successful POST - gated by a fresh login and
+    # blocked in demo mode - carries it, on purpose.
+    password_configured = bool(configured_password)
+    values["LDAP_BIND_PASSWORD"] = ""
+
     return render_template(
         "admin/ldap_diagnostics.html",
         values=values,
         error=error,
         config_fragment=config_fragment,
+        password_configured=password_configured,
     )
 
 

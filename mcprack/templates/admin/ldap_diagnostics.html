@@ -34,7 +34,7 @@
       </div>
       <div class="form-group">
         <label for="ldap-bind-password">LDAP_BIND_PASSWORD</label>
-        <input id="ldap-bind-password" name="LDAP_BIND_PASSWORD" type="password" class="form-control" value="{{ values.LDAP_BIND_PASSWORD }}" autocomplete="off">
+        <input id="ldap-bind-password" name="LDAP_BIND_PASSWORD" type="password" class="form-control" value="" autocomplete="new-password" placeholder="{{ _('leave empty to use the configured password') if password_configured else '' }}">
       </div>
     </div>
     <button type="submit" class="btn btn-primary">{{ _('Test LDAP connection') }}</button>

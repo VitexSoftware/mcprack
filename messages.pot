@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-13 00:21+0100\n"
+"POT-Creation-Date: 2026-11-13 00:30+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -226,7 +226,7 @@ msgstr ""
 msgid "Your access request was sent to the administrators."
 msgstr ""
 
-#: mcprack/reauth.py:161
+#: mcprack/reauth.py:164
 msgid ""
 "Please confirm your password to continue. Your changes were not saved - "
 "submit them again afterwards."
@@ -1544,6 +1544,10 @@ msgstr ""
 msgid ""
 "Test directory connectivity and search settings even while LDAP sign-in "
 "is disabled."
+msgstr ""
+
+#: mcprack/templates/admin/ldap_diagnostics.html:37
+msgid "leave empty to use the configured password"
 msgstr ""
 
 #: mcprack/templates/admin/ldap_diagnostics.html:40
