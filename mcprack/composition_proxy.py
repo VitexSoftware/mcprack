@@ -271,12 +271,28 @@ def cleanup_idle_compositions(max_idle_seconds=IDLE_TIMEOUT):
             continue
 
 
-def build_composition_server(config, proxy_factory=None):
-    from fastmcp import FastMCP
+# How long the aggregate waits for ONE backend before it gives up on it for
+# that request. Without a bound a single backend that accepts the connection
+# but never answers (a stdio server stuck at start-up, a host behind a firewall)
+# holds up tools/list of the whole aggregate until the client's own timeout, and
+# the client sees no tools at all. With it the answer lists every backend that
+# did respond and only the silent one is missing.
+BACKEND_TIMEOUT = float(os.environ.get("MCPRACK_COMPOSITION_BACKEND_TIMEOUT", "10"))
+
+
+def _bounded_proxy(url, timeout=None):
+    from fastmcp import Client
     from fastmcp.server import create_proxy
 
+    seconds = BACKEND_TIMEOUT if timeout is None else timeout
+    return create_proxy(Client(url, timeout=seconds, init_timeout=seconds))
+
+
+def build_composition_server(config, proxy_factory=None):
+    from fastmcp import FastMCP
+
     if proxy_factory is None:
-        proxy_factory = create_proxy
+        proxy_factory = _bounded_proxy
 
     server = FastMCP("mcprack-composition")
     for entry in config["servers"]:
