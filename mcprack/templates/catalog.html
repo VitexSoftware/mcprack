@@ -19,10 +19,14 @@
   <div class="connector-list">
     {% for server in servers %}
     <div class="connector-row">
-      <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="connector-icon" loading="lazy" width="40" height="40">
       <div class="connector-content">
-        <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}">{{ server.label }}</a>
-        <small class="text-muted"><code>{{ server.name }}</code></small>
+        <div class="connector-icon-wrap">
+          <img src="{{ url_for('catalog.server_icon', server_id=server.id) }}" alt="" class="connector-icon" loading="lazy" width="40" height="40">
+        </div>
+        <div class="connector-fields">
+          <a href="{{ url_for('catalog.server_page', server_uuid=server.uuid) }}">{{ server.label }}</a>
+          <small class="text-muted"><code>{{ server.name }}</code></small>
+        </div>
       </div>
     </div>
     {% endfor %}
