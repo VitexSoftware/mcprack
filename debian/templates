@@ -1,6 +1,5 @@
 Template: mcprack/public_base_url
 Type: string
-Priority: medium
 Default:
 Description: Public base URL of this mcprack instance:
  Enter the externally reachable URL, for example
@@ -10,7 +9,6 @@ Description: Public base URL of this mcprack instance:
 
 Template: mcprack/gunicorn_bind
 Type: string
-Priority: low
 Default: 127.0.0.1:8912
 Description: Address and port where the mcprack web server listens:
  The default listens on the local machine only. Change this only when
@@ -19,7 +17,6 @@ Description: Address and port where the mcprack web server listens:
 
 Template: mcprack/oauth_enabled
 Type: boolean
-Priority: low
 Default: false
 Description: Enable the OAuth authorization server:
  Enable OAuth authorization for MCP clients. This requires PUBLIC_BASE_URL
@@ -28,7 +25,6 @@ Description: Enable the OAuth authorization server:
 
 Template: mcprack/session_cookie_secure
 Type: boolean
-Priority: low
 Default: true
 Description: Require HTTPS for authentication cookies:
  Leave enabled for internet-facing installations or when TLS is terminated
