@@ -96,3 +96,60 @@ def test_standalone_module_entry_point(tmp_path, capsys):
     bad = tmp_path / "bad.json"
     bad.write_text("{}", encoding="utf-8")
     assert manifest.main(["validate", str(bad)]) == 1
+
+
+FAKE_SERVER = r"""
+import json, sys
+TOOLS = [{"name": "list_things", "description": "List\n  things", "annotations": {"readOnlyHint": True, "title": "x"},
+          "inputSchema": {"type": "object"}}, {"name": "drop_thing", "description": "Drop"}]
+for line in sys.stdin:
+    msg = json.loads(line)
+    if "id" not in msg:
+        continue
+    method = msg["method"]
+    if method == "initialize":
+        result = {"protocolVersion": "2025-06-18", "capabilities": {}, "serverInfo": {"name": "fake", "version": "1"}}
+    elif method == "tools/list":
+        result = {"tools": TOOLS}
+    elif method == "prompts/list":
+        result = {"prompts": [{"name": "p", "description": "A prompt"}]}
+    else:
+        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "error": {"code": -32601, "message": "no"}}), flush=True)
+        continue
+    print("stray non-protocol line", flush=True)
+    print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": result}), flush=True)
+"""
+
+
+def test_introspect_and_sync(tmp_path):
+    import sys
+
+    script = tmp_path / "fake.py"
+    script.write_text(FAKE_SERVER, encoding="utf-8")
+    found = manifest.introspect([sys.executable, str(script)], timeout=20)
+    assert [t["name"] for t in found["tools"]] == ["list_things", "drop_thing"]
+    assert found["resources"] == []  # method not offered -> empty, not an error
+    tools, prompts, resources = manifest.to_extension_items(found)
+    assert tools[0]["description"] == "List things"  # whitespace collapsed
+    assert tools[0]["annotations"] == {"readOnlyHint": True}  # only the four MCP hints
+
+    target = tmp_path / "server.json"
+    data = _unified()
+    manifest.extension(data)["tools"] = []
+    target.write_text(json.dumps(data), encoding="utf-8")
+    cmd = ["--", sys.executable, str(script)]
+    assert manifest.main(["sync", "--check", str(target), *cmd]) == 1  # file lists no tools
+    assert manifest.main(["sync", str(target), *cmd]) == 0
+    assert manifest.main(["sync", "--check", str(target), *cmd]) == 0
+    written = json.loads(target.read_text(encoding="utf-8"))
+    assert manifest.validate(written) == []
+    assert [p["name"] for p in manifest.extension(written)["prompts"]] == ["p"]
+
+
+def test_introspect_reports_a_dying_server(tmp_path):
+    import sys
+
+    script = tmp_path / "dies.py"
+    script.write_text("import sys; sys.exit(3)", encoding="utf-8")
+    with pytest.raises(RuntimeError):
+        manifest.introspect([sys.executable, str(script)], timeout=10)
