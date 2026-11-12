@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-11-07 14:18+0100\n"
+"POT-Creation-Date: 2026-11-12 10:20+0100\n"
 "PO-Revision-Date: 2026-08-01 11:21+0000\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: sk\n"
@@ -18,112 +18,177 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
-#: mcprack/app.py:205
+#: mcprack/app.py:247
 msgid "Bad Request"
 msgstr "Neplatná požiadavka"
 
-#: mcprack/app.py:206
+#: mcprack/app.py:248
 msgid "The request could not be understood by the server."
 msgstr "Serveru sa nepodarilo požiadavke porozumieť."
 
-#: mcprack/app.py:218
+#: mcprack/app.py:260
 msgid "Access Denied"
 msgstr "Prístup odmietnutý"
 
-#: mcprack/app.py:219
+#: mcprack/app.py:261
 msgid "You do not have permission to access this resource."
 msgstr "K tomuto zdroju nemáte oprávnenie."
 
-#: mcprack/app.py:231
+#: mcprack/app.py:273
 msgid "Page Not Found"
 msgstr "Stránka sa nenašla"
 
-#: mcprack/app.py:232
+#: mcprack/app.py:274
 msgid "The page or resource you requested could not be found."
 msgstr "Požadovaná stránka ani zdroj sa nenašli."
 
-#: mcprack/app.py:244
+#: mcprack/app.py:286
 msgid "Request Too Large"
 msgstr "Požiadavka je príliš veľká"
 
-#: mcprack/app.py:245
+#: mcprack/app.py:287
 msgid "The data you submitted is larger than this server accepts."
 msgstr "Odoslané údaje sú väčšie, než tento server prijíma."
 
-#: mcprack/app.py:258
+#: mcprack/app.py:300
 msgid "Too Many Requests"
 msgstr "Príliš veľa požiadaviek"
 
-#: mcprack/app.py:259
-msgid ""
-"Too many requests from your IP address. Please slow down and try again "
-"later."
+#: mcprack/app.py:301
+msgid "Too many requests from your IP address. Please slow down and try again later."
 msgstr ""
-"Z vašej IP adresy prišlo príliš veľa požiadaviek. Spomaľte a skúste to "
-"znova neskôr."
+"Z vašej IP adresy prišlo príliš veľa požiadaviek. Spomaľte a skúste to znova"
+" neskôr."
 
-#: mcprack/app.py:273
+#: mcprack/app.py:315
 msgid "Internal Server Error"
 msgstr "Vnútorná chyba servera"
 
-#: mcprack/app.py:274
+#: mcprack/app.py:316
 msgid "An unexpected server error occurred. Please contact the administrator."
 msgstr "Došlo k neočakávanej chybe servera. Obráťte sa na administrátora."
 
-#: mcprack/app.py:286
+#: mcprack/app.py:328
 msgid "Bad Gateway"
 msgstr "Chybná brána"
 
-#: mcprack/app.py:287
+#: mcprack/app.py:329
 msgid "The upstream service did not respond properly."
 msgstr "Nadradená služba neodpovedala správne."
 
-#: mcprack/auth.py:165 mcprack/auth.py:197
+#: mcprack/auth.py:148
+msgid ""
+"Administrators must set up two-factor authentication before using the admin "
+"area."
+msgstr "Správcovia musia pred použitím administrácie nastaviť dvojfázové overenie."
+
+#: mcprack/auth.py:287
+msgid "Your sign-in expired. Please enter your password again."
+msgstr "Platnosť prihlásenia vypršala. Zadajte prosím znova svoje heslo."
+
+#: mcprack/auth.py:295 mcprack/auth.py:338 mcprack/auth.py:515 mcprack/auth.py:548
+#: mcprack/auth.py:584
+msgid "Too many failed attempts. Try again in a few minutes."
+msgstr "Príliš veľa neúspešných pokusov. Skúste to znova o niekoľko minút."
+
+#: mcprack/auth.py:308
+#, python-format
+msgid ""
+"You signed in with a recovery code. %(count)d left - consider generating new"
+" ones."
+msgstr ""
+"Prihlásili ste sa záložným kódom. Zostáva ich %(count)d – zvážte vytvorenie "
+"nových."
+
+#: mcprack/auth.py:314
+msgid "That code is not valid."
+msgstr "Tento kód nie je platný."
+
+#: mcprack/auth.py:354 mcprack/auth.py:384
 msgid "Invalid username or password."
 msgstr "Neplatné používateľské meno alebo heslo."
 
-#: mcprack/auth.py:185
+#: mcprack/auth.py:374
 msgid "This account has been deactivated."
 msgstr "Tento účet bol deaktivovaný."
 
-#: mcprack/auth.py:236
+#: mcprack/auth.py:437
 msgid ""
-"Your account is managed externally (LDAP) — its password can't be changed"
-" here."
+"Your account is managed externally (LDAP) — its password can't be changed "
+"here."
 msgstr "Váš účet je spravovaný externe (LDAP) — jeho heslo tu nemožno zmeniť."
 
-#: mcprack/auth.py:245
+#: mcprack/auth.py:446
 msgid "Current password is incorrect."
 msgstr "Aktuálne heslo je nesprávne."
 
-#: mcprack/auth.py:247 mcprack/auth.py:317
-#, python-format
-msgid "New password must be at least %(n)d characters."
-msgstr "Nové heslo musí mať aspoň %(n)d znakov."
-
-#: mcprack/auth.py:249 mcprack/auth.py:319
+#: mcprack/auth.py:448 mcprack/auth.py:661
 msgid "New password and confirmation don't match."
 msgstr "Nové heslo a jeho potvrdenie sa nezhodujú."
 
-#: mcprack/auth.py:256
+#: mcprack/auth.py:458
 msgid "Password changed."
 msgstr "Heslo bolo zmenené."
 
-#: mcprack/auth.py:282
+#: mcprack/auth.py:478
+msgid "QR code for your authenticator app"
+msgstr "QR kód pre vašu autentifikačnú aplikáciu"
+
+#: mcprack/auth.py:479
+msgid "Scan it with an authenticator app to add this account."
+msgstr "Naskenujte ho autentifikačnou aplikáciou a pridajte tento účet."
+
+#: mcprack/auth.py:506
+msgid ""
+"Two-factor authentication is already on. Turn it off first to set it up "
+"again."
+msgstr ""
+"Dvojfázové overenie je už zapnuté. Ak ho chcete nastaviť znova, najprv ho "
+"vypnite."
+
+#: mcprack/auth.py:519
+msgid "Your password is not correct."
+msgstr "Vaše heslo nie je správne."
+
+#: mcprack/auth.py:529
+msgid "That code is not valid. Check the time on your phone and try again."
+msgstr "Tento kód nie je platný. Skontrolujte čas v telefóne a skúste to znova."
+
+#: mcprack/auth.py:539
+msgid "Two-factor authentication is not on."
+msgstr "Dvojfázové overenie nie je zapnuté."
+
+#: mcprack/auth.py:543
+msgid "Administrators cannot turn two-factor authentication off."
+msgstr "Správcovia nemôžu dvojfázové overenie vypnúť."
+
+#: mcprack/auth.py:554 mcprack/auth.py:594
+msgid "Your password or the code is not correct."
+msgstr "Vaše heslo alebo kód nie je správny."
+
+#: mcprack/auth.py:565
+msgid "Two-factor authentication is now off."
+msgstr "Dvojfázové overenie je teraz vypnuté."
+
+#: mcprack/auth.py:568
+msgid "Unknown action."
+msgstr "Neznáma akcia."
+
+#: mcprack/auth.py:626
 msgid "mcprack password reset"
 msgstr "Obnovenie hesla pre mcprack"
 
-#: mcprack/auth.py:284
+#: mcprack/auth.py:628
 #, python-format
 msgid ""
-"Someone (hopefully you) requested a password reset for the mcprack "
-"account '%(username)s'.\n"
+"Someone (hopefully you) requested a password reset for the mcprack account "
+"'%(username)s'.\n"
 "\n"
 "Reset it here (valid for %(minutes)d minutes):\n"
 "%(url)s\n"
 "\n"
-"If you didn't request this, ignore this email — your password hasn't been"
-" changed."
+"If you didn't request this, ignore this email — your password hasn't been "
+"changed."
 msgstr ""
 "Niekto (dúfajme, že vy) požiadal o obnovenie hesla pre účet mcprack "
 "„%(username)s“.\n"
@@ -133,25 +198,30 @@ msgstr ""
 "\n"
 "Ak ste o to nežiadali, tento e-mail ignorujte — vaše heslo nebolo zmenené."
 
-#: mcprack/auth.py:296
-msgid ""
-"If that account exists and has an email on file, a reset link has been "
-"sent."
+#: mcprack/auth.py:640
+msgid "If that account exists and has an email on file, a reset link has been sent."
 msgstr ""
 "Ak tento účet existuje a má nastavený e-mail, bol odoslaný odkaz na "
 "obnovenie hesla."
 
-#: mcprack/auth.py:309
+#: mcprack/auth.py:653
 msgid "This password reset link is invalid or has expired."
 msgstr "Tento odkaz na obnovenie hesla je neplatný alebo vypršal."
 
-#: mcprack/auth.py:326
+#: mcprack/auth.py:671
 msgid "Password reset. You can now log in."
 msgstr "Heslo bolo obnovené. Teraz sa môžete prihlásiť."
 
-#: mcprack/templates/_config_paths.html:4
-#: mcprack/templates/_config_paths.html:27
-#: mcprack/templates/_config_paths.html:42
+#: mcprack/reauth.py:159
+msgid ""
+"Please confirm your password to continue. Your changes were not saved - "
+"submit them again afterwards."
+msgstr ""
+"Pre pokračovanie potvrďte prosím svoje heslo. Vaše zmeny neboli uložené – "
+"odošlite ich potom znova."
+
+#: mcprack/templates/_config_paths.html:4 mcprack/templates/_config_paths.html:27
+#: mcprack/templates/_config_paths.html:40 mcprack/templates/_config_paths.html:55
 msgid "Where to put this file"
 msgstr "Kam tento súbor uložiť"
 
@@ -159,29 +229,25 @@ msgstr "Kam tento súbor uložiť"
 msgid "Claude Desktop app — replace the whole file at:"
 msgstr "Aplikácia Claude Desktop — nahraďte celý súbor na:"
 
-#: mcprack/templates/_config_paths.html:9
-#: mcprack/templates/_config_paths.html:32
-#: mcprack/templates/_config_paths.html:47
+#: mcprack/templates/_config_paths.html:9 mcprack/templates/_config_paths.html:45
+#: mcprack/templates/_config_paths.html:60
 msgid "Linux"
 msgstr "Linux"
 
-#: mcprack/templates/_config_paths.html:10
-#: mcprack/templates/_config_paths.html:33
-#: mcprack/templates/_config_paths.html:48
+#: mcprack/templates/_config_paths.html:10 mcprack/templates/_config_paths.html:46
+#: mcprack/templates/_config_paths.html:61
 msgid "macOS"
 msgstr "macOS"
 
-#: mcprack/templates/_config_paths.html:11
-#: mcprack/templates/_config_paths.html:19
-#: mcprack/templates/_config_paths.html:34
-#: mcprack/templates/_config_paths.html:49
+#: mcprack/templates/_config_paths.html:11 mcprack/templates/_config_paths.html:19
+#: mcprack/templates/_config_paths.html:47 mcprack/templates/_config_paths.html:62
 msgid "Windows"
 msgstr "Windows"
 
 #: mcprack/templates/_config_paths.html:15
 msgid ""
-"Claude Code (the CLI) — this file also holds other settings, so merge the"
-" \"mcpServers\" key into it instead of overwriting it:"
+"Claude Code (the CLI) — this file also holds other settings, so merge the "
+"\"mcpServers\" key into it instead of overwriting it:"
 msgstr ""
 "Claude Code (CLI) — tento súbor obsahuje aj ďalšie nastavenia, preto doň "
 "kľúč „mcpServers“ zlúčte, namiesto toho, aby ste ho prepísali:"
@@ -201,13 +267,37 @@ msgstr ""
 
 #: mcprack/templates/_config_paths.html:29
 msgid ""
+"Claude Code, project scope — save it as .mcp.json in the root of the "
+"project. The file contains no secret, so it can be committed; Claude Code "
+"reads the token from the MCPRACK_TOKEN environment variable and asks for "
+"approval before using a project-scoped server."
+msgstr ""
+"Claude Code, rozsah projektu — uložte ho ako .mcp.json do koreňa projektu. "
+"Súbor neobsahuje žiadne tajomstvo, takže ho možno commitnúť; Claude Code "
+"načíta token z premennej prostredia MCPRACK_TOKEN a pred použitím servera na"
+" úrovni projektu požiada o schválenie."
+
+#: mcprack/templates/_config_paths.html:32
+msgid "Any OS"
+msgstr "Ľubovoľný OS"
+
+#: mcprack/templates/_config_paths.html:36
+msgid ""
+"For all your projects use the claude mcp add commands on the View & Copy "
+"page instead (user scope)."
+msgstr ""
+"Pre všetky svoje projekty použite namiesto toho príkazy claude mcp add na "
+"stránke Zobraziť a kopírovať (rozsah používateľa)."
+
+#: mcprack/templates/_config_paths.html:42
+msgid ""
 "VS Code (user profile — applies to every workspace). If the file already "
 "exists, merge the \"servers\" key into it instead of overwriting it:"
 msgstr ""
 "VS Code (užívateľský profil — platí pre všetky workspace). Ak súbor už "
 "existuje, zlúčte doň kľúč „servers“, namiesto toho, aby ste ho prepísali:"
 
-#: mcprack/templates/_config_paths.html:38
+#: mcprack/templates/_config_paths.html:51
 msgid ""
 "Or install <code>mcprack-sync-vscode</code> and run <code>mcprack-sync-"
 "vscode sync</code> to keep this file up to date automatically."
@@ -216,19 +306,19 @@ msgstr ""
 ">mcprack-sync-vscode sync</code>, aby sa súbor udržiaval aktuálny "
 "automaticky."
 
-#: mcprack/templates/_config_paths.html:44
+#: mcprack/templates/_config_paths.html:57
 msgid ""
-"Cursor (user profile). If the file already exists, merge the "
-"\"mcpServers\" key into it instead of overwriting it:"
+"Cursor (user profile). If the file already exists, merge the \"mcpServers\" "
+"key into it instead of overwriting it:"
 msgstr ""
 "Cursor (užívateľský profil). Ak súbor už existuje, zlúčte doň kľúč "
 "„mcpServers“, namiesto toho, aby ste ho prepísali:"
 
-#: mcprack/templates/_config_paths.html:50
+#: mcprack/templates/_config_paths.html:63
 msgid "Also checked"
 msgstr "Kontroluje sa aj"
 
-#: mcprack/templates/_config_paths.html:54
+#: mcprack/templates/_config_paths.html:67
 msgid ""
 "Or install <code>mcprack-sync-cursor</code> and run <code>mcprack-sync-"
 "cursor sync</code> to keep this file up to date automatically."
@@ -236,6 +326,86 @@ msgstr ""
 "Alebo nainštalujte <code>mcprack-sync-cursor</code> a spustite <code"
 ">mcprack-sync-cursor sync</code>, aby sa súbor udržiaval aktuálny "
 "automaticky."
+
+#: mcprack/templates/_nav.html:11
+msgid "Main navigation"
+msgstr "Hlavná navigácia"
+
+#: mcprack/templates/_nav.html:13
+msgid "Workspace"
+msgstr "Pracovný priestor"
+
+#: mcprack/templates/_nav.html:14
+msgid "Catalog"
+msgstr "Katalóg"
+
+#: mcprack/templates/_nav.html:18
+msgid "Registry"
+msgstr "Register"
+
+#: mcprack/templates/_nav.html:19
+msgid "All Servers"
+msgstr "Všetky servery"
+
+#: mcprack/templates/_nav.html:20
+msgid "Install New Server"
+msgstr "Inštalovať nový server"
+
+#: mcprack/templates/_nav.html:21
+msgid "Config Templates"
+msgstr "Konfiguračné šablóny"
+
+#: mcprack/templates/_nav.html:24 mcprack/templates/admin/user_form.html:45
+msgid "Access"
+msgstr "Prístup"
+
+#: mcprack/templates/_nav.html:25
+msgid "All Users"
+msgstr "Všetci používatelia"
+
+#: mcprack/templates/_nav.html:26
+msgid "Proxy Instances"
+msgstr "Inštancie proxy"
+
+#: mcprack/templates/_nav.html:29
+msgid "Observability"
+msgstr "Sledovanie"
+
+#: mcprack/templates/_nav.html:30 mcprack/templates/admin/audit_log.html:2
+#: mcprack/templates/admin/audit_log.html:6
+#: mcprack/templates/admin/audit_log_detail.html:2
+msgid "Audit Log"
+msgstr "Auditný log"
+
+#: mcprack/templates/_nav.html:33
+msgid "System"
+msgstr "Systém"
+
+#: mcprack/templates/_nav.html:34
+msgid "Vaultwarden Setup"
+msgstr "Nastavenie Vaultwardenu"
+
+#: mcprack/templates/_nav.html:35
+msgid "OAuth Diagnostics"
+msgstr "Diagnostika OAuth"
+
+#: mcprack/templates/_nav.html:36
+msgid "OTEL Diagnostics"
+msgstr "OTEL diagnostika"
+
+#: mcprack/templates/_nav.html:40
+msgid "Account"
+msgstr "Účet"
+
+#: mcprack/templates/_nav.html:42 mcprack/templates/base.html:59
+msgid "Change Password"
+msgstr "Zmeniť heslo"
+
+#: mcprack/templates/_nav.html:44 mcprack/templates/account_mfa.html:2
+#: mcprack/templates/account_mfa.html:7 mcprack/templates/base.html:63
+#: mcprack/templates/login_mfa.html:2 mcprack/templates/login_mfa.html:7
+msgid "Two-factor authentication"
+msgstr "Dvojfázové overenie"
 
 #: mcprack/templates/_override_editor.html:13
 msgid "Available configuration keys"
@@ -304,8 +474,8 @@ msgstr "citlivé"
 
 #: mcprack/templates/_override_editor.html:81
 msgid ""
-"Always stored as a secret — the administrator declared this key, or its "
-"name looks like a credential."
+"Always stored as a secret — the administrator declared this key, or its name"
+" looks like a credential."
 msgstr ""
 "Vždy sa ukladá ako tajná hodnota — tento kľúč deklaroval administrátor, "
 "alebo jeho názov vyzerá ako prihlasovací údaj."
@@ -347,8 +517,8 @@ msgstr "Chýba povinná hodnota — bez jej vyplnenia server nenaštartuje."
 #: mcprack/templates/admin/server_form.html:178
 #, python-format
 msgid ""
-"%(n)s required value(s) missing — the MCP server will not start until "
-"they are filled in."
+"%(n)s required value(s) missing — the MCP server will not start until they "
+"are filled in."
 msgstr ""
 "Chýbajú povinné hodnoty (%(n)s) — kým ich nevyplníte, MCP server "
 "nenaštartuje."
@@ -369,28 +539,165 @@ msgstr ""
 #: mcprack/templates/_proxy_auth_note.html:6
 msgid ""
 "MCP OAuth is enabled: relay URLs look like "
-"<code>/proxy/mcp/&lt;id&gt;</code> with no secret in the path. Your "
-"client will open a browser login the first time it connects."
+"<code>/proxy/mcp/&lt;id&gt;</code> with no secret in the path. Your client "
+"will open a browser login the first time it connects."
 msgstr ""
 "MCP OAuth je zapnuté: relay URL vyzerajú ako "
-"<code>/proxy/mcp/&lt;id&gt;</code> bez tajomstva v ceste. Klient pri "
-"prvom pripojení otvorí prihlásenie v prehliadači."
+"<code>/proxy/mcp/&lt;id&gt;</code> bez tajomstva v ceste. Klient pri prvom "
+"pripojení otvorí prihlásenie v prehliadači."
 
 #: mcprack/templates/_proxy_auth_note.html:9
 msgid ""
-"Signed path-token URLs still work if you need them (e.g. for <code"
-">mcprack-mcp-probe</code>)."
-msgstr ""
-"Podpísané URL s tokenom v ceste fungujú ďalej (napr. pre <code>mcprack-"
+"Signed path-token URLs still work if you need them (e.g. for <code>mcprack-"
 "mcp-probe</code>)."
+msgstr ""
+"Podpísané URL s tokenom v ceste fungujú ďalej (napr. pre <code>mcprack-mcp-"
+"probe</code>)."
 
 #: mcprack/templates/_proxy_auth_note.html:15
 msgid ""
-"Each relay URL embeds a personal access token — treat a downloaded or "
-"copied config like a password."
+"Each relay URL embeds a personal access token — treat a downloaded or copied"
+" config like a password."
 msgstr ""
 "Každá relay URL obsahuje osobný prístupový token — stiahnutý alebo "
 "skopírovaný config berte ako heslo."
+
+#: mcprack/templates/account_mfa.html:12
+msgid "Two-factor authentication is now on."
+msgstr "Dvojfázové overenie je teraz zapnuté."
+
+#: mcprack/templates/account_mfa.html:13
+msgid "Your recovery codes"
+msgstr "Vaše záložné kódy"
+
+#: mcprack/templates/account_mfa.html:14
+msgid ""
+"Each code works once, if you lose your phone. They are shown only now — "
+"store them somewhere safe (a password manager, a printout)."
+msgstr ""
+"Každý kód funguje len raz, pre prípad straty telefónu. Zobrazujú sa iba "
+"teraz — uložte ich na bezpečné miesto (správca hesiel, výtlačok)."
+
+#: mcprack/templates/account_mfa.html:17
+msgid "I have saved them"
+msgstr "Uložil/a som si ich"
+
+#: mcprack/templates/account_mfa.html:22
+msgid "Set up your authenticator app"
+msgstr "Nastavte svoju autentifikačnú aplikáciu"
+
+#: mcprack/templates/account_mfa.html:25
+msgid ""
+"In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) choose "
+"to add an account and scan this QR code."
+msgstr ""
+"V autentifikačnej aplikácii (FreeOTP, Aegis, Google Authenticator, …) zvoľte"
+" pridanie účtu a naskenujte tento QR kód."
+
+#: mcprack/templates/account_mfa.html:26 mcprack/templates/account_mfa.html:38
+msgid "Enter the code the app shows to confirm."
+msgstr "Na potvrdenie zadajte kód, ktorý aplikácia zobrazuje."
+
+#: mcprack/templates/account_mfa.html:30
+msgid "Cannot scan it? Enter the key by hand"
+msgstr "Nedá sa naskenovať? Zadajte kľúč ručne"
+
+#: mcprack/templates/account_mfa.html:31 mcprack/templates/account_mfa.html:37
+msgid "Key:"
+msgstr "Kľúč:"
+
+#: mcprack/templates/account_mfa.html:31 mcprack/templates/account_mfa.html:37
+msgid "time-based, 6 digits"
+msgstr "časovo založený, 6 číslic"
+
+#: mcprack/templates/account_mfa.html:32 mcprack/templates/account_mfa.html:40
+msgid "Or import this address into an app that accepts it:"
+msgstr "Alebo importujte túto adresu do aplikácie, ktorá ju prijíma:"
+
+#: mcprack/templates/account_mfa.html:36
+msgid ""
+"In your authenticator app (FreeOTP, Aegis, Google Authenticator, …) add an "
+"account by entering a key manually."
+msgstr ""
+"V autentifikačnej aplikácii (FreeOTP, Aegis, Google Authenticator, …) "
+"pridajte účet ručným zadaním kľúča."
+
+#: mcprack/templates/account_mfa.html:46
+msgid "Code from the app"
+msgstr "Kód z aplikácie"
+
+#: mcprack/templates/account_mfa.html:49
+msgid "Turn on"
+msgstr "Zapnúť"
+
+#: mcprack/templates/account_mfa.html:55
+msgid "Two-factor authentication is on."
+msgstr "Dvojfázové overenie je zapnuté."
+
+#: mcprack/templates/account_mfa.html:56
+#, python-format
+msgid "%(num)d recovery code left."
+msgid_plural "%(num)d recovery codes left."
+msgstr[0] "Zostáva %(num)d záložný kód."
+msgstr[1] "Zostávajú %(num)d záložné kódy."
+msgstr[2] "Zostáva %(num)d záložných kódov."
+
+#: mcprack/templates/account_mfa.html:57 mcprack/templates/error.html:10
+#: mcprack/templates/override.html:31 mcprack/templates/view_config.html:34
+msgid "Back to Catalog"
+msgstr "Späť do katalógu"
+
+#: mcprack/templates/account_mfa.html:59
+msgid "Generate new recovery codes"
+msgstr "Vytvoriť nové záložné kódy"
+
+#: mcprack/templates/account_mfa.html:60
+msgid "The old ones stop working."
+msgstr "Tie staré prestanú fungovať."
+
+#: mcprack/templates/account_mfa.html:65 mcprack/templates/account_mfa.html:84
+#: mcprack/templates/account_mfa.html:106
+#: mcprack/templates/account_password.html:14
+#: mcprack/templates/account_reauth.html:17
+msgid "Current password"
+msgstr "Aktuálne heslo"
+
+#: mcprack/templates/account_mfa.html:69 mcprack/templates/account_mfa.html:88
+#: mcprack/templates/login_mfa.html:15
+msgid "Code"
+msgstr "Kód"
+
+#: mcprack/templates/account_mfa.html:72
+msgid "Generate new codes"
+msgstr "Vytvoriť nové kódy"
+
+#: mcprack/templates/account_mfa.html:79
+msgid "Turn off"
+msgstr "Vypnúť"
+
+#: mcprack/templates/account_mfa.html:91
+msgid "Turn off two-factor authentication"
+msgstr "Vypnúť dvojfázové overenie"
+
+#: mcprack/templates/account_mfa.html:95
+msgid "Administrators cannot turn it off."
+msgstr "Správcovia ho nemôžu vypnúť."
+
+#: mcprack/templates/account_mfa.html:100
+msgid ""
+"Two-factor authentication is off. With it on, signing in needs a code from "
+"an authenticator app in addition to your password."
+msgstr ""
+"Dvojfázové overenie je vypnuté. Po zapnutí bude prihlásenie popri hesle "
+"vyžadovať kód z autentifikačnej aplikácie."
+
+#: mcprack/templates/account_mfa.html:101
+msgid "As an administrator you must set it up before you can use the admin area."
+msgstr "Ako správca ho musíte nastaviť, než budete môcť používať administráciu."
+
+#: mcprack/templates/account_mfa.html:109
+msgid "Set up"
+msgstr "Nastaviť"
 
 #: mcprack/templates/account_password.html:2
 #: mcprack/templates/account_password.html:26
@@ -400,10 +707,6 @@ msgstr "Zmena hesla"
 #: mcprack/templates/account_password.html:7
 msgid "Change your password"
 msgstr "Zmeňte si heslo"
-
-#: mcprack/templates/account_password.html:14
-msgid "Current password"
-msgstr "Aktuálne heslo"
 
 #: mcprack/templates/account_password.html:18
 #: mcprack/templates/reset_password.html:14
@@ -415,68 +718,85 @@ msgstr "Nové heslo"
 msgid "Confirm new password"
 msgstr "Potvrďte nové heslo"
 
-#: mcprack/templates/base.html:29
+#: mcprack/templates/account_reauth.html:2 mcprack/templates/account_reauth.html:7
+msgid "Confirm your identity"
+msgstr "Potvrďte svoju totožnosť"
+
+#: mcprack/templates/account_reauth.html:8
+msgid ""
+"This action changes what the server runs or who can access it. Confirm your "
+"identity to continue."
+msgstr ""
+"Táto akcia mení, čo server spúšťa alebo kto k nemu má prístup. Pre "
+"pokračovanie potvrďte svoju totožnosť."
+
+#: mcprack/templates/account_reauth.html:9
+msgid "Your password and a code are needed."
+msgstr "Je potrebné vaše heslo a kód."
+
+#: mcprack/templates/account_reauth.html:9
+msgid "Your password is needed."
+msgstr "Je potrebné vaše heslo."
+
+#: mcprack/templates/account_reauth.html:22
+msgid "Code from your authenticator app (or a recovery code)"
+msgstr "Kód z vašej autentifikačnej aplikácie (alebo záložný kód)"
+
+#: mcprack/templates/account_reauth.html:26
+msgid "Confirm"
+msgstr "Potvrdiť"
+
+#: mcprack/templates/base.html:24
+msgid "Toggle menu"
+msgstr "Prepnúť menu"
+
+#: mcprack/templates/base.html:35
 msgid "View on GitHub"
 msgstr "Zobraziť na GitHube"
 
-#: mcprack/templates/base.html:29
+#: mcprack/templates/base.html:35
 msgid "View mcprack on GitHub"
 msgstr "Zobraziť mcprack na GitHube"
 
-#: mcprack/templates/base.html:51
-msgid "Catalog"
-msgstr "Katalóg"
-
-#: mcprack/templates/base.html:54
-msgid "All Servers"
-msgstr "Všetky servery"
-
-#: mcprack/templates/base.html:55
-msgid "Install New Server"
-msgstr "Inštalovať nový server"
-
-#: mcprack/templates/base.html:56
-msgid "All Users"
-msgstr "Všetci používatelia"
-
-#: mcprack/templates/base.html:57
-msgid "Config Templates"
-msgstr "Konfiguračné šablóny"
-
-#: mcprack/templates/base.html:58
-msgid "Proxy Instances"
-msgstr "Inštancie proxy"
-
-#: mcprack/templates/admin/audit_log.html:2
-#: mcprack/templates/admin/audit_log.html:6
-#: mcprack/templates/admin/audit_log_detail.html:2
-#: mcprack/templates/base.html:59
-msgid "Audit Log"
-msgstr "Auditný log"
-
-#: mcprack/templates/base.html:60
-msgid "Vaultwarden Setup"
-msgstr "Nastavenie Vaultwardenu"
-
-#: mcprack/templates/base.html:61
-msgid "OAuth Diagnostics"
-msgstr "Diagnostika OAuth"
-
-#: mcprack/templates/base.html:62
-msgid "OTEL Diagnostics"
-msgstr "OTEL diagnostika"
-
-#: mcprack/templates/base.html:66
-msgid "Change Password"
-msgstr "Zmeniť heslo"
-
-#: mcprack/templates/base.html:69
+#: mcprack/templates/base.html:67
 msgid "Log out"
 msgstr "Odhlásiť sa"
 
-#: mcprack/templates/base.html:114
+#: mcprack/templates/base.html:121
 msgid "Loading..."
 msgstr "Načítanie…"
+
+#: mcprack/templates/base.html:127
+msgid "Search:"
+msgstr "Hľadať:"
+
+#: mcprack/templates/base.html:128
+msgid "Show _MENU_ rows"
+msgstr "Zobraziť _MENU_ riadkov"
+
+#: mcprack/templates/base.html:129
+msgid "_START_–_END_ of _TOTAL_"
+msgstr "_START_–_END_ z _TOTAL_"
+
+#: mcprack/templates/base.html:130
+msgid "0 rows"
+msgstr "0 riadkov"
+
+#: mcprack/templates/base.html:131
+msgid "(filtered from _MAX_)"
+msgstr "(filtrované z _MAX_)"
+
+#: mcprack/templates/base.html:132
+msgid "No matching rows"
+msgstr "Žiadne zodpovedajúce riadky"
+
+#: mcprack/templates/admin/server_form.html:38 mcprack/templates/base.html:133
+msgid "Previous"
+msgstr "Predchádzajúce"
+
+#: mcprack/templates/admin/server_form.html:39 mcprack/templates/base.html:134
+msgid "Next"
+msgstr "Ďalšie"
 
 #: mcprack/templates/catalog.html:2 mcprack/templates/catalog.html:6
 msgid "MCP Server Catalog"
@@ -484,11 +804,11 @@ msgstr "Katalóg MCP serverov"
 
 #: mcprack/templates/catalog.html:7
 msgid ""
-"Select servers, save, then download or copy a client config. You can "
-"change the selection anytime."
+"Select servers, save, then download or copy a client config. You can change "
+"the selection anytime."
 msgstr ""
-"Vyberte servery, uložte a stiahnite alebo skopírujte config klienta. "
-"Výber môžete kedykoľvek zmeniť."
+"Vyberte servery, uložte a stiahnite alebo skopírujte config klienta. Výber "
+"môžete kedykoľvek zmeniť."
 
 #: mcprack/templates/catalog.html:11
 msgid "Download Your Config"
@@ -503,88 +823,91 @@ msgid "Works with Claude for Desktop application."
 msgstr "Funguje s aplikáciou Claude pre počítač."
 
 #: mcprack/templates/catalog.html:21 mcprack/templates/catalog.html:36
-#: mcprack/templates/catalog.html:51
+#: mcprack/templates/catalog.html:51 mcprack/templates/catalog.html:66
 msgid "Download Config"
 msgstr "Stiahnuť konfiguráciu"
 
 #: mcprack/templates/catalog.html:24 mcprack/templates/catalog.html:39
-#: mcprack/templates/catalog.html:54
+#: mcprack/templates/catalog.html:54 mcprack/templates/catalog.html:69
 msgid "View & Copy"
 msgstr "Zobraziť a kopírovať"
 
 #: mcprack/templates/catalog.html:33
+msgid ""
+"A .mcp.json without secrets, plus claude mcp add commands. Needs an API "
+"token in MCPRACK_TOKEN."
+msgstr ""
+"Súbor .mcp.json bez tajomstiev plus príkazy claude mcp add. Vyžaduje API "
+"token v MCPRACK_TOKEN."
+
+#: mcprack/templates/catalog.html:48
 msgid "Works with VS Code Copilot and other GitHub Copilot clients."
 msgstr "Funguje s VS Code Copilot a ďalšími klientmi GitHub Copilot."
 
-#: mcprack/templates/catalog.html:48
+#: mcprack/templates/catalog.html:63
 msgid "Works with the Cursor IDE MCP settings."
 msgstr "Funguje s nastavením MCP v IDE Cursor."
 
-#: mcprack/templates/catalog.html:65
+#: mcprack/templates/catalog.html:80
 msgid "Add as Individual Connectors"
 msgstr "Pridať ako jednotlivé konektory"
 
-#: mcprack/templates/catalog.html:66
+#: mcprack/templates/catalog.html:81
 msgid "For Claude Desktop / claude.ai custom connectors — copy name + URL below."
 msgstr ""
-"Pre vlastné konektory Claude Desktop / claude.ai — skopírujte nižšie "
-"názov + URL."
+"Pre vlastné konektory Claude Desktop / claude.ai — skopírujte nižšie názov +"
+" URL."
 
 #: mcprack/templates/admin/servers_list.html:29
 #: mcprack/templates/admin/templates_list.html:14
-#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:80
-#: mcprack/templates/catalog.html:158
+#: mcprack/templates/admin/users_list.html:8 mcprack/templates/catalog.html:95
+#: mcprack/templates/catalog.html:173
 msgid "Name"
 msgstr "Názov"
 
-#: mcprack/templates/catalog.html:83 mcprack/templates/catalog.html:90
-#: mcprack/templates/catalog.html:161 mcprack/templates/catalog.html:168
+#: mcprack/templates/catalog.html:98 mcprack/templates/catalog.html:105
+#: mcprack/templates/catalog.html:176 mcprack/templates/catalog.html:183
 msgid "Copy"
 msgstr "Kopírovať"
 
-#: mcprack/templates/catalog.html:87 mcprack/templates/catalog.html:165
+#: mcprack/templates/catalog.html:102 mcprack/templates/catalog.html:180
 msgid "URL"
 msgstr "URL"
 
-#: mcprack/templates/catalog.html:104
+#: mcprack/templates/catalog.html:119
 msgid "Available Servers"
 msgstr "Dostupné servery"
 
-#: mcprack/templates/catalog.html:113
+#: mcprack/templates/catalog.html:128
 #, python-format
 msgid "Select %(label)s"
 msgstr "Vybrať %(label)s"
 
-#: mcprack/templates/catalog.html:128
+#: mcprack/templates/catalog.html:143
 msgid "Connector"
 msgstr "Konektor"
 
-#: mcprack/templates/catalog.html:133
+#: mcprack/templates/catalog.html:148
 msgid "Using Custom Credentials"
 msgstr "Používajú sa vlastné prihlasovacie údaje"
 
-#: mcprack/templates/catalog.html:135
+#: mcprack/templates/catalog.html:150
 msgid "Use My Own Credentials"
 msgstr "Použiť vlastné prihlasovacie údaje"
 
-#: mcprack/templates/catalog.html:144
+#: mcprack/templates/catalog.html:159
 msgid "No servers available yet. Ask an admin to register some."
 msgstr ""
-"Zatiaľ nie sú dostupné žiadne servery. Požiadajte administrátora, aby "
-"nejaké zaregistroval."
+"Zatiaľ nie sú dostupné žiadne servery. Požiadajte administrátora, aby nejaké"
+" zaregistroval."
 
-#: mcprack/templates/catalog.html:149
+#: mcprack/templates/catalog.html:164
 msgid "Save Selection"
 msgstr "Uložiť výber"
 
-#: mcprack/templates/catalog.html:172
+#: mcprack/templates/catalog.html:187
 msgid "Close"
 msgstr "Zatvoriť"
-
-#: mcprack/templates/error.html:10 mcprack/templates/override.html:31
-#: mcprack/templates/view_config.html:24
-msgid "Back to Catalog"
-msgstr "Späť do katalógu"
 
 #: mcprack/templates/forgot_password.html:2
 msgid "Forgot password"
@@ -649,23 +972,36 @@ msgstr "Prihlásiť sa"
 
 #: mcprack/templates/login.html:38
 msgid "Use your local mcprack account, or your Active Directory credentials."
-msgstr ""
-"Použite svoj lokálny účet mcprack alebo prihlasovacie údaje Active "
-"Directory."
+msgstr "Použite svoj lokálny účet mcprack alebo prihlasovacie údaje Active Directory."
 
 #: mcprack/templates/login.html:40
 msgid "Use your local mcprack account."
 msgstr "Použite svoj lokálny účet mcprack."
 
-#: mcprack/templates/oauth_consent.html:2
-#: mcprack/templates/oauth_consent.html:7
+#: mcprack/templates/login_mfa.html:8
+msgid ""
+"Enter the 6-digit code from your authenticator app, or one of your recovery "
+"codes."
+msgstr ""
+"Zadajte 6-miestny kód z autentifikačnej aplikácie alebo jeden zo svojich "
+"záložných kódov."
+
+#: mcprack/templates/login_mfa.html:18
+msgid "Verify"
+msgstr "Overiť"
+
+#: mcprack/templates/login_mfa.html:20
+msgid "Start over"
+msgstr "Začať znova"
+
+#: mcprack/templates/oauth_consent.html:2 mcprack/templates/oauth_consent.html:7
 msgid "Authorize application"
 msgstr "Autorizovať aplikáciu"
 
 #: mcprack/templates/oauth_consent.html:9
 msgid ""
-"An MCP client wants to use your selected servers through mcprack. Only "
-"allow clients you trust."
+"An MCP client wants to use your selected servers through mcprack. Only allow"
+" clients you trust."
 msgstr ""
 "Klient MCP chce používať vaše vybrané servery cez mcprack. Povoľte len "
 "klientov, ktorým dôverujete."
@@ -679,32 +1015,42 @@ msgid "will connect as"
 msgstr "sa pripojí ako"
 
 #: mcprack/templates/oauth_consent.html:21
+msgid "After you allow this, the authorization code is sent to:"
+msgstr "Po povolení bude autorizačný kód odoslaný na:"
+
+#: mcprack/templates/oauth_consent.html:27
+msgid ""
+"This address is on this computer. Only allow it if you just started this "
+"connection from an application running on this computer."
+msgstr ""
+"Táto adresa je na tomto počítači. Povoľte ju iba vtedy, ak ste práve "
+"spustili toto spojenie z aplikácie bežiacej na tomto počítači."
+
+#: mcprack/templates/oauth_consent.html:32
 msgid "Access is limited to MCP servers you have selected in the catalog."
 msgstr "Prístup je obmedzený na MCP servery, ktoré máte vybrané v katalógu."
 
-#: mcprack/templates/oauth_consent.html:22
-msgid ""
-"Backend credentials stay on the server — they are never sent to the "
-"client."
+#: mcprack/templates/oauth_consent.html:33
+msgid "Backend credentials stay on the server — they are never sent to the client."
 msgstr ""
 "Prihlasovacie údaje backendu zostávajú na serveri — klientovi sa nikdy "
 "neposielajú."
 
-#: mcprack/templates/oauth_consent.html:24
+#: mcprack/templates/oauth_consent.html:35
 msgid "Requested scopes:"
 msgstr "Požadované scope:"
 
-#: mcprack/templates/oauth_consent.html:29
+#: mcprack/templates/oauth_consent.html:40
 msgid "Client id:"
 msgstr "ID klienta:"
 
 #: mcprack/templates/admin/user_form.html:58
-#: mcprack/templates/oauth_consent.html:36
+#: mcprack/templates/oauth_consent.html:47
 msgid "Allow"
 msgstr "Povoliť"
 
 #: mcprack/templates/admin/user_form.html:62
-#: mcprack/templates/oauth_consent.html:39
+#: mcprack/templates/oauth_consent.html:50
 msgid "Deny"
 msgstr "Zakázať"
 
@@ -724,8 +1070,8 @@ msgid ""
 "administrator. You can override specific keys or add your own custom "
 "settings below."
 msgstr ""
-"mcprack automaticky dedí všetky nastavenia od administrátora. Nižšie "
-"môžete prepísať jednotlivé kľúče alebo pridať vlastné."
+"mcprack automaticky dedí všetky nastavenia od administrátora. Nižšie môžete "
+"prepísať jednotlivé kľúče alebo pridať vlastné."
 
 #: mcprack/templates/override.html:21
 msgid "Save My Configuration"
@@ -746,8 +1092,8 @@ msgstr "Zvoľte nové heslo"
 
 #: mcprack/templates/view_config.html:7
 msgid ""
-"Copy the configuration below into your client's config file, or download "
-"it directly."
+"Copy the configuration below into your client's config file, or download it "
+"directly."
 msgstr ""
 "Skopírujte nižšie uvedenú konfiguráciu do konfiguračného súboru svojho "
 "klienta, alebo si ju priamo stiahnite."
@@ -757,18 +1103,32 @@ msgstr ""
 msgid "Copy failed — select the text manually."
 msgstr "Kopírovanie zlyhalo — vyberte text ručne."
 
-#: mcprack/templates/admin/user_config_view.html:18
 #: mcprack/templates/view_config.html:18
+msgid "Or add the servers with the Claude Code CLI"
+msgstr "Alebo pridajte servery cez Claude Code CLI"
+
+#: mcprack/templates/view_config.html:20
+msgid ""
+"Create an API token with the scope proxy:access and export it as "
+"MCPRACK_TOKEN first. The commands use user scope (all your projects); the "
+"token stays in your environment, never in a file."
+msgstr ""
+"Najprv vytvorte API token s oprávnením proxy:access a exportujte ho ako "
+"MCPRACK_TOKEN. Príkazy používajú rozsah používateľa (všetky vaše projekty); "
+"token zostáva vo vašom prostredí, nikdy v súbore."
+
+#: mcprack/templates/admin/user_config_view.html:18
+#: mcprack/templates/view_config.html:28
 msgid "Copy to clipboard"
 msgstr "Kopírovať do schránky"
 
 #: mcprack/templates/admin/user_config_view.html:21
-#: mcprack/templates/view_config.html:21
+#: mcprack/templates/view_config.html:31
 msgid "Download File"
 msgstr "Stiahnuť súbor"
 
 #: mcprack/templates/admin/user_config_view.html:29
-#: mcprack/templates/view_config.html:29
+#: mcprack/templates/view_config.html:39
 msgid "Copied to clipboard!"
 msgstr "Skopírované do schránky!"
 
@@ -784,8 +1144,8 @@ msgstr "Administrácia"
 
 #: mcprack/templates/admin/audit_log.html:8
 msgid ""
-"Append-only security audit trail — who did what, against which server, "
-"and whether it succeeded. Entries cannot be edited or deleted here."
+"Append-only security audit trail — who did what, against which server, and "
+"whether it succeeded. Entries cannot be edited or deleted here."
 msgstr ""
 "Bezpečnostný auditný záznam iba na pridávanie — kto čo urobil, na ktorom "
 "serveri a či to bolo úspešné. Záznamy tu nemožno upravovať ani mazať."
@@ -793,11 +1153,11 @@ msgstr ""
 #: mcprack/templates/admin/audit_log.html:9
 #, python-format
 msgid ""
-"Entries older than %(days)s days are archived and purged by the "
-"<code>flask audit-archive</code> CLI command."
+"Entries older than %(days)s days are archived and purged by the <code>flask "
+"audit-archive</code> CLI command."
 msgstr ""
-"Záznamy staršie ako %(days)s dní sú archivované a odstránené príkazom CLI"
-" <code>flask audit-archive</code>."
+"Záznamy staršie ako %(days)s dní sú archivované a odstránené príkazom CLI "
+"<code>flask audit-archive</code>."
 
 #: mcprack/templates/admin/audit_log.html:14
 #: mcprack/templates/admin/audit_log.html:57
@@ -969,8 +1329,8 @@ msgstr "ako toto nakonfigurovať."
 
 #: mcprack/templates/admin/oauth_wizard.html:16
 msgid ""
-"Enabled — clients get tokenless <code>/proxy/mcp/&lt;id&gt;</code> URLs "
-"and authenticate with Bearer tokens."
+"Enabled — clients get tokenless <code>/proxy/mcp/&lt;id&gt;</code> URLs and "
+"authenticate with Bearer tokens."
 msgstr ""
 "Zapnuté — klienti dostávajú URL bez tokenu "
 "(<code>/proxy/mcp/&lt;id&gt;</code>) a autentifikujú sa Bearer tokenmi."
@@ -978,12 +1338,12 @@ msgstr ""
 #: mcprack/templates/admin/oauth_wizard.html:18
 msgid ""
 "Disabled — configs embed a signed path token. Set "
-"<code>OAUTH_ENABLED=true</code> in <code>/etc/mcprack/env</code> and "
-"restart to turn this on."
+"<code>OAUTH_ENABLED=true</code> in <code>/etc/mcprack/env</code> and restart"
+" to turn this on."
 msgstr ""
 "Vypnuté — konfigurácie obsahujú podpísaný token v ceste. Pre zapnutie "
-"nastavte <code>OAUTH_ENABLED=true</code> v <code>/etc/mcprack/env</code> "
-"a reštartujte službu."
+"nastavte <code>OAUTH_ENABLED=true</code> v <code>/etc/mcprack/env</code> a "
+"reštartujte službu."
 
 #: mcprack/templates/admin/oauth_wizard.html:31
 msgid "— used as the OAuth issuer in discovery metadata."
@@ -991,8 +1351,8 @@ msgstr "— používa sa ako OAuth issuer v discovery metadátach."
 
 #: mcprack/templates/admin/oauth_wizard.html:33
 msgid ""
-"Not set. Clients may discover the wrong issuer behind a reverse proxy — "
-"set this to the externally-reachable origin."
+"Not set. Clients may discover the wrong issuer behind a reverse proxy — set "
+"this to the externally-reachable origin."
 msgstr ""
 "Nie je nastavené. Klienti môžu za reverse proxy objaviť zlý issuer — "
 "nastavte na verejne dostupný origin."
@@ -1000,16 +1360,16 @@ msgstr ""
 #: mcprack/templates/admin/oauth_wizard.html:35
 msgid "Not set (only required when OAuth is on, or for CLI config generation)."
 msgstr ""
-"Nie je nastavené (potrebné len pri zapnutom OAuth alebo pre CLI "
-"generovanie configu)."
+"Nie je nastavené (potrebné len pri zapnutom OAuth alebo pre CLI generovanie "
+"configu)."
 
 #: mcprack/templates/admin/oauth_wizard.html:47
 msgid ""
-"On — authlib will accept plain HTTP authorize/token. Lab only; never on "
-"the public internet."
+"On — authlib will accept plain HTTP authorize/token. Lab only; never on the "
+"public internet."
 msgstr ""
-"Zapnuté — authlib prijme authorize/token cez prosté HTTP. Len pre lab; "
-"nikdy na verejnom internete."
+"Zapnuté — authlib prijme authorize/token cez prosté HTTP. Len pre lab; nikdy"
+" na verejnom internete."
 
 #: mcprack/templates/admin/oauth_wizard.html:49
 msgid "Off (default) — authorize/token require HTTPS."
@@ -1076,13 +1436,12 @@ msgstr "— záložné riešenie namiesto požadovaného <code>%(protocol)s</cod
 
 #: mcprack/templates/admin/otel_wizard.html:47
 msgid ""
-"The Python OTLP exporter has no <code>http/json</code> transport (unlike "
-"the JS SDK) — only <code>grpc</code> and <code>http/protobuf</code> are "
+"The Python OTLP exporter has no <code>http/json</code> transport (unlike the"
+" JS SDK) — only <code>grpc</code> and <code>http/protobuf</code> are "
 "supported."
 msgstr ""
-"Python OTLP exportér nemá transport <code>http/json</code> (na rozdiel od"
-" JS SDK) — podporované sú iba <code>grpc</code> a "
-"<code>http/protobuf</code>."
+"Python OTLP exportér nemá transport <code>http/json</code> (na rozdiel od JS"
+" SDK) — podporované sú iba <code>grpc</code> a <code>http/protobuf</code>."
 
 #: mcprack/templates/admin/otel_wizard.html:51
 msgid "Not initialized."
@@ -1099,14 +1458,13 @@ msgstr "Test pripojenia"
 #: mcprack/templates/admin/otel_wizard.html:68
 #, python-format
 msgid ""
-"Sends one test span and one test metric point and force-flushes them — "
-"this proves the exporter can talk to <code>%(endpoint)s</code> without "
-"raising, but a \"success\" here does not guarantee the Collector actually"
-" stored the data (that background export path does not surface errors "
-"synchronously)."
+"Sends one test span and one test metric point and force-flushes them — this "
+"proves the exporter can talk to <code>%(endpoint)s</code> without raising, "
+"but a \"success\" here does not guarantee the Collector actually stored the "
+"data (that background export path does not surface errors synchronously)."
 msgstr ""
-"Odošle jeden testovací span a jeden testovací metrický bod a vynútene ich"
-" odošle — to preukazuje, že exportér vie komunikovať s "
+"Odošle jeden testovací span a jeden testovací metrický bod a vynútene ich "
+"odošle — to preukazuje, že exportér vie komunikovať s "
 "<code>%(endpoint)s</code> bez chyby, ale „úspech“ tu nezaručuje, že "
 "Collector dáta skutočne uložil (táto cesta exportu na pozadí chyby "
 "synchrónne nezobrazuje)."
@@ -1117,17 +1475,17 @@ msgstr "(nie je nakonfigurovaný žiadny endpoint)"
 
 #: mcprack/templates/admin/otel_wizard.html:69
 msgid ""
-"If several mcprack instances share this Collector, the test signal is "
-"tagged <code>server_name=\"otel-diagnostics@&lt;this-"
-"host&apos;s-hostname&gt;\"</code> so you can tell them apart in "
-"Grafana/your trace UI even if the Collector's own resource-attribute "
-"handling (service.name/host.name) is misconfigured."
+"If several mcprack instances share this Collector, the test signal is tagged"
+" <code>server_name=\"otel-diagnostics@&lt;this-"
+"host&apos;s-hostname&gt;\"</code> so you can tell them apart in Grafana/your"
+" trace UI even if the Collector's own resource-attribute handling "
+"(service.name/host.name) is misconfigured."
 msgstr ""
 "Ak tento Collector využíva viac instancií mcpracku, testovací signál je "
 "označený ako <code>server_name=\"otel-diagnostics@&lt;hostname-tohto-"
-"stroja&gt;\"</code>, takže ho v Grafane alebo vo svojom trace UI "
-"rozlíšite aj vtedy, keď má Collector zle nastavené spracovanie atribútov "
-"prostriedku (service.name/host.name)."
+"stroja&gt;\"</code>, takže ho v Grafane alebo vo svojom trace UI rozlíšite "
+"aj vtedy, keď má Collector zle nastavené spracovanie atribútov prostriedku "
+"(service.name/host.name)."
 
 #: mcprack/templates/admin/otel_wizard.html:73
 msgid "Send test span + metric"
@@ -1189,8 +1547,8 @@ msgstr "Bežiace inštancie proxy pre jednotlivých používateľov"
 
 #: mcprack/templates/admin/proxy_instances.html:49
 msgid ""
-"Only stdio servers without a fixed network URL are started here, on "
-"demand, one isolated instance per (user, server) pair."
+"Only stdio servers without a fixed network URL are started here, on demand, "
+"one isolated instance per (user, server) pair."
 msgstr ""
 "Tu sa na vyžiadanie spúšťajú iba stdio servery bez pevnej sieťovej URL, "
 "jedna izolovaná inštancia pre každú dvojicu (používateľ, server)."
@@ -1279,14 +1637,6 @@ msgstr "Prostredie"
 msgid "Options"
 msgstr "Možnosti"
 
-#: mcprack/templates/admin/server_form.html:38
-msgid "Previous"
-msgstr "Predchádzajúce"
-
-#: mcprack/templates/admin/server_form.html:39
-msgid "Next"
-msgstr "Ďalšie"
-
 #: mcprack/templates/admin/server_form.html:56
 msgid "This name is already used by another server."
 msgstr "Tento názov už používa iný server."
@@ -1301,11 +1651,11 @@ msgstr "Register MCP serverov"
 
 #: mcprack/templates/admin/servers_list.html:7
 msgid ""
-"Manage MCP servers available in your catalog. Register new servers, check"
-" their health status, and manage credentials."
+"Manage MCP servers available in your catalog. Register new servers, check "
+"their health status, and manage credentials."
 msgstr ""
-"Spravujte MCP servery dostupné vo vašom katalógu. Registrujte nové "
-"servery, kontrolujte ich stav a spravujte prihlasovacie údaje."
+"Spravujte MCP servery dostupné vo vašom katalógu. Registrujte nové servery, "
+"kontrolujte ich stav a spravujte prihlasovacie údaje."
 
 #: mcprack/templates/admin/servers_list.html:11
 msgid "Register New Server"
@@ -1321,15 +1671,15 @@ msgstr "Automatické rozpoznanie:"
 
 #: mcprack/templates/admin/servers_list.html:22
 msgid ""
-"Scans this machine for Claude Desktop config, running mcp-rack-* proxies,"
-" and known MCP binaries on PATH. Registers any servers not already in the"
-" catalog. Only command and args are imported—you'll need to set default "
+"Scans this machine for Claude Desktop config, running mcp-rack-* proxies, "
+"and known MCP binaries on PATH. Registers any servers not already in the "
+"catalog. Only command and args are imported—you'll need to set default "
 "credentials."
 msgstr ""
 "Prehľadá tento počítač na konfiguráciu Claude Desktop, bežiace proxy mcp-"
-"rack-* a známe binárne súbory MCP v PATH. Zaregistruje všetky servery, "
-"ktoré ešte nie sú v katalógu. Importujú sa iba príkaz a argumenty — "
-"predvolené prihlasovacie údaje bude potrebné nastaviť ručne."
+"rack-* a známe binárne súbory MCP v PATH. Zaregistruje všetky servery, ktoré"
+" ešte nie sú v katalógu. Importujú sa iba príkaz a argumenty — predvolené "
+"prihlasovacie údaje bude potrebné nastaviť ručne."
 
 #: mcprack/templates/admin/servers_list.html:30
 #: mcprack/templates/admin/template_form.html:14
@@ -1435,12 +1785,11 @@ msgstr "Odstrániť"
 
 #: mcprack/templates/admin/servers_list.html:104
 msgid ""
-"No servers registered yet. Use the buttons above to register new servers "
-"or autodetect existing ones."
+"No servers registered yet. Use the buttons above to register new servers or "
+"autodetect existing ones."
 msgstr ""
 "Zatiaľ nie sú zaregistrované žiadne servery. Použite tlačidlá vyššie na "
-"registráciu nových serverov alebo na automatické rozpoznanie "
-"existujúcich."
+"registráciu nových serverov alebo na automatické rozpoznanie existujúcich."
 
 #: mcprack/templates/admin/template_form.html:2
 #: mcprack/templates/admin/template_form.html:4
@@ -1469,12 +1818,12 @@ msgstr "Servery"
 
 #: mcprack/templates/admin/template_form.html:21
 msgid ""
-"Tick \"Allowed\" for every server users of this template may use, and "
-"\"Pre-selected\" for the subset that should already be included in their "
-"generated config."
+"Tick \"Allowed\" for every server users of this template may use, and \"Pre-"
+"selected\" for the subset that should already be included in their generated"
+" config."
 msgstr ""
-"Zaškrtnite „Povolené“ u každého servera, ktorý užívatelia tejto šablóny "
-"smú používať, a „Predvybrané“ u tých, ktoré majú byť hneď súčasťou ich "
+"Zaškrtnite „Povolené“ u každého servera, ktorý užívatelia tejto šablóny smú "
+"používať, a „Predvybrané“ u tých, ktoré majú byť hneď súčasťou ich "
 "vygenerovanej konfigurácie."
 
 #: mcprack/templates/admin/template_form.html:25
@@ -1507,13 +1856,13 @@ msgstr "Konfiguračné šablóny"
 
 #: mcprack/templates/admin/templates_list.html:7
 msgid ""
-"A template is a reusable preset of allowed/denied servers and which of "
-"them are pre-selected. Apply it to a user from their edit page to "
-"configure them in one step, then fine-tune individually if needed."
+"A template is a reusable preset of allowed/denied servers and which of them "
+"are pre-selected. Apply it to a user from their edit page to configure them "
+"in one step, then fine-tune individually if needed."
 msgstr ""
 "Šablóna je znovupoužiteľná predvoľba povolených a zakázaných serverov a "
-"toho, ktoré z nich sú predvybrané. Použite ju na užívateľa z jeho stránky"
-" na úpravu — nastavíte ho tým v jednom kroku a potom môžete doladiť "
+"toho, ktoré z nich sú predvybrané. Použite ju na užívateľa z jeho stránky na"
+" úpravu — nastavíte ho tým v jednom kroku a potom môžete doladiť "
 "jednotlivosti."
 
 #: mcprack/templates/admin/templates_list.html:27
@@ -1541,12 +1890,12 @@ msgstr "pre %(name)s"
 #: mcprack/templates/admin/user_config_view.html:7
 #, python-format
 msgid ""
-"Config for <strong>%(name)s</strong> (%(username)s). Copy the "
-"configuration below or download it directly, then send it to the user."
+"Config for <strong>%(name)s</strong> (%(username)s). Copy the configuration "
+"below or download it directly, then send it to the user."
 msgstr ""
-"Konfigurácia pre <strong>%(name)s</strong> (%(username)s). Skopírujte "
-"nižšie uvedenú konfiguráciu alebo si ju priamo stiahnite a potom ju "
-"odošlite používateľovi."
+"Konfigurácia pre <strong>%(name)s</strong> (%(username)s). Skopírujte nižšie"
+" uvedenú konfiguráciu alebo si ju priamo stiahnite a potom ju odošlite "
+"používateľovi."
 
 #: mcprack/templates/admin/user_config_view.html:24
 #: mcprack/templates/admin/user_override_form.html:37
@@ -1592,16 +1941,12 @@ msgstr "Prístup k serverom a výber do konfigurácie"
 #: mcprack/templates/admin/user_form.html:39
 msgid ""
 "Allow or deny each server for this user, and tick which allowed servers "
-"should actually be included in their generated config — the admin decides"
-" this on their behalf, no login required."
+"should actually be included in their generated config — the admin decides "
+"this on their behalf, no login required."
 msgstr ""
-"Povoľte alebo zakážte tomuto užívateľovi jednotlivé servery a zaškrtnite,"
-" ktoré z povolených majú byť súčasťou jeho vygenerovanej konfigurácie — "
+"Povoľte alebo zakážte tomuto užívateľovi jednotlivé servery a zaškrtnite, "
+"ktoré z povolených majú byť súčasťou jeho vygenerovanej konfigurácie — "
 "rozhoduje o tom administrátor za neho, užívateľ sa nemusí prihlasovať."
-
-#: mcprack/templates/admin/user_form.html:45
-msgid "Access"
-msgstr "Prístup"
 
 #: mcprack/templates/admin/user_form.html:46
 msgid "Included in config"
@@ -1633,11 +1978,11 @@ msgstr "Konfigurácie klientov"
 
 #: mcprack/templates/admin/user_form.html:88
 msgid ""
-"View or download this user's MCP client config directly — useful for "
-"users who never log in themselves."
+"View or download this user's MCP client config directly — useful for users "
+"who never log in themselves."
 msgstr ""
-"Zobrazte alebo stiahnite konfiguráciu MCP klienta tohto používateľa "
-"priamo — užitočné pre používateľov, ktorí sa sami nikdy neprihlasujú."
+"Zobrazte alebo stiahnite konfiguráciu MCP klienta tohto používateľa priamo —"
+" užitočné pre používateľov, ktorí sa sami nikdy neprihlasujú."
 
 #: mcprack/templates/admin/user_form.html:100
 msgid "Apply a configuration template"
@@ -1645,12 +1990,11 @@ msgstr "Použiť konfiguračnú šablónu"
 
 #: mcprack/templates/admin/user_form.html:101
 msgid ""
-"Replaces this user's access and selection with the template's. Individual"
-" credentials already set for this user are kept."
+"Replaces this user's access and selection with the template's. Individual "
+"credentials already set for this user are kept."
 msgstr ""
-"Nahradí prístup a výber tohto užívateľa hodnotami zo šablóny. "
-"Individuálne prihlasovacie údaje, ktoré už má nastavené, zostanú "
-"zachované."
+"Nahradí prístup a výber tohto užívateľa hodnotami zo šablóny. Individuálne "
+"prihlasovacie údaje, ktoré už má nastavené, zostanú zachované."
 
 #: mcprack/templates/admin/user_form.html:105
 msgid "Choose a template…"
@@ -1663,6 +2007,44 @@ msgstr "Použiť šablónu"
 #: mcprack/templates/admin/user_form.html:112
 msgid "Manage templates"
 msgstr "Správa šablón"
+
+#: mcprack/templates/admin/user_form.html:116
+msgid "Security"
+msgstr "Zabezpečenie"
+
+#: mcprack/templates/admin/user_form.html:118
+msgid "Two-factor authentication is on for this user."
+msgstr "Dvojfázové overenie je pre tohto používateľa zapnuté."
+
+#: mcprack/templates/admin/user_form.html:118
+msgid "Two-factor authentication is off for this user."
+msgstr "Dvojfázové overenie je pre tohto používateľa vypnuté."
+
+#: mcprack/templates/admin/user_form.html:120
+msgid ""
+"Revoke all tokens of this user? They will have to download a new "
+"configuration."
+msgstr ""
+"Zrušiť všetky tokeny tohto používateľa? Bude si musieť stiahnuť novú "
+"konfiguráciu."
+
+#: mcprack/templates/admin/user_form.html:122
+msgid "Revoke all tokens"
+msgstr "Zrušiť všetky tokeny"
+
+#: mcprack/templates/admin/user_form.html:125
+msgid ""
+"Turn off two-factor authentication for this user? Use this when they have "
+"lost their device and recovery codes. They sign in with the password only "
+"until they set it up again."
+msgstr ""
+"Vypnúť dvojfázové overenie tomuto používateľovi? Použite, keď stratil "
+"zariadenie aj záložné kódy. Do nového nastavenia sa bude prihlasovať iba "
+"heslom."
+
+#: mcprack/templates/admin/user_form.html:127
+msgid "Reset two-factor authentication"
+msgstr "Obnoviť dvojfázové overenie"
 
 #: mcprack/templates/admin/user_override_form.html:3
 #, python-format
@@ -1677,22 +2059,22 @@ msgstr "Individuálna konfigurácia užívateľa %(username)s — %(label)s"
 #: mcprack/templates/admin/user_override_form.html:9
 msgid ""
 "Set this user's personal configuration and credentials for this server. "
-"Empty keys automatically inherit the administrator defaults. The user "
-"never needs to log in or set these themselves."
+"Empty keys automatically inherit the administrator defaults. The user never "
+"needs to log in or set these themselves."
 msgstr ""
-"Nastavte tomuto užívateľovi osobnú konfiguráciu a prihlasovacie údaje pre"
-" tento server. Prázdne kľúče automaticky dedia predvolené hodnoty od "
+"Nastavte tomuto užívateľovi osobnú konfiguráciu a prihlasovacie údaje pre "
+"tento server. Prázdne kľúče automaticky dedia predvolené hodnoty od "
 "administrátora. Užívateľ sa nemusí prihlasovať ani nič nastavovať sám."
 
 #: mcprack/templates/admin/user_override_form.html:14
 msgid ""
-"Self-service override is disabled for this server — this user could not "
-"set this themselves even if they logged in. As an admin, you can still "
-"set it here."
+"Self-service override is disabled for this server — this user could not set "
+"this themselves even if they logged in. As an admin, you can still set it "
+"here."
 msgstr ""
-"U tohto servera je vlastné nastavenie užívateľom zakázané — tento "
-"užívateľ by si to nemohol nastaviť sám, ani keby sa prihlásil. Ako "
-"administrátor to tu nastaviť môžete."
+"U tohto servera je vlastné nastavenie užívateľom zakázané — tento užívateľ "
+"by si to nemohol nastaviť sám, ani keby sa prihlásil. Ako administrátor to "
+"tu nastaviť môžete."
 
 #: mcprack/templates/admin/user_override_form.html:32
 msgid "Reset to Default"
@@ -1730,12 +2112,12 @@ msgstr "Sprievodca pripojením k Vaultwardenu"
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:5
 msgid ""
-"Checks each prerequisite in order and stops at the first problem, so you "
-"can fix one thing at a time instead of guessing from a raw error message."
+"Checks each prerequisite in order and stops at the first problem, so you can"
+" fix one thing at a time instead of guessing from a raw error message."
 msgstr ""
-"Postupne skontroluje každý predpoklad a zastaví sa pri prvom probléme, "
-"aby ste mohli riešiť jednu vec po druhej namiesto hádania z holej "
-"chybovej správy."
+"Postupne skontroluje každý predpoklad a zastaví sa pri prvom probléme, aby "
+"ste mohli riešiť jednu vec po druhej namiesto hádania z holej chybovej "
+"správy."
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:25
 msgid "All checks passed — Vaultwarden is fully configured and reachable."
@@ -1745,13 +2127,13 @@ msgstr ""
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:27
 msgid ""
-"Edit <code>/etc/mcprack/env</code> on the mcprack host to fix the flagged"
-" setting, then restart the mcprack service, then re-run this diagnostics "
+"Edit <code>/etc/mcprack/env</code> on the mcprack host to fix the flagged "
+"setting, then restart the mcprack service, then re-run this diagnostics "
 "page."
 msgstr ""
 "Upravte <code>/etc/mcprack/env</code> na hostiteľovi mcprack a opravte "
-"označené nastavenie, potom reštartujte službu mcprack a znovu spustite "
-"túto diagnostickú stránku."
+"označené nastavenie, potom reštartujte službu mcprack a znovu spustite túto "
+"diagnostickú stránku."
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:33
 msgid "Back to servers"
@@ -1763,15 +2145,15 @@ msgstr "Migrácia tajných kľúčov medzi lokálnym úložiskom a Vaultwardenom
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:38
 msgid ""
-"These are deliberate, one-off data moves — not automatic fallbacks. "
-"Neither backend is ever chosen silently at request time based on live "
-"reachability; which one is authoritative is decided purely by whether "
+"These are deliberate, one-off data moves — not automatic fallbacks. Neither "
+"backend is ever chosen silently at request time based on live reachability; "
+"which one is authoritative is decided purely by whether "
 "<code>BW_SERVER</code> is configured."
 msgstr ""
 "Toto sú zámerné, jednorazové presuny dát — nie automatické záložné "
 "mechanizmy. Žiadny backend nie je nikdy ticho vybraný za behu na základe "
-"aktuálnej dostupnosti; ktorý z nich je autoritatívny, sa rozhoduje "
-"výhradne podľa toho, či je nakonfigurovaný <code>BW_SERVER</code>."
+"aktuálnej dostupnosti; ktorý z nich je autoritatívny, sa rozhoduje výhradne "
+"podľa toho, či je nakonfigurovaný <code>BW_SERVER</code>."
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:44
 msgid "Move local secrets into Vaultwarden"
@@ -1779,8 +2161,8 @@ msgstr "Presunúť lokálne tajné kľúče do Vaultwardenu"
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:47
 msgid ""
-"Run this once Vaultwarden has been newly configured, to move over "
-"whatever accumulated locally while it was not."
+"Run this once Vaultwarden has been newly configured, to move over whatever "
+"accumulated locally while it was not."
 msgstr ""
 "Spustite toto po tom, čo je Vaultwarden novo nakonfigurovaný, aby ste "
 "presunuli všetko, čo sa nahromadilo lokálne, kým nakonfigurovaný nebol."
@@ -1791,19 +2173,17 @@ msgstr "Zálohovať tajné kľúče Vaultwardenu lokálne"
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:57
 msgid ""
-"Run this <em>before</em> a planned Vaultwarden outage. Vaultwarden's copy"
-" is left untouched — afterwards you can unset <code>BW_SERVER</code> for "
-"the duration and switch back once it's back up."
+"Run this <em>before</em> a planned Vaultwarden outage. Vaultwarden's copy is"
+" left untouched — afterwards you can unset <code>BW_SERVER</code> for the "
+"duration and switch back once it's back up."
 msgstr ""
 "Spustite toto <em>pred</em> plánovaným výpadkom Vaultwardenu. Kópia vo "
 "Vaultwardene zostane nedotknutá — potom môžete na dobu výpadku zrušiť "
-"nastavenie <code>BW_SERVER</code> a prepnúť späť, hneď ako bude "
-"Vaultwarden opäť dostupný."
+"nastavenie <code>BW_SERVER</code> a prepnúť späť, hneď ako bude Vaultwarden "
+"opäť dostupný."
 
 #: mcprack/templates/admin/vaultwarden_wizard.html:62
-msgid ""
-"Both actions require <code>BW_SERVER</code> to be configured and "
-"reachable."
+msgid "Both actions require <code>BW_SERVER</code> to be configured and reachable."
 msgstr ""
 "Obe akcie vyžadujú, aby bol <code>BW_SERVER</code> nakonfigurovaný a "
 "dostupný."
@@ -1823,25 +2203,25 @@ msgstr ""
 #~ msgid ""
 #~ "Mark a row <strong>sensitive</strong> if "
 #~ "it's a secret — those go to "
-#~ "Vaultwarden (or an encrypted local "
-#~ "fallback if Vaultwarden isn't configured). "
-#~ "Everything else is stored directly in"
-#~ " mcprack's own database."
+#~ "Vaultwarden (or an encrypted local fallback"
+#~ " if Vaultwarden isn't configured). Everything"
+#~ " else is stored directly in mcprack's"
+#~ " own database."
 #~ msgstr ""
-#~ "Označte riadok ako <strong>citlivé</strong>, "
-#~ "ak ide o tajný kľúč — tie sa"
-#~ " ukladajú do Vaultwardenu (alebo do "
-#~ "šifrovaného lokálneho záložného úložiska, ak"
-#~ " Vaultwarden nie je nakonfigurovaný). "
-#~ "Všetko ostatné sa ukladá priamo do "
-#~ "vlastnej databázy mcprack."
+#~ "Označte riadok ako <strong>citlivé</strong>, ak"
+#~ " ide o tajný kľúč — tie sa "
+#~ "ukladajú do Vaultwardenu (alebo do "
+#~ "šifrovaného lokálneho záložného úložiska, ak "
+#~ "Vaultwarden nie je nakonfigurovaný). Všetko "
+#~ "ostatné sa ukladá priamo do vlastnej "
+#~ "databázy mcprack."
 
 #~ msgid "Server access"
 #~ msgstr "Prístup k serverom"
 
 #~ msgid ""
-#~ "Explicitly allow or deny each currently"
-#~ " available MCP server for this user."
+#~ "Explicitly allow or deny each currently "
+#~ "available MCP server for this user."
 #~ msgstr ""
 #~ "Explicitne povoľte alebo zakážte tomuto "
 #~ "používateľovi každý aktuálne dostupný MCP "
@@ -1850,9 +2230,9 @@ msgstr ""
 #~ msgid ""
 #~ "Claude Desktop's \"Add custom connector\" "
 #~ "dialog (and claude.ai) asks for a "
-#~ "name and a URL — copy each "
-#~ "one below instead of using a JSON"
-#~ " config file."
+#~ "name and a URL — copy each one"
+#~ " below instead of using a JSON "
+#~ "config file."
 #~ msgstr ""
 
 #~ msgid "Your %(label)s Credentials"
@@ -1863,9 +2243,9 @@ msgstr ""
 
 #~ msgid ""
 #~ "These credentials are stored securely in"
-#~ " Vaultwarden and only apply to "
-#~ "configs you download. They override the"
-#~ " admin's default credentials."
+#~ " Vaultwarden and only apply to configs"
+#~ " you download. They override the admin's"
+#~ " default credentials."
 #~ msgstr ""
 #~ "Tieto prihlasovacie údaje sú bezpečne "
 #~ "uložené vo Vaultwardene a platia iba "
@@ -1880,13 +2260,11 @@ msgstr ""
 #~ msgstr "Prihlasovacie údaje (formát KĽÚČ=hodnota, jeden na riadok)"
 
 #~ msgid ""
-#~ "Store sensitive values like API keys,"
-#~ " tokens, and passwords in KEY=value "
-#~ "format."
+#~ "Store sensitive values like API keys, "
+#~ "tokens, and passwords in KEY=value format."
 #~ msgstr ""
-#~ "Citlivé hodnoty, ako API kľúče, tokeny"
-#~ " a heslá, ukladajte vo formáte "
-#~ "KĽÚČ=hodnota."
+#~ "Citlivé hodnoty, ako API kľúče, tokeny "
+#~ "a heslá, ukladajte vo formáte KĽÚČ=hodnota."
 
 #~ msgid "Save My Credentials"
 #~ msgstr "Uložiť moje prihlasovacie údaje"
@@ -1899,10 +2277,13 @@ msgstr ""
 
 #~ msgid ""
 #~ "Set this user's personal credentials for"
-#~ " this server. These are stored "
-#~ "securely and override the admin default"
-#~ " for this user only. The user "
-#~ "never needs to log in or set "
-#~ "these themselves."
+#~ " this server. These are stored securely"
+#~ " and override the admin default for "
+#~ "this user only. The user never needs"
+#~ " to log in or set these "
+#~ "themselves."
 #~ msgstr ""
+
+#~ msgid "New password must be at least %(n)d characters."
+#~ msgstr "Nové heslo musí mať aspoň %(n)d znakov."
 
