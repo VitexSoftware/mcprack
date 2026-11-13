@@ -1278,6 +1278,7 @@ the catalog on `apt install`.
 - [Redmine](https://github.com/Vitexus/mcp-server-redmine) (+ companion)
 - [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver) (+ companion)
 - [Semaphore UI](https://github.com/VitexSoftware/mcp-server-semaphore) (+ companion)
+- [Snipe-IT](https://github.com/Vitexus/mcp-server-snipeit) (`mcp-server-snipeit` + companion; fork of jameshgordy/snipeit-mcp, MIT; not in `Suggests:` until published to repo.vitexsoftware.com)
 - [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg) (+ companion)
 - [Twitter / X](https://github.com/Vitexus/mcp-server-twitter) (`mcp-server-twitter` + companion; fork of rafaljanicki/x-twitter-mcp-server)
 - [Vaultwarden/Bitwarden](https://github.com/Vitexus/mcp-server-warden) (`mcp-server-warden` + companion)
