@@ -113,7 +113,8 @@ Suggests:
  mcprack-mcp-server-ms-365,
  mcprack-mcp-server-email,
  mcprack-mcp-server-wakatime,
- mcprack-mcp-server-raynet
+ mcprack-mcp-server-raynet,
+ mcprack-mcp-server-snipeit
 Description: Self-service MCP server catalog and client config generator
  mcprack lets an admin register MCP (Model Context Protocol) servers once;
  users log in (local account or Active Directory), pick which servers they
