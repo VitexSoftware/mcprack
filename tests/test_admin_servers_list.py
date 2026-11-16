@@ -476,3 +476,28 @@ def test_servers_list_makes_one_vault_round_trip_for_many_servers(app, client):
     assert resp.status_code == 200
     assert list_notes.call_count == 1
     get_notes.assert_not_called()
+
+
+def test_servers_list_does_not_flag_secret_required_key_when_vault_skipped(app, client):
+    """Secret values are unknown when the vault check is skipped (outage);
+    a required secret key must then not be reported as missing."""
+    _login_admin(client)
+
+    with app.app_context():
+        server = McpServer(
+            name="graylog", label="Graylog", transport="stdio",
+            command="/bin/true", enabled=True,
+        )
+        server.env_var_names = ["GRAYLOG_TOKEN"]
+        server.required_env_keys = ["GRAYLOG_TOKEN"]
+        db.session.add(server)
+        db.session.commit()
+
+    from mcprack import vaultwarden
+
+    with patch("mcprack.admin.vaultwarden.unlock", side_effect=vaultwarden.VaultwardenError("down")), \
+         patch("mcprack.admin.health.check_reachable", return_value=True):
+        resp = client.get("/admin/servers")
+
+    assert resp.status_code == 200
+    assert b"required value(s) missing" not in resp.data

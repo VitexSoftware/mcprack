@@ -121,13 +121,23 @@ def _compute_server_health(servers):
         if not server.required_env_keys:
             return []
         effective = dict(server.env_config or {})
-        effective.update(secret_values or {})
-        return sorted(key for key in server.required_env_keys if not effective.get(key))
+        keys = server.required_env_keys
+        if secret_values is None:
+            # Secrets were not loaded (vault skipped/unreachable/list too
+            # large): their state is unknown, so never flag secret keys as
+            # missing — only judge the plain env_config ones.
+            secret_keys = set(server.env_var_names or [])
+            if server.url and server.auth_env_key:
+                secret_keys.add(server.auth_env_key)
+            keys = [k for k in keys if k not in secret_keys]
+        else:
+            effective.update(secret_values)
+        return sorted(key for key in keys if not effective.get(key))
 
     health_by_id = {
         server.id: {
             "missing_credentials": [],
-            "missing_required": _missing_required(server, {}),
+            "missing_required": _missing_required(server, None),
             "reachable": health.check_reachable(server),
         }
         for server in servers
