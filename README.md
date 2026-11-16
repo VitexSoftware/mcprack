@@ -1276,6 +1276,7 @@ the catalog on `apt install`.
 - [Phone / ADB](https://github.com/Vitexus/mcp-server-adb) (`mcp-server-adb` + companion)
 - [Raynet CRM](https://github.com/Vitexus/mcp-server-raynet) (`mcp-server-raynet` + companion)
 - [Redmine](https://github.com/Vitexus/mcp-server-redmine) (+ companion)
+- [Relate](https://github.com/Vitexus/relate) (`mcp-server-relate` + companion; fork of relatedb/relate, read-only by default)
 - [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver) (+ companion)
 - [Semaphore UI](https://github.com/VitexSoftware/mcp-server-semaphore) (+ companion)
 - [Snipe-IT](https://github.com/Vitexus/mcp-server-snipeit) (`mcp-server-snipeit` + companion; fork of jameshgordy/snipeit-mcp, MIT)
