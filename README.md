@@ -1259,6 +1259,7 @@ the catalog on `apt install`.
 - [CC Token Saver](https://github.com/Vitexus/mcp-server-cc-token-saver) — offload small tasks to a local LLM to save tokens (`mcp-server-cc-token-saver` + companion)
 - [Datovka (Czech ISDS Data Box)](https://github.com/VitexSoftware/mcp-server-datovka) — read and send Czech ISDS data box messages (+ companion)
 - [InvokeAI](https://github.com/Vitexus/mcp-server-invokeai) — image generation via InvokeAI (`mcp-server-invokeai` + companion)
+- [IPEX](https://github.com/Spoje-NET/mcp-server-ipex) — IPEX B2B VoIP/mobile API: customers, numbers, calls, invoices (`mcp-server-ipex` + companion; read-only by default)
 - [Email](https://github.com/Vitexus/mcp-server-email) — read, search and send email over IMAP/SMTP (`mcp-server-email` + companion)
 - [Facebook Page](https://github.com/Vitexus/mcp-server-facebook) — manage Facebook Page posts and comments (`mcp-server-facebook` + companion; fork of HagaiHen/facebook-mcp-server)
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) — sandboxed local file access (+ companion)
