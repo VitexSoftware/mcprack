@@ -30,7 +30,7 @@
           <tr>
             <td>
               <input type="checkbox" class="server-checkbox" name="server_id" value="{{ server.id }}"
-                     {{ "checked" if server.id in selected_ids else "" }} {{ "disabled" if not selectable else "" }}
+                     {{ "checked" if server.id in selected_ids else "" }} {{ "disabled" if not selectable and server.id not in selected_ids else "" }}
                      id="server-{{ server.id }}" aria-label="{{ _('Select %(label)s', label=server.label) }}">
             </td>
             <td>
@@ -54,10 +54,12 @@
             <td>
               {% if not server.enabled %}
               <span class="badge badge-warning">{{ _('Disabled') }}</span>
+              {% if server.id in selected_ids %}<br><small class="text-muted">{{ _('Subscribed, but inactive — untick to remove.') }}</small>{% endif %}
               {% elif permitted %}
               <span class="badge badge-success">{{ _('Access allowed') }}</span>
               {% else %}
               <span class="badge badge-warning">{{ _('Access not allowed') }}</span>
+              {% if server.id in selected_ids %}<br><small class="text-muted">{{ _('Subscribed, but inactive — untick to remove.') }}</small>{% endif %}
               {% endif %}
             </td>
             <td class="nowrap">

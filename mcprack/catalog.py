@@ -362,9 +362,14 @@ def _allowed_enabled_server_ids(user_id):
 
 
 def _server_permission_allowed(user_id, server_id):
+    # Must agree with _allowed_enabled_server_ids(): once a user has any
+    # explicit ACL row, a server without a row is NOT allowed (otherwise the
+    # detail page lets them subscribe to a server the list/aggregate hide).
     permission = UserServerPermission.query.filter_by(user_id=user_id, server_id=server_id).first()
     if permission is not None:
         return bool(permission.is_allowed)
+    if UserServerPermission.query.filter_by(user_id=user_id).first() is not None:
+        return False
     return not current_app.config["STRICT_SERVER_PERMISSIONS"]
 
 
@@ -384,9 +389,11 @@ def index():
 def servers():
     available_servers = McpServer.query.order_by(McpServer.category, McpServer.name).all()
     allowed_ids = _allowed_enabled_server_ids(current_user.id)
+    # Raw selection (not intersected with allowed_ids): a stale subscription to
+    # a server that is no longer usable must stay visible and removable.
     selected_ids = {
         row.server_id for row in UserServerSelection.query.filter_by(user_id=current_user.id).all()
-    } & allowed_ids
+    }
     override_ids = {
         row.server_id for row in UserServerOverride.query.filter_by(user_id=current_user.id).all()
     }
