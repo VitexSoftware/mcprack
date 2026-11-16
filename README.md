@@ -1263,6 +1263,7 @@ the catalog on `apt install`.
 - [Pohoda](https://github.com/VitexSoftware/mcp-server-pohoda) — Stormware Pohoda accounting via mServer XML API: invoices, orders, stock, contacts (`mcp-server-pohoda` + companion; PHP, fork of dg/pohoda-mcp; read-only by default)
 - [CNB Cache](https://github.com/Spoje-NET/mcp-server-cnb-cache) — Czech National Bank exchange rates, conversions and history from a [cnb-cache](https://github.com/Spoje-NET/CNB-Cache) instance (`mcp-server-cnb-cache` + companion; Python; read-only)
 - [Ollama](https://github.com/Vitexus/mcp-ollama-python) — local Ollama models as tools: list/show/ps, chat, generate, embeddings, pull/delete, opt-in code execution (`mcp-server-ollama` + companion; Python, fork of pblagoje/mcp-ollama-python; read-only by default via companion)
+- [Grafana](https://github.com/Vitexus/mcp-server-grafana) — Grafana dashboards, Prometheus/Loki queries, alert rules, incidents and annotations (`mcp-server-grafana` + companion; Go, fork of grafana/mcp-grafana; read-only by default via companion)
 - [Email](https://github.com/Vitexus/mcp-server-email) — read, search and send email over IMAP/SMTP (`mcp-server-email` + companion)
 - [Facebook Page](https://github.com/Vitexus/mcp-server-facebook) — manage Facebook Page posts and comments (`mcp-server-facebook` + companion; fork of HagaiHen/facebook-mcp-server)
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) — sandboxed local file access (+ companion)
