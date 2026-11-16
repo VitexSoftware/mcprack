@@ -97,3 +97,22 @@ def test_ldap_provisioned_account_sees_nothing_in_strict_mode(app, client):
         carol = User.query.filter_by(username="carol").first()
         assert carol is not None
         assert _allowed_enabled_server_ids(carol.id) == set()
+
+
+def test_admin_without_row_may_use_server_added_after_their_acl(app):
+    from mcprack.catalog import _server_permission_allowed
+    from mcprack.models import UserServerPermission
+
+    with app.app_context():
+        app.config["STRICT_SERVER_PERMISSIONS"] = True
+        admin = User(username="root2", auth_type="local", is_admin=True)
+        admin.set_password("pw")
+        old = McpServer(name="old", label="Old", transport="stdio", command="/bin/true", enabled=True)
+        new = McpServer(name="new", label="New", transport="stdio", command="/bin/true", enabled=True)
+        db.session.add_all([admin, old, new])
+        db.session.commit()
+        db.session.add(UserServerPermission(user_id=admin.id, server_id=old.id, is_allowed=False))
+        db.session.commit()
+        assert _allowed_enabled_server_ids(admin.id) == {new.id}
+        assert _server_permission_allowed(admin.id, new.id) is True
+        assert _server_permission_allowed(admin.id, old.id) is False

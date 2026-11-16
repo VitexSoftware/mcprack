@@ -352,6 +352,12 @@ def _allowed_enabled_server_ids(user_id):
 
     enabled_ids = {s.id for s in McpServer.query.filter_by(enabled=True).all()}
     permission_rows = UserServerPermission.query.filter_by(user_id=user_id).all()
+    if _is_admin_user(user_id):
+        # Administrators may use every server without an explicit row (a server
+        # registered after their ACL was written would otherwise be a dead end:
+        # they cannot request access); an explicit deny row still wins.
+        denied = {row.server_id for row in permission_rows if not row.is_allowed}
+        return enabled_ids - denied
     if not permission_rows:
         if current_app.config["STRICT_SERVER_PERMISSIONS"]:
             return set()
@@ -361,6 +367,11 @@ def _allowed_enabled_server_ids(user_id):
     return enabled_ids & allowed
 
 
+def _is_admin_user(user_id):
+    user = db.session.get(User, user_id)
+    return bool(user is not None and user.is_admin)
+
+
 def _server_permission_allowed(user_id, server_id):
     # Must agree with _allowed_enabled_server_ids(): once a user has any
     # explicit ACL row, a server without a row is NOT allowed (otherwise the
@@ -368,6 +379,8 @@ def _server_permission_allowed(user_id, server_id):
     permission = UserServerPermission.query.filter_by(user_id=user_id, server_id=server_id).first()
     if permission is not None:
         return bool(permission.is_allowed)
+    if _is_admin_user(user_id):
+        return True
     if UserServerPermission.query.filter_by(user_id=user_id).first() is not None:
         return False
     return not current_app.config["STRICT_SERVER_PERMISSIONS"]
