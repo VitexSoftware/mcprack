@@ -2,6 +2,11 @@ mcprack (1.8.0-1) UNRELEASED; urgency=medium
 
   * Add a per-user FastMCP composition endpoint and aggregate client configs.
   * Separate the user home page from server discovery and subscriptions.
+  * Resolve all of a user's uncached Vaultwarden secrets in one lookup and
+    fall back to expired cache entries (BW_ENV_CACHE_STALE_GRACE) when
+    Vaultwarden is busy, instead of failing client connects with a 502.
+  * Raise the default service limits to MemoryMax=4G, TasksMax=2048 and
+    LimitNOFILE=16384; document how to size them per deployment.
 
  -- Vítězslav Dvořák <info@vitexsoftware.cz>  Thu, 12 Nov 2026 15:33:24 +0100
 

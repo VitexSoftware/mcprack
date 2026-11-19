@@ -80,12 +80,21 @@ SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 
 # Resource limits: contain a runaway or malicious registered command from
-# exhausting the host (denial-of-service via forkbomb/memory leak). Sized
-# generously for normal multi-user proxy operation - tune per deployment.
-MemoryMax=2G
-TasksMax=512
+# exhausting the host (denial-of-service via forkbomb/memory leak). The
+# limits cover the whole cgroup: gunicorn AND every MCP server process it
+# spawns. Each (user, selected server) pair runs its own fastmcp relay plus
+# the server itself - roughly 150-200 MB together - and every `bw` CLI call
+# adds ~180 MB while it runs. Size MemoryMax as about
+#   1 GB + 200 MB x (users x selected servers active at the same time)
+# e.g. 2 users x 15 servers ~ 7 GB. A cgroup that sits at MemoryMax is
+# throttled by reclaim long before anything is OOM-killed, which slows
+# `bw` past BW_LOCK_TIMEOUT and shows up as "Vaultwarden is busy" 502s.
+# Override per host with a drop-in, not by editing this file:
+#   systemctl edit mcprack   ->   [Service] MemoryMax=6G
+MemoryMax=4G
+TasksMax=2048
 CPUQuota=400%
-LimitNOFILE=4096
+LimitNOFILE=16384
 
 [Install]
 WantedBy=multi-user.target
