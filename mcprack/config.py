@@ -208,6 +208,12 @@ class Config:
     # (see secret_store.py) keeps this from masking real edits; the TTL is
     # only a safety net for the multi-worker case.
     BW_ENV_CACHE_TTL = float(os.environ.get("BW_ENV_CACHE_TTL", "60"))
+    # How long past BW_ENV_CACHE_TTL an expired entry may still be served
+    # when Vaultwarden cannot be asked right now (lock wait exceeded, `bw`
+    # timeout, server down) - instead of failing the client's connect with
+    # a 502. Secret writes in mcprack still drop entries immediately. 0
+    # disables the fallback.
+    BW_ENV_CACHE_STALE_GRACE = float(os.environ.get("BW_ENV_CACHE_STALE_GRACE", "86400"))
     BITWARDENCLI_APPDATA_DIR = os.environ.get(
         "BITWARDENCLI_APPDATA_DIR", "/opt/mcprack/.bw"
     )

@@ -117,16 +117,23 @@ def _env_cache_key(server, user):
     return f"{server.id}:{user.id if user is not None else ''}"
 
 
-def _get_cached_secrets(key):
+def _stale_grace_seconds():
+    return float(current_app.config.get("BW_ENV_CACHE_STALE_GRACE", 86400.0))
+
+
+def _get_cached_secrets(key, stale_grace=0.0):
     """(admin default secrets, the user's own secrets) cached for `key`, or
     None. The two layers are cached apart so the rule in _compose_env() also
     holds on a cache hit. An entry written by an older version (one flat,
-    merged dict) cannot be split, so it counts as a miss."""
+    merged dict) cannot be split, so it counts as a miss.
+
+    `stale_grace` accepts an entry that expired up to that many seconds ago -
+    only for _stale_fallback(), when Vaultwarden cannot be asked right now."""
     entry = _load_env_cache().get(key)
     if entry is None:
         return None
     expires_at, values = entry
-    if time.time() >= expires_at:
+    if time.time() >= expires_at + stale_grace:
         return None
     if not (isinstance(values, dict) and set(values) == {"d", "u"}
             and isinstance(values["d"], dict) and isinstance(values["u"], dict)):
@@ -134,11 +141,46 @@ def _get_cached_secrets(key):
     return values["d"], values["u"]
 
 
-def _set_cached_secrets(key, default_values, user_values=None):
+def _set_cached_secrets_many(entries):
+    """Store several {key: (default_values, user_values)} in one cache
+    rewrite, dropping entries that are past even the stale grace period so
+    the file does not grow without bound."""
+    if not entries:
+        return
+    now = time.time()
     ttl = float(current_app.config.get("BW_ENV_CACHE_TTL", 60.0))
-    cache = _load_env_cache()
-    cache[key] = [time.time() + ttl, {"d": dict(default_values or {}), "u": dict(user_values or {})}]
+    grace = _stale_grace_seconds()
+    cache = {
+        k: v for k, v in _load_env_cache().items()
+        if isinstance(v, list) and len(v) == 2 and isinstance(v[0], (int, float)) and v[0] + grace > now
+    }
+    for key, (default_values, user_values) in entries.items():
+        cache[key] = [now + ttl, {"d": dict(default_values or {}), "u": dict(user_values or {})}]
     _save_env_cache(cache)
+
+
+def _set_cached_secrets(key, default_values, user_values=None):
+    _set_cached_secrets_many({key: (default_values, user_values)})
+
+
+def _stale_fallback(key, server, user, exc):
+    """Layers from an expired cache entry when Vaultwarden could not be asked
+    (lock wait exceeded, `bw` timed out, server unreachable) - or None.
+
+    The cache only ever holds values Vaultwarden itself returned, and every
+    secret write in mcprack drops the affected entries (_invalidate_cached_
+    secrets), so a stale entry is what Vaultwarden said before nobody here
+    changed it. Serving it beats failing a client's connect with a 502 just
+    because a burst of cold requests queued up on the single `bw` lock."""
+    layers = _get_cached_secrets(key, stale_grace=_stale_grace_seconds())
+    if layers is not None:
+        logger.warning(
+            "Vaultwarden unavailable for server %s (user %s), serving cached credentials: %s",
+            server.name,
+            user.id if user is not None else "-",
+            exc,
+        )
+    return layers
 
 
 def _invalidate_cached_secrets(server_id=None, user_id=None):
@@ -232,18 +274,12 @@ def resolve_server_env(server, user=None):
             key = _env_cache_key(server, user)
             layers = _get_cached_secrets(key)
             if layers is None:
-                # Acquire vaultwarden's own cross-process lock directly (instead
-                # of going through session(), which would unlock() first) so we
-                # can re-check the shared cache *after* getting exclusive access.
-                with vaultwarden._serialized():
-                    layers = _get_cached_secrets(key)
+                try:
+                    layers = _resolve_uncached(server, user, key)
+                except vaultwarden.VaultwardenError as exc:
+                    layers = _stale_fallback(key, server, user, exc)
                     if layers is None:
-                        sess = vaultwarden.unlock()
-                        try:
-                            layers = vaultwarden.resolve_env_layers(sess, server, user=user)
-                        finally:
-                            vaultwarden.lock(sess)
-                        _set_cached_secrets(key, *layers)
+                        raise
             default_secrets, user_secrets = layers
         else:
             if server.env_secrets_encrypted:
@@ -253,6 +289,108 @@ def resolve_server_env(server, user=None):
 
     user_non_secret = override_row.env_config if override_row else {}
     return _compose_env(server, default_secrets, user_secrets, user_non_secret)
+
+
+def _resolve_uncached(server, user, key):
+    """Secret layers for `server` straight from Vaultwarden, under the
+    cross-process `bw` lock, and cached before the lock is released.
+
+    The lock is taken directly (not via vaultwarden.session(), which would
+    unlock() first) so the shared cache can be re-checked *after* getting
+    exclusive access: whoever held it may have resolved this very entry.
+
+    A client connecting opens all of its servers at once, and each one is a
+    separate request that would otherwise take its own several-second `bw`
+    round trip in turn, so the last of them queues past BW_LOCK_TIMEOUT and
+    fails. When the user has other selected servers that are not cached
+    either, they are resolved here too, in the same unlock with one
+    `bw list items`, and the requests still waiting find them cached."""
+    with vaultwarden._serialized():
+        layers = _get_cached_secrets(key)
+        if layers is not None:
+            return layers
+        siblings = _uncached_sibling_servers(server, user)
+        if not siblings:
+            sess = vaultwarden.unlock()
+            try:
+                layers = vaultwarden.resolve_env_layers(sess, server, user=user)
+            finally:
+                vaultwarden.lock(sess)
+            _set_cached_secrets(key, *layers)
+            return layers
+        sess = vaultwarden.unlock()
+        try:
+            notes = vaultwarden.list_notes(sess)
+        finally:
+            vaultwarden.lock(sess)
+        resolved = _cache_from_notes([server, *siblings], user, notes)
+    return resolved[server.id]
+
+
+def _uncached_sibling_servers(server, user):
+    """The user's other selected, enabled servers whose secrets come from
+    Vaultwarden and are not cached yet - the ones their client is about to
+    ask for alongside `server`."""
+    if user is None:
+        return []
+    from .models import McpServer, UserServerOverride, UserServerSelection
+
+    candidates = (
+        McpServer.query.join(UserServerSelection, UserServerSelection.server_id == McpServer.id)
+        .filter(
+            UserServerSelection.user_id == user.id,
+            McpServer.enabled.is_(True),
+            McpServer.id != server.id,
+        )
+        .all()
+    )
+    if not candidates:
+        return []
+    with_override = {
+        row.server_id
+        for row in UserServerOverride.query.filter(
+            UserServerOverride.user_id == user.id,
+            UserServerOverride.server_id.in_([s.id for s in candidates]),
+        ).all()
+    }
+    return [
+        s for s in candidates
+        if (server_needs_secrets(s) or s.id in with_override)
+        and _get_cached_secrets(_env_cache_key(s, user)) is None
+    ]
+
+
+def _cache_from_notes(servers, user, notes):
+    """Split one `vaultwarden.list_notes()` result into each server's
+    (defaults, user override) layers, cache them all in one write and
+    return {server.id: layers}. Call while still holding the `bw` lock, so
+    requests queued behind it see the entries instead of re-fetching."""
+    resolved, learned = {}, False
+    for server in servers:
+        default = notes.get(server.vault_item)
+        default_values = vaultwarden.parse_notes(default[1]) if default else {}
+        user_values = {}
+        if user is not None:
+            override = notes.get(f"{server.vault_item}-user-{user.username}")
+            if override:
+                user_values = vaultwarden.parse_notes(override[1])
+        audit.log_audit_event("credential_access", "success", user=user, server=server)
+        resolved[server.id] = (default_values, user_values)
+        if default and server.vault_item_id != default[0]:
+            server.vault_item_id = default[0]
+            learned = True
+    _set_cached_secrets_many(
+        {_env_cache_key(server, user): resolved[server.id] for server in servers}
+    )
+    if learned:
+        from .extensions import db
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.warning("could not persist learned vault item ids", exc_info=True)
+    return resolved
 
 
 def _repoints_endpoint(baseline, user_values):
@@ -364,34 +502,23 @@ def resolve_server_envs(servers, user=None):
                     notes = vaultwarden.list_notes(sess)
                 finally:
                     vaultwarden.lock(sess)
+                # Cached before the lock is released, so requests queued
+                # behind it find these entries instead of re-fetching.
+                resolved = _cache_from_notes(todo, user, notes)
+                for server in todo:
+                    results[server.id] = _compose_env(
+                        server, *resolved[server.id], overrides.get(server.id, {})
+                    )
     except (vaultwarden.VaultwardenError, SecretStoreError) as exc:
         for server in pending:
-            results.setdefault(server.id, exc)
-        return results
-
-    learned = False
-    for server in todo:
-        default = notes.get(server.vault_item)
-        default_values = vaultwarden.parse_notes(default[1]) if default else {}
-        user_values = {}
-        if user is not None:
-            override = notes.get(f"{server.vault_item}-user-{user.username}")
-            if override:
-                user_values = vaultwarden.parse_notes(override[1])
-        audit.log_audit_event("credential_access", "success", user=user, server=server)
-        _set_cached_secrets(_env_cache_key(server, user), default_values, user_values)
-        results[server.id] = _compose_env(server, default_values, user_values, overrides.get(server.id, {}))
-        if default and server.vault_item_id != default[0]:
-            server.vault_item_id = default[0]
-            learned = True
-    if learned:
-        from .extensions import db
-
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-            logger.warning("could not persist learned vault item ids", exc_info=True)
+            if server.id in results:
+                continue
+            layers = None
+            if isinstance(exc, vaultwarden.VaultwardenError):
+                layers = _stale_fallback(_env_cache_key(server, user), server, user, exc)
+            results[server.id] = (
+                exc if layers is None else _compose_env(server, *layers, overrides.get(server.id, {}))
+            )
     return results
 
 
