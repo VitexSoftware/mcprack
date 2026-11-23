@@ -1285,7 +1285,7 @@ the catalog on `apt install`.
 - [Relate](https://github.com/Vitexus/relate) — embedded Cypher property graph database, read-only by default (`mcp-server-relate` + companion; fork of relatedb/relate)
 - [Selenium WebDriver](https://github.com/VitexSoftware/mcp-server-webdriver) — browser automation and devtools diagnostics (+ companion)
 - [Semaphore UI](https://github.com/VitexSoftware/mcp-server-semaphore) — Semaphore Ansible projects, templates and tasks (+ companion)
-- [Snipe-IT](https://github.com/Vitexus/mcp-server-snipeit) — Snipe-IT asset management (`mcp-server-snipeit` + companion; fork of jameshgordy/snipeit-mcp, MIT)
+- [Snipe-IT](https://github.com/Spoje-NET/mcp-server-snipeit) — Snipe-IT asset management (`mcp-server-snipeit` + companion; fork of jameshgordy/snipeit-mcp, MIT)
 - [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg) — Subreg domain and DNS management (+ companion)
 - [Twitter / X](https://github.com/Vitexus/mcp-server-twitter) — post and read on Twitter / X (`mcp-server-twitter` + companion; fork of rafaljanicki/x-twitter-mcp-server)
 - [UniFi Network](https://github.com/Spoje-NET/mcp-server-unifi) — UniFi Network controller: devices, clients, WLANs, switch ports, firewall, vouchers, statistics; UniFi OS and classic Network Application (`mcp-server-unifi` + companion; Python, fork of sirkirby/unifi-mcp; read-only by default via companion)
