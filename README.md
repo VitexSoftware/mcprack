@@ -1288,6 +1288,7 @@ the catalog on `apt install`.
 - [Snipe-IT](https://github.com/Vitexus/mcp-server-snipeit) — Snipe-IT asset management (`mcp-server-snipeit` + companion; fork of jameshgordy/snipeit-mcp, MIT)
 - [Subreg.cz](https://github.com/VitexSoftware/mcp-server-subreg) — Subreg domain and DNS management (+ companion)
 - [Twitter / X](https://github.com/Vitexus/mcp-server-twitter) — post and read on Twitter / X (`mcp-server-twitter` + companion; fork of rafaljanicki/x-twitter-mcp-server)
+- [UniFi Network](https://github.com/Spoje-NET/mcp-server-unifi) — UniFi Network controller: devices, clients, WLANs, switch ports, firewall, vouchers, statistics; UniFi OS and classic Network Application (`mcp-server-unifi` + companion; Python, fork of sirkirby/unifi-mcp; read-only by default via companion)
 - [Vaultwarden/Bitwarden](https://github.com/Vitexus/mcp-server-warden) — Vaultwarden/Bitwarden vault access (`mcp-server-warden` + companion)
 - [WakaTime](https://github.com/Vitexus/mcp-server-wakatime) — WakaTime coding activity stats (`mcp-server-wakatime` + companion)
 - [Wazuh](https://github.com/VitexSoftware/mcp-server-wazuh) — Wazuh agents, alerts and vulnerabilities (`mcp-server-wazuh` + companion)
