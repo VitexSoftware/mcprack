@@ -1260,6 +1260,7 @@ the catalog on `apt install`.
 - [Datovka (Czech ISDS Data Box)](https://github.com/VitexSoftware/mcp-server-datovka) — read and send Czech ISDS data box messages (+ companion)
 - [InvokeAI](https://github.com/Vitexus/mcp-server-invokeai) — image generation via InvokeAI (`mcp-server-invokeai` + companion)
 - [IPEX](https://github.com/Spoje-NET/mcp-server-ipex) — IPEX B2B VoIP/mobile API: customers, numbers, calls, invoices (`mcp-server-ipex` + companion; read-only by default)
+- [ISPConfig](https://github.com/VitexSoftware/mcp-server-ispconfig) — ISPConfig 3 hosting: DNS, mail, websites, databases, clients, migration between instances (`mcp-server-ispconfig` + companion; Node.js, fork of DayZAnder/ispconfig-mcp; read-only by default via companion)
 - [Pohoda](https://github.com/VitexSoftware/mcp-server-pohoda) — Stormware Pohoda accounting via mServer XML API: invoices, orders, stock, contacts (`mcp-server-pohoda` + companion; PHP, fork of dg/pohoda-mcp; read-only by default)
 - [CNB Cache](https://github.com/Spoje-NET/mcp-server-cnb-cache) — Czech National Bank exchange rates, conversions and history from a [cnb-cache](https://github.com/Spoje-NET/CNB-Cache) instance (`mcp-server-cnb-cache` + companion; Python; read-only)
 - [Ollama](https://github.com/Vitexus/mcp-ollama-python) — local Ollama models as tools: list/show/ps, chat, generate, embeddings, pull/delete, opt-in code execution (`mcp-server-ollama` + companion; Python, fork of pblagoje/mcp-ollama-python; read-only by default via companion)
