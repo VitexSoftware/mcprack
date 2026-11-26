@@ -1270,6 +1270,7 @@ the catalog on `apt install`.
 - [Filesystem](https://github.com/VitexSoftware/mcp-server-filesystem) — sandboxed local file access (+ companion)
 - [Google Workspace](https://github.com/VitexSoftware/mcp-server-googleoffice) — Gmail, Drive, Calendar, Docs and Sheets (`mcp-server-googleoffice` + companion; fork of taylorwilsdon/google_workspace_mcp)
 - [Graylog](https://github.com/VitexSoftware/mcp-server-graylog) — search Graylog logs and streams (`mcp-server-graylog` + companion)
+- [Graphiti](https://github.com/Vitexus/mcp-server-graphiti) — temporal knowledge-graph memory and hybrid search (`mcp-server-graphiti` + companion; read-only by default)
 - [LibreNMS](https://github.com/VitexSoftware/mcp-server-librenms) — network monitoring: devices, ports, alerts (`mcp-server-librenms` + companion; fork of mhajder/librenms-mcp)
 - [LinkedIn](https://github.com/Vitexus/mcp-server-linkedin) — LinkedIn profile and post access (`mcp-server-linkedin` + companion)
 - [Magento 2](https://github.com/Vitexus/mcp-server-magento) — Magento 2 store catalog and orders (`mcp-server-magento` + companion)
