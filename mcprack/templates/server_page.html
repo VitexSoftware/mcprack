@@ -27,11 +27,19 @@
       <dl class="info-list">
         <dt>{{ _('Administrator allows access') }}</dt>
         <dd><span class="badge {{ 'badge-success' if permission_allowed else 'badge-warning' }}">{{ _('Yes') if permission_allowed else _('No') }}</span></dd>
-        <dt>{{ _('Configured') }}</dt>
-        <dd><span class="badge {{ 'badge-success' if configured else 'badge-warning' }}">{{ _('Yes') if configured else _('No') }}</span></dd>
+        <dt>{{ _('Preconfigured by administrator') }}</dt>
+        <dd><span class="badge {{ 'badge-success' if admin_configured else 'badge-warning' }}">{{ _('Unknown') if admin_configured is none else (_('Yes') if admin_configured else _('No')) }}</span></dd>
+        <dt>{{ _('Overridden by your settings') }}</dt>
+        <dd><span class="badge {{ 'badge-users' if has_user_override else 'badge-warning' }}">{{ _('Access not allowed') if not permission_allowed else (_('Unknown') if has_user_override is none else (_('Yes') if has_user_override else _('No'))) }}</span></dd>
+        <dt>{{ _('Ready with your effective configuration') }}</dt>
+        <dd><span class="badge {{ 'badge-success' if configured else 'badge-warning' }}">{{ _('Unknown') if configured is none else (_('Yes') if configured else _('No')) }}</span></dd>
         <dt>{{ _('In your subscriptions') }}</dt>
         <dd><span class="badge {{ 'badge-success' if selected else 'badge-warning' }}">{{ _('Yes') if selected else _('No') }}</span></dd>
       </dl>
+      <p class="text-sm text-muted">{{ _('Administrator defaults are inherited. Your settings replace or add individual values; configuration values and secrets are not displayed here.') }}</p>
+      {% if server.enabled and permission_allowed and server.allow_user_override %}
+      <a href="{{ url_for('catalog.override', server_id=server.id) }}" class="btn btn-secondary">{{ _('User configuration') }}</a>
+      {% endif %}
       {% if relay_url %}
       <div class="connector-field mt-md">
         <span class="connector-field-label">{{ _('Individual MCP URL') }}</span>

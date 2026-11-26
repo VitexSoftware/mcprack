@@ -473,15 +473,36 @@ def server_page(server_uuid):
     request_row = UserServerAccessRequest.query.filter_by(
         user_id=current_user.id, server_id=server.id
     ).first()
-    configured = bool(server.command or server.url)
-    if configured:
+    admin_configured = bool(server.command or server.url)
+    configured = admin_configured
+    has_user_override = False
+    try:
+        admin_env = secret_store.resolve_server_env(server)
+        admin_configured = admin_configured and all(
+            admin_env.get(key) for key in server.required_env_keys
+        )
+        configured = admin_configured
+    except (vaultwarden.VaultwardenError, secret_store.SecretStoreError):
+        admin_configured = configured = None
+        logger.warning("Could not determine administrator configuration readiness for server %s", server.name)
+
+    if permission_allowed:
         try:
-            effective_user = current_user if permission_allowed else None
-            env = secret_store.resolve_server_env(server, user=effective_user)
-            configured = all(env.get(key) for key in server.required_env_keys)
-        except Exception:
-            configured = False
-            logger.warning("Could not determine configuration readiness for server %s", server.name)
+            user_non_secret, user_secret = secret_store.load_user_override(server, current_user)
+            user_values, _dropped = env_policy.strip_denied({**user_secret, **user_non_secret})
+            has_user_override = bool(user_values)
+        except (vaultwarden.VaultwardenError, secret_store.SecretStoreError):
+            has_user_override = configured = None
+            logger.warning("Could not determine user configuration overrides for server %s", server.name)
+        if has_user_override:
+            try:
+                env = secret_store.resolve_server_env(server, user=current_user)
+                configured = bool(server.command or server.url) and all(
+                    env.get(key) for key in server.required_env_keys
+                )
+            except (vaultwarden.VaultwardenError, secret_store.SecretStoreError):
+                configured = None
+                logger.warning("Could not determine configuration readiness for server %s", server.name)
 
     relay_url = None
     if server.enabled and permission_allowed and selected:
@@ -503,6 +524,8 @@ def server_page(server_uuid):
         permission_allowed=permission_allowed,
         selected=selected,
         configured=configured,
+        admin_configured=admin_configured,
+        has_user_override=has_user_override,
         relay_url=relay_url,
         access_request_status=request_row.status if request_row else None,
         can_request_access=(not current_user.is_admin and server.enabled and not permission_allowed),

@@ -18,6 +18,26 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
 
+#: mcprack/templates/server_page.html
+msgid "Unknown"
+msgstr "Neznáme"
+
+#: mcprack/templates/server_page.html
+msgid "Preconfigured by administrator"
+msgstr "Predkonfigurované administrátorom"
+
+#: mcprack/templates/server_page.html
+msgid "Overridden by your settings"
+msgstr "Prepísané vaším nastavením"
+
+#: mcprack/templates/server_page.html
+msgid "Ready with your effective configuration"
+msgstr "Pripravené s vaším výsledným nastavením"
+
+#: mcprack/templates/server_page.html
+msgid "Administrator defaults are inherited. Your settings replace or add individual values; configuration values and secrets are not displayed here."
+msgstr "Predvolené nastavenie administrátora sa dedí. Vaše nastavenie prepisuje alebo dopĺňa jednotlivé hodnoty; hodnoty konfigurácie ani tajné údaje sa tu nezobrazujú."
+
 #: mcprack/admin.py:218
 msgid "This access request has already been resolved."
 msgstr "Táto žiadosť o prístup už bola vybavená."

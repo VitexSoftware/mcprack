@@ -37,6 +37,17 @@ consistent and either can be scripted or clicked through interchangeably.
   credentials** — those survive untouched and can still be fine-tuned
   afterwards.
 
+The server detail page distinguishes **Preconfigured by administrator**
+(an endpoint and all required values are available without personal settings),
+**Overridden by your settings** (the viewer has applicable personal values),
+and **Ready with your effective configuration** (readiness after merging).
+Personal values also count when they add a new key or match a default.
+Empty overrides and forbidden variable names do not count. A credential-store
+failure is shown as **Unknown**, not as missing configuration. Values and
+secrets are never displayed in these status indicators. Users with access can
+open **User configuration** when self-service overrides are enabled; an
+administrator can still manage personal settings when self-service is disabled.
+
 ### Which values count as secret
 
 `secret_store.override_key_is_secret()` is the single rule, and every

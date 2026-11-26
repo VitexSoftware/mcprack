@@ -11,6 +11,7 @@ from mcprack.models import (
     McpServer,
     User,
     UserServerAccessRequest,
+    UserServerOverride,
     UserServerPermission,
     UserServerSelection,
 )
@@ -114,6 +115,122 @@ def test_server_page_shows_subscribers_only_to_admin(app):
     assert b"Subscribed users" not in user_response.data
     # The viewer's own name is in the top bar; the OTHER subscriber must not appear.
     assert b"other-subscriber" not in user_response.data
+
+
+@pytest.mark.parametrize(
+    "admin_token,user_config,user_token,expected",
+    [
+        ("shared-token", {}, None, ("Yes", "No", "Yes")),
+        (None, {}, None, ("No", "No", "No")),
+        (None, {}, "personal-token", ("No", "Yes", "Yes")),
+        ("shared-token", {"REGION": "eu"}, None, ("Yes", "Yes", "Yes")),
+        ("shared-token", {"SERVICE_URL": "https://service.example.test"}, None, ("Yes", "Yes", "Yes")),
+        ("shared-token", {"SERVICE_URL": "https://other.example.test"}, None, ("Yes", "Yes", "No")),
+        ("shared-token", {"LD_PRELOAD": "/untrusted.so"}, None, ("Yes", "No", "Yes")),
+    ],
+)
+def test_server_page_distinguishes_configuration_layers(
+    app, client, admin_token, user_config, user_token, expected
+):
+    from mcprack import secret_store
+
+    user_id = _login(client)
+    with app.app_context(), patch("mcprack.secret_store.is_vaultwarden_configured", return_value=False):
+        server = McpServer(
+            name="configuration-layers", label="Configuration layers",
+            transport="stdio", command="/bin/true", enabled=True,
+        )
+        server.env_config = {"SERVICE_URL": "https://service.example.test"}
+        server.env_var_names = ["AUTH_TOKEN"]
+        server.required_env_keys = ["AUTH_TOKEN"]
+        db.session.add(server)
+        db.session.commit()
+        secret_store.save_server_secrets(server, {"AUTH_TOKEN": admin_token} if admin_token else {})
+        user = db.session.get(User, user_id)
+        # Include empty and legacy forbidden rows, which normal writes remove/refuse.
+        row = UserServerOverride(user_id=user_id, server_id=server.id)
+        row.env_config = user_config
+        db.session.add(row)
+        if user_token:
+            secret_store.save_user_override_secrets(server, user, {"AUTH_TOKEN": user_token})
+        db.session.commit()
+
+        response = client.get(f"/server/{server.uuid}")
+
+    assert response.status_code == 200
+    body = response.data.decode()
+    for label, value in zip(
+        ("Preconfigured by administrator", "Overridden by your settings", "Ready with your effective configuration"),
+        expected,
+    ):
+        assert re.search(rf"<dt>{label}</dt>\s*<dd><span[^>]*>{value}</span></dd>", body)
+    assert f"/override/{server.id}" in body
+    assert "shared-token" not in body
+    assert "personal-token" not in body
+    assert "https://service.example.test" not in body
+    assert "https://other.example.test" not in body
+
+
+def test_server_page_shows_unknown_configuration_on_store_failure(app, client, caplog):
+    from mcprack.secret_store import SecretStoreError
+
+    _login(client)
+    server_id = _add_enabled_server(app)
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+    with patch("mcprack.secret_store.resolve_server_env", side_effect=SecretStoreError("store unavailable")):
+        response = client.get(f"/server/{server_uuid}")
+    body = response.data.decode()
+    assert re.search(r"<dt>Preconfigured by administrator</dt>\s*<dd><span[^>]*>Unknown</span>", body)
+    assert re.search(r"<dt>Ready with your effective configuration</dt>\s*<dd><span[^>]*>Unknown</span>", body)
+    assert "Could not determine administrator configuration readiness" in caplog.text
+
+
+def test_server_page_does_not_inspect_denied_users_overrides(app, client):
+    _login(client)
+    server_id = _add_enabled_server(app)
+    app.config["STRICT_SERVER_PERMISSIONS"] = True
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+    with patch("mcprack.secret_store.load_user_override") as load_override:
+        response = client.get(f"/server/{server_uuid}")
+    assert response.status_code == 200
+    load_override.assert_not_called()
+    body = response.data.decode()
+    assert re.search(r"<dt>Overridden by your settings</dt>\s*<dd><span[^>]*>Access not allowed</span>", body)
+    assert f"/override/{server_id}" not in body
+
+
+@pytest.mark.parametrize("failing_operation", ["load_user_override", "resolve_server_env"])
+def test_server_page_preserves_admin_status_when_personal_configuration_fails(
+    app, client, failing_operation
+):
+    from mcprack.secret_store import SecretStoreError
+
+    _login(client)
+    server_id = _add_enabled_server(app)
+    with app.app_context():
+        server_uuid = db.session.get(McpServer, server_id).uuid
+
+    def resolve_env(server, user=None):
+        if user is not None:
+            raise SecretStoreError("personal store unavailable")
+        return {}
+
+    with (
+        patch("mcprack.secret_store.resolve_server_env", side_effect=resolve_env),
+        patch(
+            "mcprack.secret_store.load_user_override",
+            side_effect=SecretStoreError("personal store unavailable") if failing_operation == "load_user_override" else None,
+            return_value=({"REGION": "eu"}, {}),
+        ),
+    ):
+        response = client.get(f"/server/{server_uuid}")
+    body = response.data.decode()
+    assert re.search(r"<dt>Preconfigured by administrator</dt>\s*<dd><span[^>]*>Yes</span>", body)
+    override_status = "Unknown" if failing_operation == "load_user_override" else "Yes"
+    assert re.search(rf"<dt>Overridden by your settings</dt>\s*<dd><span[^>]*>{override_status}</span>", body)
+    assert re.search(r"<dt>Ready with your effective configuration</dt>\s*<dd><span[^>]*>Unknown</span>", body)
 
 
 def test_server_page_allows_subscribe_and_unsubscribe(app, client):
