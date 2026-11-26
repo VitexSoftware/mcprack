@@ -442,6 +442,51 @@ client SDK), or validated with `openapi-spec-validator`. Every operation
 declares a stable `operationId` specifically so codegen tools produce
 clean method names.
 
+### MCPRack management MCP server
+
+With `OAUTH_ENABLED=true`, mcprack exposes a separate control-plane MCP
+endpoint at:
+
+```text
+https://mcprack.example.test/mcp/management
+```
+
+The URL is shown on the signed-in user's overview and is included as
+`mcprack-management` in generated client configurations. It uses the same
+OAuth client login as the MCP proxy, but asks for management scopes instead
+of only `mcp`:
+
+- `mcprack:read` — profile, catalog, subscriptions, and generated configs
+- `mcprack:manage` — subscriptions and personal server configuration
+- `mcprack:admin:read` — administrator read-only operations
+- `mcprack:admin:write` — administrator mutations
+
+OAuth never turns a normal user into an administrator. Administrative tools
+are listed only for an administrator and the existing user role is checked
+again when every tool is called.
+
+The endpoint exposes explicit, annotated MCP tools for:
+
+- browsing the catalog and requesting access;
+- subscribing, unsubscribing, and viewing user selections;
+- reading the permitted configuration schema and setting personal values;
+- generating an MCP client configuration;
+- administering servers, users, permissions, access requests, selections,
+  overrides, templates, and the audit log.
+
+Mutating tools dispatch through the same `/api/v1` handlers as the web UI.
+They therefore retain ACL checks, server endpoint validation, environment
+policy, demo-mode restrictions, audit records, and administrator re-use of
+the bearer credential model. Browser cookies are intentionally not accepted
+by the control endpoint. Secret values are never returned by its standard
+read tools; only key names and secret classification are available.
+
+If OAuth is disabled, the endpoint can still be used by an MCP client that
+supports a fixed bearer header. Mint a dedicated, expiring, scope-limited
+personal API token in Account → API tokens. Do not put an unrestricted
+administrator token in a client configuration committed to source control.
+Prefer separate tokens with the minimum required scopes.
+
 ## Database
 
 `SQLALCHEMY_DATABASE_URI` defaults to SQLite but PostgreSQL

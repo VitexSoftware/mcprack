@@ -31,6 +31,7 @@ from . import audit, oauth_policy
 from .extensions import csrf, db, limiter
 from .models import (
     OAUTH_MCP_SCOPE,
+    OAUTH_SCOPES,
     OAuthAuthorizationCode,
     OAuthClient,
     OAuthToken,
@@ -262,7 +263,7 @@ def init_oauth(app):
                 "token_endpoint": f"{_issuer_url()}/oauth/token",
                 "registration_endpoint": f"{_issuer_url()}/oauth/register",
                 "revocation_endpoint": f"{_issuer_url()}/oauth/revoke",
-                "scopes_supported": [OAUTH_MCP_SCOPE],
+                "scopes_supported": list(OAUTH_SCOPES),
                 "response_types_supported": ["code"],
                 "grant_types_supported": ["authorization_code", "refresh_token"],
                 "token_endpoint_auth_methods_supported": [
@@ -281,7 +282,7 @@ def init_oauth(app):
                 raise InvalidRedirectURIError(description=problem)
             _make_room_for_a_client(cfg)
             # Default MCP-friendly metadata when the client omits fields.
-            metadata.setdefault("scope", OAUTH_MCP_SCOPE)
+            metadata.setdefault("scope", " ".join(OAUTH_SCOPES))
             metadata.setdefault("grant_types", ["authorization_code", "refresh_token"])
             metadata.setdefault("response_types", ["code"])
             metadata.setdefault("token_endpoint_auth_method", "none")
@@ -390,6 +391,21 @@ def resolve_oauth_bearer_user(raw_token):
     return user
 
 
+def resolve_oauth_management_token(raw_token):
+    """Return (user, granted scopes) for a live management OAuth token.
+    Ordinary MCP proxy tokens remain intentionally restricted to `mcp`."""
+    token = _find_token(raw_token, hint="access_token")
+    if token is None or token.is_revoked() or token.is_expired():
+        return None, set()
+    scopes = set((token.scope or "").split())
+    if not scopes.intersection(OAUTH_SCOPES[1:]):
+        return None, scopes
+    user = db.session.get(User, token.user_id) if token.user_id else None
+    if user is None or not user.is_active:
+        return None, scopes
+    return user, scopes
+
+
 # --- Discovery -------------------------------------------------------------
 
 
@@ -403,7 +419,7 @@ def authorization_server_metadata():
             "token_endpoint": f"{issuer}/oauth/token",
             "registration_endpoint": f"{issuer}/oauth/register",
             "revocation_endpoint": f"{issuer}/oauth/revoke",
-            "scopes_supported": [OAUTH_MCP_SCOPE],
+            "scopes_supported": list(OAUTH_SCOPES),
             "response_types_supported": ["code"],
             "grant_types_supported": ["authorization_code", "refresh_token"],
             "token_endpoint_auth_methods_supported": [
@@ -447,6 +463,20 @@ def protected_resource_metadata_aggregate():
     return _protected_resource_metadata(resource)
 
 
+@bp.route("/.well-known/oauth-protected-resource/mcp/management")
+def protected_resource_metadata_management():
+    issuer = _issuer_url()
+    return jsonify(
+        {
+            "resource": f"{issuer}/mcp/management",
+            "authorization_servers": [issuer],
+            "scopes_supported": list(OAUTH_SCOPES[1:]),
+            "bearer_methods_supported": ["header"],
+            "resource_documentation": "https://github.com/VitexSoftware/mcprack",
+        }
+    )
+
+
 # --- AS endpoints ----------------------------------------------------------
 
 
@@ -465,11 +495,15 @@ def authorize():
     )
     where = urlsplit(redirect_uri).netloc or redirect_uri
     if request.method == "GET":
+        requested_scopes = (
+            getattr(grant.request, "scope", None) or OAUTH_MCP_SCOPE
+        ).split()
         return render_template(
             "oauth_consent.html",
             grant=grant,
             client=client,
-            scopes=(getattr(grant.request, "scope", None) or OAUTH_MCP_SCOPE).split(),
+            scopes=requested_scopes,
+            management_scopes=any(scope.startswith("mcprack:") for scope in requested_scopes),
             redirect_uri=redirect_uri,
             redirect_host=where,
             loopback_redirect=oauth_policy.is_loopback(redirect_uri),

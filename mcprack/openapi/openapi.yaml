@@ -1107,6 +1107,124 @@ paths:
         "200":
           description: OK
 
+  /me/catalog:
+    get:
+      operationId: getMyCatalog
+      tags: [servers]
+      summary: List catalog entries and their current-user state
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /servers/{serverId}/configuration-schema:
+    get:
+      operationId: getServerConfigurationSchema
+      tags: [overrides]
+      summary: Get allowed per-user configuration keys
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/InsufficientScope"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /me/access-requests:
+    get:
+      operationId: listMyAccessRequests
+      tags: [servers]
+      summary: List the current user's access requests
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /me/access-requests/{serverId}:
+    post:
+      operationId: requestServerAccess
+      tags: [servers]
+      summary: Request access to a denied MCP server
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "201":
+          description: Request created
+        "409":
+          description: The server is disabled or already permitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorEnvelope"
+
+  /me/selections/{serverId}:
+    post:
+      operationId: subscribeServer
+      tags: [selections]
+      summary: Subscribe to one permitted MCP server
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: OK
+    delete:
+      operationId: unsubscribeServer
+      tags: [selections]
+      summary: Unsubscribe from one MCP server
+      parameters:
+        - $ref: "#/components/parameters/ServerId"
+      responses:
+        "200":
+          description: OK
+
+  /admin/access-requests:
+    get:
+      operationId: listAccessRequests
+      tags: [admin-servers]
+      summary: List MCP server access requests
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, denied, all]
+            default: pending
+      responses:
+        "200":
+          description: OK
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/InsufficientScope"
+
+  /admin/access-requests/{userId}/{serverId}/{decision}:
+    post:
+      operationId: resolveAccessRequest
+      tags: [admin-servers]
+      summary: Approve or deny an MCP server access request
+      parameters:
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ServerId"
+        - name: decision
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [approve, deny]
+      responses:
+        "200":
+          description: Updated request
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: The request cannot be resolved in its current state
+
 components:
   securitySchemes:
     cookieAuth:

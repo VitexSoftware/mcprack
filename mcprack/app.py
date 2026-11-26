@@ -333,11 +333,13 @@ def create_app(config_object=Config):
     from .admin import bp as admin_bp
     from .catalog import bp as catalog_bp
     from .api import bp as api_bp
+    from .management_mcp import bp as management_mcp_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(management_mcp_bp)
     # Bearer-token requests carry no ambient cookie for a forged cross-site
     # request to exploit, and no browser JS calls into /api/v1/* exist today
     # - see api.py's module docstring for the full rationale.

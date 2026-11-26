@@ -60,11 +60,13 @@ SENSITIVE_ENDPOINTS = frozenset(
         "api.admin_user_update",
         "api.admin_user_delete",
         "api.admin_user_mfa_reset",
+        "api.admin_access_request_resolve",
     }
 )
 
 # Every other mutating admin endpoint, with the reason it needs no fresh login.
 REVIEWED_NOT_SENSITIVE = {
+    "management_mcp.endpoint": "bearer-only; mutating calls dispatch through classified REST endpoints",
     "admin.otel_wizard_test": "sends a test telemetry signal",
     "admin.proxy_instance_stop": "stops a running proxy; harmless",
     "admin.server_test_stdio": "starts an already registered command, registers nothing",

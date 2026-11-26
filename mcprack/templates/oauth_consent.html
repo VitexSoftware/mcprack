@@ -5,9 +5,13 @@
 <div class="auth-card auth-card-wide">
   <div class="auth-card-header">
     <h1 class="mb-md">{{ _('Authorize application') }}</h1>
+    {% if management_scopes %}
     <p class="text-muted">
-      {{ _('An MCP client wants to use your selected servers through mcprack. Only allow clients you trust.') }}
+      {{ _('An MCP client wants to manage your mcprack account or, if you are an administrator, requested administrative functions. Only allow clients you trust.') }}
     </p>
+    {% else %}
+    <p class="text-muted">{{ _('An MCP client wants to use your selected servers through mcprack. Only allow clients you trust.') }}</p>
+    {% endif %}
   </div>
 
   <div class="form-card p-lg">
@@ -29,7 +33,12 @@
     {% endif %}
 
     <ul class="consent-details text-muted mt-md">
+      {% if management_scopes %}
+      <li>{{ _('Administrative scopes never grant administrator privileges to a normal account.') }}</li>
+      <li>{{ _('Mutating tools can change subscriptions, configuration, and administrator-managed records.') }}</li>
+      {% else %}
       <li>{{ _('Access is limited to MCP servers you have selected in the catalog.') }}</li>
+      {% endif %}
       <li>{{ _('Backend credentials stay on the server — they are never sent to the client.') }}</li>
       {% if scopes %}
       <li>{{ _('Requested scopes:') }}

@@ -308,3 +308,23 @@ def test_config_download_omits_path_token_when_oauth_enabled(oauth_app, oauth_cl
     payload = json.loads(body)
     url = payload["mcpServers"]["mcprack"]["url"]
     assert url == "https://mcprack.test/proxy/mcp/aggregate"
+    assert payload["mcpServers"]["mcprack-management"]["url"] == (
+        "https://mcprack.test/mcp/management"
+    )
+
+
+def test_oauth_config_allows_management_before_first_subscription(
+    oauth_app, oauth_client
+):
+    with oauth_app.app_context():
+        _make_user()
+
+    _login(oauth_client)
+    response = oauth_client.get("/api/v1/me/config/vscode")
+
+    assert response.status_code == 200
+    servers = response.get_json()["data"]["config"]["servers"]
+    assert list(servers) == ["mcprack-management"]
+    assert servers["mcprack-management"]["url"] == (
+        "https://mcprack.test/mcp/management"
+    )

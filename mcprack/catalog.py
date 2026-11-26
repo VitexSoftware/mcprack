@@ -394,6 +394,9 @@ def index():
         "catalog.html",
         servers=servers,
         aggregate_url=_aggregate_relay_url(current_user) if servers else None,
+        management_url=_external_proxy_url("management_mcp.endpoint")
+        if current_app.config.get("OAUTH_ENABLED")
+        else None,
     )
 
 
@@ -1367,7 +1370,7 @@ def _build_client_config_json(client, user=None, auth=None, mode="aggregate"):
     render_fn, filename = RENDERERS[client]
 
     selected = _selected_enabled_allowed_servers(user)
-    if not selected:
+    if not selected and not current_app.config.get("OAUTH_ENABLED"):
         return None, filename, "You haven't selected any MCP servers yet."
 
     if _config_mode(mode) == "servers":
@@ -1389,14 +1392,29 @@ def _build_client_config_json(client, user=None, auth=None, mode="aggregate"):
             for server in selected
         ]
     else:
-        entries = [
+        entries = (
+            [
+                {
+                    "name": "mcprack",
+                    "transport": "http",
+                    "url": _aggregate_relay_url(
+                        user, bearer=client in BEARER_CLIENTS
+                    ),
+                    "env": {},
+                }
+            ]
+            if selected
+            else []
+        )
+    if current_app.config.get("OAUTH_ENABLED"):
+        entries.append(
             {
-                "name": "mcprack",
+                "name": "mcprack-management",
                 "transport": "http",
-                "url": _aggregate_relay_url(user, bearer=client in BEARER_CLIENTS),
+                "url": _external_proxy_url("management_mcp.endpoint"),
                 "env": {},
             }
-        ]
+        )
 
     if client == "claude-code":
         payload = render_fn(entries, header=_claude_code_uses_header(auth))

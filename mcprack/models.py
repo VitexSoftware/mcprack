@@ -157,6 +157,17 @@ API_TOKEN_SCOPE_ALL = "*"
 # route. Kept deliberately short so MCP clients' default scope requests
 # (often just "mcp") match without a custom scope-selection dance.
 OAUTH_MCP_SCOPE = "mcp"
+OAUTH_READ_SCOPE = "mcprack:read"
+OAUTH_MANAGE_SCOPE = "mcprack:manage"
+OAUTH_ADMIN_READ_SCOPE = "mcprack:admin:read"
+OAUTH_ADMIN_WRITE_SCOPE = "mcprack:admin:write"
+OAUTH_SCOPES = (
+    OAUTH_MCP_SCOPE,
+    OAUTH_READ_SCOPE,
+    OAUTH_MANAGE_SCOPE,
+    OAUTH_ADMIN_READ_SCOPE,
+    OAUTH_ADMIN_WRITE_SCOPE,
+)
 
 
 class ApiToken(db.Model):

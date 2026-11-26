@@ -42,6 +42,7 @@ from .models import (
     ConfigTemplate,
     McpServer,
     User,
+    UserServerAccessRequest,
     UserServerOverride,
     UserServerPermission,
     UserServerSelection,
@@ -249,6 +250,38 @@ def _server_detail(server, reveal_secrets=False):
         except (vaultwarden.VaultwardenError, secret_store.SecretStoreError) as exc:
             data["secrets_error"] = secret_store.public_error(exc)
     return data
+
+
+def _catalog_server_entry(server, user):
+    selected = (
+        UserServerSelection.query.filter_by(user_id=user.id, server_id=server.id).first()
+        is not None
+    )
+    override = (
+        UserServerOverride.query.filter_by(user_id=user.id, server_id=server.id).first()
+        is not None
+    )
+    access_request = db.session.get(UserServerAccessRequest, (user.id, server.id))
+    return {
+        **_server_summary(server),
+        "permitted": catalog._server_permission_allowed(user.id, server.id),
+        "selected": selected,
+        "has_user_override": override,
+        "access_request_status": access_request.status if access_request else None,
+    }
+
+
+def _access_request_entry(access_request):
+    return {
+        "user_id": access_request.user_id,
+        "username": access_request.user.username,
+        "server_id": access_request.server_id,
+        "server_name": access_request.server.name,
+        "status": access_request.status,
+        "requested_at": _iso(access_request.requested_at),
+        "resolved_at": _iso(access_request.resolved_at),
+        "resolved_by_id": access_request.resolved_by_id,
+    }
 
 
 def _token_summary(token):
@@ -578,6 +611,78 @@ def servers_list():
     return api_ok([_server_summary(s) for s in servers])
 
 
+@bp.route("/me/catalog", methods=["GET"])
+@api_login_required
+@api_scope_required("servers:read")
+def me_catalog():
+    """The server registry exactly as a logged-in user sees it in the web UI:
+    permitted, denied and disabled entries remain visible with explicit state."""
+    servers = McpServer.query.order_by(McpServer.category, McpServer.name).all()
+    return api_ok([_catalog_server_entry(server, current_user) for server in servers])
+
+
+@bp.route("/servers/<int:server_id>/configuration-schema", methods=["GET"])
+@api_login_required
+@api_scope_required("servers:read")
+def server_configuration_schema(server_id):
+    server = db.get_or_404(McpServer, server_id)
+    if server.id not in catalog._allowed_enabled_server_ids(current_user.id):
+        abort(403)
+    if not server.allow_user_override:
+        abort(403)
+    return api_ok(
+        {
+            "server_id": server.id,
+            "server_name": server.name,
+            "properties": catalog.get_server_known_keys(server),
+        }
+    )
+
+
+@bp.route("/me/access-requests", methods=["GET"])
+@api_login_required
+@api_scope_required("servers:read")
+def me_access_requests_list():
+    requests = (
+        UserServerAccessRequest.query.filter_by(user_id=current_user.id)
+        .order_by(UserServerAccessRequest.requested_at.desc())
+        .all()
+    )
+    return api_ok([_access_request_entry(item) for item in requests])
+
+
+@bp.route("/me/access-requests/<int:server_id>", methods=["POST"])
+@api_login_required
+@api_scope_required("selections:manage")
+def me_access_request(server_id):
+    server = db.get_or_404(McpServer, server_id)
+    if not server.enabled:
+        return api_error(409, "server_disabled", "The server is disabled")
+    if catalog._server_permission_allowed(current_user.id, server.id):
+        return api_error(409, "already_permitted", "You already have access to this server")
+
+    access_request = db.session.get(UserServerAccessRequest, (current_user.id, server.id))
+    if access_request is None:
+        access_request = UserServerAccessRequest(
+            user_id=current_user.id, server_id=server.id
+        )
+        db.session.add(access_request)
+    elif access_request.status != "pending":
+        access_request.status = "pending"
+        access_request.requested_at = datetime.now(timezone.utc)
+        access_request.resolved_at = None
+        access_request.resolved_by_id = None
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server=server,
+        error_message="server access requested via API",
+    )
+    return api_ok(_access_request_entry(access_request), status=201)
+
+
 # --- servers (admin CRUD) --------------------------------------------------
 
 @bp.route("/admin/servers", methods=["GET", "POST"])
@@ -706,6 +811,47 @@ def admin_server_delete(server_id):
     return "", 204
 
 
+@bp.route("/admin/access-requests", methods=["GET"])
+@api_admin_required
+def admin_access_requests_list():
+    status = request.args.get("status", "pending")
+    if status not in ("pending", "approved", "denied", "all"):
+        return api_error(400, "invalid_request", "status must be pending, approved, denied, or all")
+    query = UserServerAccessRequest.query
+    if status != "all":
+        query = query.filter_by(status=status)
+    items, pagination = paginate(query.order_by(UserServerAccessRequest.requested_at.desc()))
+    return api_ok([_access_request_entry(item) for item in items], pagination=pagination)
+
+
+@bp.route(
+    "/admin/access-requests/<int:user_id>/<int:server_id>/<decision>",
+    methods=["POST"],
+)
+@api_admin_required
+def admin_access_request_resolve(user_id, server_id, decision):
+    access_request = db.session.get(UserServerAccessRequest, (user_id, server_id))
+    if access_request is None:
+        return api_error(404, "not_found", "Access request not found")
+    try:
+        admin.resolve_access_request(access_request, decision, current_user)
+    except ValueError as exc:
+        return api_error(409, "invalid_decision", str(exc))
+
+    db.session.commit()
+    audit.log_audit_event(
+        "admin_change",
+        "success",
+        user=current_user,
+        server=access_request.server,
+        error_message=(
+            f"{decision} server access request for user "
+            f"'{access_request.user.username}' via API"
+        ),
+    )
+    return api_ok(_access_request_entry(access_request))
+
+
 # --- current user's selections ---------------------------------------------
 
 @bp.route("/me/selections", methods=["GET"])
@@ -731,6 +877,32 @@ def me_selections_set():
     final_ids = catalog.set_user_selection(current_user.id, submitted_ids)
     db.session.commit()
     return api_ok({"server_ids": sorted(final_ids)})
+
+
+@bp.route("/me/selections/<int:server_id>", methods=["POST", "DELETE"])
+@api_login_required
+@api_scope_required("selections:manage")
+def me_selection_change(server_id):
+    server = db.get_or_404(McpServer, server_id)
+    allowed_ids = catalog._allowed_enabled_server_ids(current_user.id)
+    if server_id not in allowed_ids:
+        return api_error(403, "forbidden", "This server is not permitted or enabled")
+
+    selection = UserServerSelection.query.filter_by(
+        user_id=current_user.id, server_id=server_id
+    ).first()
+    if request.method == "POST":
+        if selection is None:
+            db.session.add(
+                UserServerSelection(user_id=current_user.id, server_id=server_id)
+            )
+        selected = True
+    else:
+        if selection is not None:
+            db.session.delete(selection)
+        selected = False
+    db.session.commit()
+    return api_ok({"server_id": server_id, "selected": selected})
 
 
 # --- admin: a user's selections ----------------------------------------------

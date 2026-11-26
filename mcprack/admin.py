@@ -224,26 +224,12 @@ def access_request_resolve(user_id, server_id, decision):
     access_request = db.session.get(UserServerAccessRequest, (user_id, server_id))
     if access_request is None:
         abort(404)
-    if access_request.status != "pending":
-        flash(_("This access request has already been resolved."), "warning")
+    try:
+        resolve_access_request(access_request, decision, current_user)
+    except ValueError as exc:
+        flash(str(exc), "warning" if access_request.status != "pending" else "error")
         return redirect(url_for("admin.access_requests"))
 
-    if decision == "approve":
-        if not access_request.user.is_active or not access_request.server.enabled:
-            flash(_("Enable the account and server before granting access."), "error")
-            return redirect(url_for("admin.access_requests"))
-        permission = db.session.get(UserServerPermission, (user_id, server_id))
-        if permission is None:
-            permission = UserServerPermission(user_id=user_id, server_id=server_id, is_allowed=True)
-            db.session.add(permission)
-        else:
-            permission.is_allowed = True
-        access_request.status = "approved"
-    else:
-        access_request.status = "denied"
-
-    access_request.resolved_at = datetime.now(timezone.utc)
-    access_request.resolved_by_id = current_user.id
     db.session.commit()
     audit.log_audit_event(
         "admin_change",
@@ -254,6 +240,38 @@ def access_request_resolve(user_id, server_id, decision):
     )
     flash(_("Access request updated."), "success")
     return redirect(url_for("admin.access_requests"))
+
+
+def resolve_access_request(access_request, decision, resolver):
+    """Resolve a pending access request and update the matching ACL row.
+    Callers own transaction commit and audit logging."""
+    if decision not in ("approve", "deny"):
+        raise ValueError(_("Unknown access request decision."))
+    if access_request.status != "pending":
+        raise ValueError(_("This access request has already been resolved."))
+
+    if decision == "approve":
+        if not access_request.user.is_active or not access_request.server.enabled:
+            raise ValueError(_("Enable the account and server before granting access."))
+        permission = db.session.get(
+            UserServerPermission, (access_request.user_id, access_request.server_id)
+        )
+        if permission is None:
+            permission = UserServerPermission(
+                user_id=access_request.user_id,
+                server_id=access_request.server_id,
+                is_allowed=True,
+            )
+            db.session.add(permission)
+        else:
+            permission.is_allowed = True
+        access_request.status = "approved"
+    else:
+        access_request.status = "denied"
+
+    access_request.resolved_at = datetime.now(timezone.utc)
+    access_request.resolved_by_id = resolver.id
+    return access_request
 
 
 def _flash_endpoint_validation(form):

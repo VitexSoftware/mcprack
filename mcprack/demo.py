@@ -53,6 +53,7 @@ BLOCKED_ENDPOINTS = frozenset(
         "api.admin_user_update",
         "api.admin_user_delete",
         "api.admin_user_revoke_tokens",
+        "api.admin_access_request_resolve",
     }
 )
 
@@ -75,15 +76,18 @@ REVIEWED_SAFE = {
     "catalog.override": "per-user env values, validated by env_policy",
     "catalog.request_server_access": "records an access request for administrator review",
     "catalog.server_subscription": "adds or removes the caller's own selection of a permitted server",
+    "api.me_access_request": "records an access request for administrator review",
     "catalog.user_proxy_mcp": "MCP relay (path token)",
     "catalog.user_proxy_mcp_oauth": "MCP relay (bearer)",
     "catalog.user_proxy_mcp_aggregate": "MCP composition relay (path token)",
     "catalog.user_proxy_mcp_aggregate_bearer": "MCP composition relay (bearer)",
     "api.me_selections_set": "chooses among already registered servers",
+    "api.me_selection_change": "adds or removes the caller's own server selection",
     "api.me_override_set": "per-user env values, validated by env_policy",
     "api.me_override_delete": "removes the caller's own override",
     "api.tokens_create": "caller's own API token",
     "api.tokens_delete": "caller's own API token",
+    "management_mcp.endpoint": "dispatches only through the REST API's per-operation demo protections",
     # OAuth endpoints (only mounted with OAUTH_ENABLED)
     "oauth.authorize": "consent for the logged-in user",
     "oauth.issue_token": "token endpoint",

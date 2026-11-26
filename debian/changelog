@@ -1,4 +1,4 @@
-mcprack (1.8.0-1) UNRELEASED; urgency=medium
+mcprack (1.9.0-1) UNRELEASED; urgency=medium
 
   * Add a per-user FastMCP composition endpoint and aggregate client configs.
   * Separate the user home page from server discovery and subscriptions.
