@@ -63,7 +63,7 @@
         <input type="hidden" name="action" value="regenerate">
         <div class="form-group">
           <label for="regen_password">{{ _('Current password') }}</label>
-          <input type="password" id="regen_password" name="current_password" required>
+          <input type="password" id="regen_password" name="current_password" required autocomplete="current-password">
         </div>
         <div class="form-group">
           <label for="regen_code">{{ _('Code') }}</label>
@@ -82,7 +82,7 @@
       <input type="hidden" name="action" value="disable">
       <div class="form-group">
         <label for="off_password">{{ _('Current password') }}</label>
-        <input type="password" id="off_password" name="current_password" required>
+        <input type="password" id="off_password" name="current_password" required autocomplete="current-password">
       </div>
       <div class="form-group">
         <label for="off_code">{{ _('Code') }}</label>

@@ -16,12 +16,12 @@
       {% endif %}
       <div class="form-group">
         <label for="username">{{ _('Username') }}</label>
-        <input type="text" id="username" name="username" value="{{ prefill_username|default('') }}" required autofocus>
+        <input type="text" id="username" name="username" value="{{ prefill_username|default('') }}" required autofocus autocomplete="username">
       </div>
 
       <div class="form-group">
         <label for="password">{{ _('Password') }}</label>
-        <input type="password" id="password" name="password" value="{{ prefill_password|default('') }}" required>
+        <input type="password" id="password" name="password" value="{{ prefill_password|default('') }}" required autocomplete="current-password">
       </div>
 
       <button type="submit" class="btn btn-primary w-full mt-lg">

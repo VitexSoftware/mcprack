@@ -671,7 +671,7 @@ def reset_password(token):
             flash(_("Password reset. You can now log in."), "success")
             return redirect(url_for("auth.login"))
 
-    return render_template("reset_password.html", token=token)
+    return render_template("reset_password.html", token=token, username=user.username)
 
 
 @bp.route("/set-locale/<locale>")

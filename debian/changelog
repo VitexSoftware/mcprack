@@ -7,6 +7,9 @@ mcprack (1.8.0-1) UNRELEASED; urgency=medium
     Vaultwarden is busy, instead of failing client connects with a 502.
   * Raise the default service limits to MemoryMax=4G, TasksMax=2048 and
     LimitNOFILE=16384; document how to size them per deployment.
+  * Add autocomplete hints to the login and password forms and show the account
+    name on them, so password managers store a reset password for the right
+    login.
 
  -- Vítězslav Dvořák <info@vitexsoftware.cz>  Thu, 12 Nov 2026 15:33:24 +0100
 

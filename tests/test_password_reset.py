@@ -163,3 +163,19 @@ def test_reset_password_rejects_expired_token(app, client):
     app.config["PASSWORD_RESET_MAX_AGE"] = -1
     resp = client.get(f"/reset-password/{token}", follow_redirects=True)
     assert b"invalid or has expired" in resp.data
+
+
+def test_password_forms_name_the_account_for_password_managers(app, client):
+    user_id = _make_local_user(app, "frank", "old-password", "frank@example.com")
+    with app.test_request_context():
+        from mcprack.auth import _generate_reset_token
+
+        token = _generate_reset_token(db.session.get(User, user_id))
+
+    page = client.get(f"/reset-password/{token}").data.decode()
+    assert 'value="frank" readonly autocomplete="username"' in page
+    assert page.count('autocomplete="new-password"') == 2
+
+    login = client.get("/login").data.decode()
+    assert 'autocomplete="username"' in login
+    assert 'autocomplete="current-password"' in login

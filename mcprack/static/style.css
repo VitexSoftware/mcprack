@@ -1159,6 +1159,7 @@ tr.row-warn {
 }
 
 .client-card {
+  min-width: 0;
   padding: var(--space-sm) var(--space-md);
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-md);
@@ -1174,9 +1175,17 @@ tr.row-warn {
 }
 
 .client-card-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
   gap: var(--space-sm);
-  flex-wrap: wrap;
+}
+
+.client-card-actions .btn {
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 /* ========================================
