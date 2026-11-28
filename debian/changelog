@@ -1,6 +1,8 @@
 mcprack (1.9.0-1) UNRELEASED; urgency=medium
 
   * Add a per-user FastMCP composition endpoint and aggregate client configs.
+  * Breaks: python3-httpx2 (<< 2.10.0): the aggregate's streamable-HTTP
+    backends need httpx2.EventSource(max_event_size=...) (python3-mcp 2.3).
   * Separate the user home page from server discovery and subscriptions.
   * Resolve all of a user's uncached Vaultwarden secrets in one lookup and
     fall back to expired cache entries (BW_ENV_CACHE_STALE_GRACE) when

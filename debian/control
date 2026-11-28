@@ -50,6 +50,13 @@ Recommends:
 # BW_SERVER may point at a remote Vaultwarden or be unset (local
 # encrypted fallback store).
  vaultwarden (>= 1.37.3-1.5~),
+# The per-user aggregate (composition_proxy.py) reaches every backend through
+# fastmcp's streamable-HTTP client. python3-mcp 2.3 calls
+# httpx2.EventSource(response, max_event_size=...), which httpx2 < 2.10.0 does
+# not accept: the TypeError surfaces only as "SSE stream ended without a
+# response", so with an older httpx2 no backend can be reached over HTTP.
+Breaks:
+ python3-httpx2 (<< 2.10.0),
 Suggests:
  python3-psycopg2,
  python3-pymysql,
